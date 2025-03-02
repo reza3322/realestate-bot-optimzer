@@ -11,7 +11,7 @@ interface Message {
 
 const ChatbotDemo = () => {
   const [messages, setMessages] = useState<Message[]>([
-    { role: 'bot', content: 'Hello! I'm RealAssist.AI. How can I help you today?' },
+    { role: 'bot', content: "Hello! I'm RealAssist.AI. How can I help you today?" },
   ]);
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
