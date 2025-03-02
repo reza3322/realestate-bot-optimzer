@@ -30,15 +30,13 @@ const Navbar = () => {
       isScrolled ? "py-3 bg-background/80 backdrop-blur-md shadow-sm" : "py-5"
     )}>
       <div className="container flex items-center justify-between">
-        <a href="/" className="flex items-center gap-2 z-50">
+        <a href="/" className="flex items-center gap-2">
           <span className="font-bold text-xl">RealHomeAI</span>
         </a>
         
-        <div className="hidden md:flex items-center z-50">
-          <NavBar items={navItems} className="relative mb-0 pt-0 static translate-x-0 left-0" />
-        </div>
+        <NavBar items={navItems} className="hidden md:flex" />
         
-        <div className="flex items-center gap-4 z-50">
+        <div className="flex items-center gap-4">
           <Button variant="outline" className="hidden sm:flex">
             Log In
           </Button>
@@ -46,8 +44,10 @@ const Navbar = () => {
         </div>
       </div>
       
-      <div className="md:hidden fixed bottom-0 left-0 right-0 flex justify-center pb-6 z-50">
-        <NavBar items={navItems} className="relative mb-0 w-auto" />
+      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-background/80 backdrop-blur-md shadow-lg py-2">
+        <div className="container">
+          <NavBar items={navItems} />
+        </div>
       </div>
     </header>
   );
