@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Home, User, MessageSquare, Phone } from "lucide-react";
+import { Home, User, Briefcase, FileText } from "lucide-react";
 import { NavBar } from "@/components/ui/tubelight-navbar";
 
 const Navbar = () => {
@@ -20,8 +20,8 @@ const Navbar = () => {
   const navItems = [
     { name: 'Home', url: '#', icon: Home },
     { name: 'About', url: '#about', icon: User },
-    { name: 'Features', url: '#features', icon: MessageSquare },
-    { name: 'Contact', url: '#contact', icon: Phone }
+    { name: 'Projects', url: '#', icon: Briefcase },
+    { name: 'Resume', url: '#', icon: FileText }
   ];
 
   return (
@@ -31,12 +31,7 @@ const Navbar = () => {
     )}>
       <div className="container flex items-center justify-between">
         <a href="/" className="flex items-center gap-2 z-50">
-          <img 
-            src="/lovable-uploads/654f67aa-52f1-4e55-9489-935a9e4f500e.png" 
-            alt="RealHomeAI Logo" 
-            className="h-10"
-          />
-          <span className="font-semibold text-lg">RealHomeAI</span>
+          <span className="font-bold text-xl">RealHomeAI</span>
         </a>
         
         <div className="hidden md:flex items-center z-50">
