@@ -1,4 +1,3 @@
-
 import type { Config } from "tailwindcss";
 
 export default {
@@ -113,6 +112,18 @@ export default {
 				'blink': {
 					'0%, 100%': { borderColor: 'transparent' },
 					'50%': { borderColor: 'hsl(var(--primary))' }
+				},
+				'glow': {
+					'0%, 100%': { opacity: '0.9' },
+					'50%': { opacity: '0.5' }
+				},
+				'move-up': {
+					'0%': { transform: 'translateY(10px)' },
+					'100%': { transform: 'translateY(0)' }
+				},
+				'lamp-light': {
+					'0%, 100%': { opacity: '0.7', transform: 'scale(1)' },
+					'50%': { opacity: '1', transform: 'scale(1.1)' }
 				}
 			},
 			animation: {
@@ -124,7 +135,10 @@ export default {
 				'pulse-soft': 'pulse-soft 4s ease-in-out infinite',
 				'float': 'float 6s ease-in-out infinite',
 				'typing': 'typing 3.5s steps(40, end)',
-				'blink': 'blink 1s step-end infinite'
+				'blink': 'blink 1s step-end infinite',
+				'glow': 'glow 2s ease-in-out infinite',
+				'move-up': 'move-up 0.5s ease-out forwards',
+				'lamp-light': 'lamp-light 2s ease-in-out infinite'
 			},
 			backdropBlur: {
 				'xs': '2px',

@@ -27,7 +27,7 @@ const ChatbotDemo = () => {
     if (!inputValue.trim()) return;
     
     // Add user message
-    const userMessage = { role: 'user', content: inputValue };
+    const userMessage: Message = { role: 'user', content: inputValue };
     setMessages(prev => [...prev, userMessage]);
     setInputValue('');
     
