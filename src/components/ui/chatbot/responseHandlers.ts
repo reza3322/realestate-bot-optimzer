@@ -13,3 +13,17 @@ export const getResponseForMessage = (messages: Message[]): string => {
   const responseIndex = Math.min(messages.length - 1, demoResponses.length - 1);
   return demoResponses[responseIndex];
 };
+
+// Custom hook for demo response generation
+export const useDemoResponse = () => {
+  const generateDemoResponse = async (message: string): Promise<string> => {
+    // Simple logic for demo purposes
+    // In a real app, this would call an API
+    
+    // Get a random response from the demo responses
+    const randomIndex = Math.floor(Math.random() * demoResponses.length);
+    return demoResponses[randomIndex];
+  };
+
+  return { generateDemoResponse };
+};

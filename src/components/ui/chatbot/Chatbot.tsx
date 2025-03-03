@@ -79,6 +79,7 @@ const Chatbot = ({
         botName={botName}
         headerStyle={styles.header}
         fontStyle={styles.font}
+        apiKeyStatus="not-set"
       />
       
       {/* Messages Container */}

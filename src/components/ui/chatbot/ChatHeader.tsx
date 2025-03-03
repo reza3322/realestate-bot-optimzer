@@ -7,10 +7,17 @@ import { useToast } from '@/components/ui/use-toast';
 
 interface ChatHeaderProps {
   headerStyle: string;
-  apiKeyStatus: 'not-set' | 'set' | 'checking';
+  fontStyle?: string;
+  botName?: string;
+  apiKeyStatus?: 'not-set' | 'set' | 'checking';
 }
 
-const ChatHeader = ({ headerStyle, apiKeyStatus }: ChatHeaderProps) => {
+const ChatHeader = ({ 
+  headerStyle, 
+  botName = "RealHomeAI Demo",
+  apiKeyStatus = 'not-set',
+  fontStyle
+}: ChatHeaderProps) => {
   const { toast } = useToast();
 
   const handleApiKeyCheck = () => {
@@ -34,7 +41,7 @@ const ChatHeader = ({ headerStyle, apiKeyStatus }: ChatHeaderProps) => {
       "p-4 flex justify-between items-center",
       headerStyle
     )}>
-      <h3 className="font-medium text-center flex-1">RealHomeAI Demo</h3>
+      <h3 className="font-medium text-center flex-1">{botName}</h3>
       <TooltipProvider>
         <Tooltip>
           <TooltipTrigger asChild>
