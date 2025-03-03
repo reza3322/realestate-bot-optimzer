@@ -19,7 +19,7 @@ const Hero = () => {
             <>
               <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight text-balance mb-8 leading-tight">
                 Automate Your Real Estate <br />
-                <span className="text-4xl md:text-[5rem] font-bold mt-1 leading-none">
+                <span className="text-4xl md:text-[6rem] font-bold mt-1 leading-none">
                   Operations With AI
                 </span>
               </h1>
