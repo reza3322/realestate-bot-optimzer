@@ -1,3 +1,4 @@
+
 import { createClient } from '@supabase/supabase-js';
 import { toast } from 'sonner';
 
@@ -252,6 +253,59 @@ export const getAllUsers = async () => {
     email: '', // Email is not stored in profiles for security
     firstName: profile.first_name || '',
     lastName: profile.last_name || '',
-    plan: profile.plan || 'starter'
+    plan: profile.plan || 'starter',
+    created_at: profile.created_at
   }));
+};
+
+// New function to get API usage statistics for each user
+export const getUserUsageStats = async () => {
+  try {
+    // This would typically be handled by a Supabase Edge Function
+    // Mock data for demonstration
+    const { data: profiles, error } = await supabase
+      .from('profiles')
+      .select('*');
+    
+    if (error) throw error;
+    
+    // This would be real data in production
+    return profiles.map(profile => ({
+      user_id: profile.id,
+      first_name: profile.first_name,
+      last_name: profile.last_name,
+      email: '', // Email would be fetched in a real implementation
+      chatbot_calls: Math.floor(Math.random() * 500), // Mock data
+      openai_tokens: Math.floor(Math.random() * 50000), // Mock data
+      last_activity: new Date(Date.now() - Math.floor(Math.random() * 7 * 24 * 60 * 60 * 1000)).toISOString() // Random date in the last week
+    }));
+  } catch (error) {
+    console.error('Error fetching usage stats:', error);
+    toast.error('Failed to fetch usage statistics');
+    return [];
+  }
+};
+
+// New function to get system logs for troubleshooting
+export const getSystemLogs = async () => {
+  try {
+    // This would typically be handled by a Supabase Edge Function
+    // Mock data for demonstration
+    const eventTypes = ['login', 'api_call', 'error', 'signup', 'chatbot_interaction'];
+    const statuses = ['success', 'warning', 'error'];
+    
+    // Generate 20 mock log entries
+    return Array.from({ length: 20 }, (_, i) => ({
+      id: `log-${i}`,
+      created_at: new Date(Date.now() - Math.floor(Math.random() * 30 * 24 * 60 * 60 * 1000)).toISOString(),
+      user_email: Math.random() > 0.3 ? `user${Math.floor(Math.random() * 10)}@example.com` : null,
+      event_type: eventTypes[Math.floor(Math.random() * eventTypes.length)],
+      message: `Sample log message for ${eventTypes[Math.floor(Math.random() * eventTypes.length)]} event #${i}`,
+      status: statuses[Math.floor(Math.random() * statuses.length)]
+    })).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  } catch (error) {
+    console.error('Error fetching system logs:', error);
+    toast.error('Failed to fetch system logs');
+    return [];
+  }
 };
