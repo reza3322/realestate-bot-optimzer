@@ -138,12 +138,13 @@ const Cta = () => {
   };
 
   const handlePlanSelection = (plan: PricingPlan) => {
+    // Prevent any default scrolling behavior
+    event?.preventDefault();
+    
     if (plan.name === "ENTERPRISE") {
-      // Scroll to contact section
-      const contactSection = document.getElementById('contact');
-      if (contactSection) {
-        contactSection.scrollIntoView({ behavior: 'smooth' });
-      }
+      // Modify to use a controlled scroll that doesn't affect page position
+      // Instead of directly scrolling, we'll use the navigate function
+      navigate('/#contact');
       return;
     }
     
@@ -156,7 +157,7 @@ const Cta = () => {
   };
 
   return (
-    <section id="pricing" className="py-20">
+    <section id="pricing" className="py-20 relative">
       <div className="container">
         <div className="text-center space-y-4 mb-12">
           <h2 className="text-4xl font-bold tracking-tight sm:text-5xl">

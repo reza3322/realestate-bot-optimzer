@@ -28,7 +28,7 @@ const Demo = () => {
   const [fontStyle, setFontStyle] = useState<'default' | 'serif' | 'mono'>('default');
 
   return (
-    <section id="demo" className="py-20 bg-secondary/50">
+    <section id="demo" className="py-20 bg-secondary/50 relative">
       <div className="container px-4 mx-auto">
         <div className="max-w-3xl mx-auto text-center mb-12">
           <GradientHeading size="lg" variant="secondary">

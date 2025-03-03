@@ -17,7 +17,11 @@ const ChatInput = ({
   const [message, setMessage] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const handleSubmit = () => {
+  const handleSubmit = (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+    }
+    
     if (message.trim()) {
       onSendMessage(message.trim());
       setMessage('');
@@ -46,7 +50,7 @@ const ChatInput = ({
         className="flex-1 bg-transparent border border-input rounded-md h-10 px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ring"
       />
       <button
-        onClick={handleSubmit}
+        onClick={(e) => handleSubmit(e)}
         disabled={!message.trim()}
         className={cn(
           "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors h-10 w-10",

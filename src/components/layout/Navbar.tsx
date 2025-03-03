@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from 'react';
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -33,7 +32,6 @@ const Navbar = () => {
   }, []);
   
   useEffect(() => {
-    // Get current user
     const getUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       setUser(session?.user || null);
@@ -41,7 +39,6 @@ const Navbar = () => {
     
     getUser();
     
-    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (_event, session) => {
         setUser(session?.user || null);
@@ -66,27 +63,23 @@ const Navbar = () => {
     }
   };
 
-  const navItems = [
-    { name: 'Product', url: '/product', icon: Home },
-    { name: 'Pricing', url: '/#pricing', icon: CreditCard },
-    { name: 'Resources', url: '/resources', icon: FileText },
-    { name: 'Contact', url: '/#contact', icon: Mail }
-  ];
-
   const scrollToSection = (id: string) => {
+    event?.preventDefault();
+    
     if (location.pathname !== '/') {
-      // If not on homepage, navigate to home and then scroll after a delay
       navigate(`/${id ? '#' + id : ''}`);
       return;
     }
     
     const element = document.getElementById(id);
     if (element) {
-      element.scrollIntoView({ behavior: 'smooth' });
+      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   };
 
-  const handleNavigation = (url: string) => {
+  const handleNavigation = (url: string, event?: React.MouseEvent) => {
+    event?.preventDefault();
+    
     if (url.startsWith('/#')) {
       const id = url.substring(2);
       scrollToSection(id);
@@ -94,6 +87,33 @@ const Navbar = () => {
       navigate(url);
     }
   };
+
+  const navItems = [
+    { 
+      name: 'Product', 
+      url: '/product', 
+      icon: Home,
+      onClick: (event) => handleNavigation('/product', event)
+    },
+    { 
+      name: 'Pricing', 
+      url: '/#pricing', 
+      icon: CreditCard,
+      onClick: (event) => handleNavigation('/#pricing', event)
+    },
+    { 
+      name: 'Resources', 
+      url: '/resources', 
+      icon: FileText,
+      onClick: (event) => handleNavigation('/resources', event)
+    },
+    { 
+      name: 'Contact', 
+      url: '/#contact', 
+      icon: Mail,
+      onClick: (event) => handleNavigation('/#contact', event)
+    }
+  ];
 
   const getUserInitials = () => {
     if (!user || !user.user_metadata) return '?';
@@ -114,13 +134,7 @@ const Navbar = () => {
           <span className="font-bold text-xl">RealHomeAI</span>
         </Link>
         
-        <NavBar 
-          items={navItems.map(item => ({
-            ...item,
-            onClick: () => handleNavigation(item.url)
-          }))} 
-          className="hidden md:flex" 
-        />
+        <NavBar items={navItems} className="hidden md:flex" />
         
         <div className="flex items-center gap-4">
           {user ? (
@@ -174,12 +188,7 @@ const Navbar = () => {
       
       <div className="md:hidden fixed bottom-0 left-0 right-0 bg-background/80 backdrop-blur-md shadow-lg py-2">
         <div className="container">
-          <NavBar 
-            items={navItems.map(item => ({
-              ...item,
-              onClick: () => handleNavigation(item.url)
-            }))}
-          />
+          <NavBar items={navItems} />
         </div>
       </div>
     </header>

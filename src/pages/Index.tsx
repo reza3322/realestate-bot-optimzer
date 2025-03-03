@@ -31,6 +31,20 @@ const Index = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  // Fix for the hash navigation to prevent unwanted scrolling
+  useEffect(() => {
+    // Only scroll if there's a specific hash that the user navigated to
+    if (window.location.hash && window.location.hash !== '#' && window.location.hash !== '#pricing') {
+      const id = window.location.hash.substring(1);
+      setTimeout(() => {
+        const element = document.getElementById(id);
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth' });
+        }
+      }, 100);
+    }
+  }, []);
+
   // Scroll to top function
   const scrollToTop = () => {
     window.scrollTo({
