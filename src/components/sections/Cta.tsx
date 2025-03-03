@@ -7,6 +7,9 @@ import { cn } from '@/lib/utils';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@clerk/clerk-react';
+import { toast } from 'sonner';
 
 interface PricingPlan {
   name: string;
@@ -82,6 +85,8 @@ const pricingPlans: PricingPlan[] = [
 const Cta = () => {
   const [isMonthly, setIsMonthly] = useState(true);
   const switchRef = useRef<HTMLButtonElement>(null);
+  const navigate = useNavigate();
+  const { isSignedIn } = useAuth();
 
   // Check if we're on desktop (for animations)
   const useMediaQuery = (query: string): boolean => {
@@ -129,6 +134,24 @@ const Cta = () => {
         startVelocity: 30,
         shapes: ["circle"],
       });
+    }
+  };
+
+  const handlePlanSelection = (plan: PricingPlan) => {
+    if (plan.name === "ENTERPRISE") {
+      // Scroll to contact section
+      const contactSection = document.getElementById('contact');
+      if (contactSection) {
+        contactSection.scrollIntoView({ behavior: 'smooth' });
+      }
+      return;
+    }
+    
+    if (isSignedIn) {
+      navigate('/dashboard');
+      toast.success(`Selected ${plan.name} plan! This would integrate with a payment provider in production.`);
+    } else {
+      navigate('/auth');
     }
   };
 
@@ -238,6 +261,7 @@ const Cta = () => {
                       "w-full group relative overflow-hidden",
                       "transform-gpu transition-all duration-300 ease-out hover:ring-2 hover:ring-primary hover:ring-offset-1 hover:bg-primary hover:text-primary-foreground"
                     )}
+                    onClick={() => handlePlanSelection(plan)}
                   >
                     {plan.buttonText}
                   </Button>

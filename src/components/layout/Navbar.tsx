@@ -2,13 +2,16 @@
 import { useEffect, useState } from 'react';
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Home, CreditCard, FileText, Mail } from "lucide-react";
+import { Home, CreditCard, FileText, Mail, User } from "lucide-react";
 import { NavBar } from "@/components/ui/tubelight-navbar";
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useAuth, UserButton } from '@clerk/clerk-react';
 
 const Navbar = () => {
   const [isScrolled, setIsScrolled] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
+  const { isSignedIn } = useAuth();
   
   useEffect(() => {
     const handleScroll = () => {
@@ -23,7 +26,7 @@ const Navbar = () => {
     { name: 'Product', url: '/product', icon: Home },
     { name: 'Pricing', url: '/#pricing', icon: CreditCard },
     { name: 'Resources', url: '/resources', icon: FileText },
-    { name: 'Contact', url: '/#how-it-works', icon: Mail }
+    { name: 'Contact', url: '/#contact', icon: Mail }
   ];
 
   const scrollToSection = (id: string) => {
@@ -43,6 +46,8 @@ const Navbar = () => {
     if (url.startsWith('/#')) {
       const id = url.substring(2);
       scrollToSection(id);
+    } else {
+      navigate(url);
     }
   };
 
@@ -65,16 +70,31 @@ const Navbar = () => {
         />
         
         <div className="flex items-center gap-4">
-          <Button 
-            variant="outline" 
-            className="hidden sm:flex"
-            onClick={() => window.location.href = '/product#signup'}
-          >
-            Log In
-          </Button>
-          <Button onClick={() => window.location.href = '/product#signup'}>
-            Get Started
-          </Button>
+          {isSignedIn ? (
+            <>
+              <Button 
+                variant="ghost" 
+                onClick={() => navigate('/dashboard')}
+                className="hidden sm:flex"
+              >
+                Dashboard
+              </Button>
+              <UserButton afterSignOutUrl="/" />
+            </>
+          ) : (
+            <>
+              <Button 
+                variant="outline" 
+                className="hidden sm:flex"
+                onClick={() => navigate('/auth')}
+              >
+                Log In
+              </Button>
+              <Button onClick={() => navigate('/auth')}>
+                Get Started
+              </Button>
+            </>
+          )}
         </div>
       </div>
       

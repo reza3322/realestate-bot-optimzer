@@ -4,6 +4,9 @@ import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@clerk/clerk-react';
+import { toast } from 'sonner';
 
 interface PricingTier {
   name: string;
@@ -67,12 +70,39 @@ const pricingTiers: PricingTier[] = [
 
 const Pricing = () => {
   const [isAnnual, setIsAnnual] = useState(false);
+  const navigate = useNavigate();
+  const { isSignedIn } = useAuth();
 
   const calculatePrice = (basePrice: number, discount: number) => {
     if (isAnnual) {
       return basePrice * (1 - discount / 100);
     }
     return basePrice;
+  };
+
+  const handlePricingClick = (tierName: string) => {
+    if (tierName === 'Enterprise') {
+      // Scroll to contact section
+      const contactSection = document.getElementById('contact');
+      if (contactSection) {
+        contactSection.scrollIntoView({ behavior: 'smooth' });
+      }
+      return;
+    }
+    
+    if (isSignedIn) {
+      navigate('/dashboard');
+      toast.success(`Selected ${tierName} plan! This would integrate with a payment provider in production.`);
+    } else {
+      navigate('/auth');
+    }
+  };
+
+  const handleCustomQuote = () => {
+    const contactSection = document.getElementById('contact');
+    if (contactSection) {
+      contactSection.scrollIntoView({ behavior: 'smooth' });
+    }
   };
 
   return (
@@ -138,6 +168,7 @@ const Pricing = () => {
                 <Button
                   variant={tier.popular ? "default" : "outline"}
                   className="w-full"
+                  onClick={() => handlePricingClick(tier.name)}
                 >
                   {tier.cta}
                 </Button>
@@ -152,7 +183,7 @@ const Pricing = () => {
             Our enterprise plan is flexible and can be tailored to your specific requirements.
             Contact our sales team to discuss how we can help your business.
           </p>
-          <Button variant="outline" size="lg">
+          <Button variant="outline" size="lg" onClick={handleCustomQuote}>
             Request Custom Quote
           </Button>
         </div>

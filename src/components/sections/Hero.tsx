@@ -3,8 +3,22 @@ import { ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ContainerScroll } from '@/components/ui/container-scroll-animation';
 import FeatureCarousel from '@/components/ui/feature-carousel';
+import { useNavigate } from 'react-router-dom';
 
 const Hero = () => {
+  const navigate = useNavigate();
+
+  const handleStartFreeTrial = () => {
+    navigate('/auth');
+  };
+
+  const handleBookDemo = () => {
+    const contactSection = document.getElementById('contact');
+    if (contactSection) {
+      contactSection.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
   return (
     <section className="relative py-24 md:py-32 overflow-hidden">
       {/* Background elements */}
@@ -30,11 +44,11 @@ const Hero = () => {
               </p>
               
               <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-6">
-                <Button size="lg" className="w-full sm:w-auto">
+                <Button size="lg" className="w-full sm:w-auto" onClick={handleStartFreeTrial}>
                   Start Free Trial
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
-                <Button size="lg" variant="outline" className="w-full sm:w-auto">
+                <Button size="lg" variant="outline" className="w-full sm:w-auto" onClick={handleBookDemo}>
                   Book a Demo
                 </Button>
               </div>
@@ -43,7 +57,7 @@ const Hero = () => {
         >
           <img 
             src="/lovable-uploads/f1c69427-2557-4792-983f-f2b5b7610878.png" 
-            alt="RealAssist.AI Dashboard" 
+            alt="RealHomeAI Dashboard" 
             className="w-full h-full object-cover object-left-top rounded-xl"
           />
         </ContainerScroll>
