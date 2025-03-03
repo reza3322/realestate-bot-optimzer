@@ -7,7 +7,7 @@ import ChatInput from './ChatInput';
 import TypingIndicator from './TypingIndicator';
 import { getChatStyles, applyFontStyle } from './chatStyles';
 import { Message } from './types';
-import { demoResponses } from './responseHandlers';
+import { testChatbotResponse } from './responseHandlers';
 
 interface ChatbotProps {
   apiKey?: string;
@@ -20,45 +20,29 @@ interface ChatbotProps {
   placeholderText?: string;
   maxHeight?: string;
   onSendMessage?: (message: string) => void;
+  userId?: string;
+  useRealAPI?: boolean;
 }
-
-// Custom hook for demo response generation
-const useDemoResponse = () => {
-  const generateDemoResponse = async (message: string): Promise<string> => {
-    // Simple logic for demo purposes
-    // In a real app, this would call an API
-    
-    // Get a random response from the demo responses
-    const randomIndex = Math.floor(Math.random() * demoResponses.length);
-    
-    // Add a small delay to simulate thinking
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve(demoResponses[randomIndex]);
-      }, 500);
-    });
-  };
-
-  return { generateDemoResponse };
-};
 
 const Chatbot = ({
   className,
   theme = 'default',
   variation = 'default',
   fontStyle = 'default',
-  botName = 'RealHomeAI Assistant',
+  botName = "RealHomeAI Assistant",
   welcomeMessage = "Hi there! I'm your RealHomeAI assistant. How can I help you today?",
   placeholderText = "Type your message...",
   maxHeight = "400px",
-  onSendMessage
+  onSendMessage,
+  userId = 'demo-user',
+  useRealAPI = false
 }: ChatbotProps) => {
   const [messages, setMessages] = useState<Message[]>([
     { role: 'bot', content: welcomeMessage }
   ]);
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const { generateDemoResponse } = useDemoResponse();
+  const [error, setError] = useState<string | null>(null);
 
   // Apply theme styles
   const baseStyles = getChatStyles(theme, variation);
@@ -83,13 +67,48 @@ const Chatbot = ({
     
     // Simulate typing
     setIsTyping(true);
+    setError(null);
     
-    // Get demo response with delay
-    setTimeout(async () => {
-      const response = await generateDemoResponse(message);
-      setIsTyping(false);
-      setMessages(prev => [...prev, { role: 'bot', content: response }]);
-    }, 1500);
+    if (useRealAPI) {
+      try {
+        // Use the real OpenAI API through Supabase edge function
+        const { response, error } = await testChatbotResponse(message, userId);
+        
+        if (error) {
+          console.error('Chatbot error:', error);
+          setError(`Error: ${error}`);
+        } else {
+          // Add bot response
+          setMessages(prev => [...prev, { role: 'bot', content: response }]);
+        }
+      } catch (err) {
+        console.error('Chatbot exception:', err);
+        setError(`Unexpected error: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      } finally {
+        setIsTyping(false);
+      }
+    } else {
+      // Use demo responses with delay
+      setTimeout(async () => {
+        // Simple logic for demo purposes - get a random response
+        const demoResponses = [
+          "I'd be happy to help you find a property. What's your budget range?",
+          "Great! And what neighborhoods are you interested in?",
+          "I've found 3 properties that match your criteria. Would you like to schedule a viewing?",
+          "Perfect! I've notified your agent and scheduled a viewing for Saturday at 2pm.",
+          "Our agents specialize in luxury properties in downtown and suburban areas.",
+          "Yes, we have several properties with pools available right now.",
+          "The average price in that neighborhood has increased by 12% over the last year.",
+          "I can help you get pre-approved for a mortgage through our partner lenders."
+        ];
+        
+        const randomIndex = Math.floor(Math.random() * demoResponses.length);
+        const demoResponse = demoResponses[randomIndex];
+        
+        setIsTyping(false);
+        setMessages(prev => [...prev, { role: 'bot', content: demoResponse }]);
+      }, 1500);
+    }
   };
 
   return (
@@ -105,7 +124,7 @@ const Chatbot = ({
         botName={botName}
         headerStyle={styles.header}
         fontStyle={styles.font}
-        apiKeyStatus="not-set"
+        apiKeyStatus={useRealAPI ? "set" : "not-set"}
       />
       
       {/* Messages Container - Fixed height with overflow */}
@@ -127,6 +146,12 @@ const Chatbot = ({
             botIconStyle={styles.botIcon}
             botBubbleStyle={styles.botBubble}
           />
+        )}
+        
+        {error && (
+          <div className="p-2 rounded-md bg-red-50 text-red-500 text-sm">
+            {error}
+          </div>
         )}
         
         <div ref={messagesEndRef} />

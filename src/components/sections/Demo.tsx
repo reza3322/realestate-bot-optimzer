@@ -20,12 +20,14 @@ import {
 } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Switch } from '@/components/ui/switch';
 
 const Demo = () => {
   // Chat customization state
   const [theme, setTheme] = useState<'default' | 'modern' | 'minimal'>('modern');
   const [variation, setVariation] = useState<'default' | 'blue' | 'green' | 'purple'>('blue');
   const [fontStyle, setFontStyle] = useState<'default' | 'serif' | 'mono'>('default');
+  const [useRealAPI, setUseRealAPI] = useState(true);
 
   // Prevent default form submission behavior
   const preventScroll = (e: React.MouseEvent) => {
@@ -117,6 +119,24 @@ const Demo = () => {
                     </div>
                   </RadioGroup>
                 </div>
+
+                <div className="space-y-2 pt-2 border-t border-border">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="use-real-api" className="cursor-pointer">
+                      Use Real AI (OpenAI API)
+                    </Label>
+                    <Switch 
+                      id="use-real-api" 
+                      checked={useRealAPI}
+                      onCheckedChange={setUseRealAPI}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {useRealAPI 
+                      ? "Powered by OpenAI GPT-4o. Real responses may take a moment." 
+                      : "Using demo responses without API calls."}
+                  </p>
+                </div>
               </TabsContent>
               
               <TabsContent value="typography" className="space-y-6">
@@ -166,6 +186,7 @@ const Demo = () => {
               fontStyle={fontStyle}
               welcomeMessage="👋 Hi there! I'm your RealHomeAI assistant. I can help you find properties, answer questions about listings, and even schedule viewings. Try asking me about available properties or how I can help with your real estate needs!"
               placeholderText="Type your message here..."
+              useRealAPI={useRealAPI}
             />
           </div>
         </div>
