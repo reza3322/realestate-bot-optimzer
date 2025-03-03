@@ -1,4 +1,3 @@
-
 import { createClient } from '@supabase/supabase-js';
 import { toast } from 'sonner';
 
@@ -212,98 +211,111 @@ export const logActivity = async (activity: any) => {
   return { error };
 };
 
-// Admin functions - special RLS policy needed
+// Admin functions - now using edge functions
 export const createEnterpriseUser = async (email: string, password: string, firstName: string, lastName: string) => {
-  // This would typically be handled by a Supabase Edge Function for security
-  // since direct admin operations require special permissions
-  const { data, error } = await supabase.auth.admin.createUser({
-    email,
-    password,
-    email_confirm: true,
-    user_metadata: {
-      first_name: firstName,
-      last_name: lastName,
-      plan: 'enterprise'
+  try {
+    // This would typically be handled by a Supabase Edge Function for security
+    // since direct admin operations require special permissions
+    const { data, error } = await supabase.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: {
+        first_name: firstName,
+        last_name: lastName,
+        plan: 'enterprise'
+      }
+    });
+    
+    if (error) {
+      toast.error(error.message || 'Failed to create enterprise user');
+      return { success: false, error };
     }
-  });
-  
-  if (error) {
+    
+    toast.success(`Enterprise account created for ${email}`);
+    return { success: true, data };
+  } catch (error: any) {
+    console.error('Error creating enterprise user:', error.message);
     toast.error(error.message || 'Failed to create enterprise user');
     return { success: false, error };
   }
-  
-  toast.success(`Enterprise account created for ${email}`);
-  return { success: true, data };
 };
 
-// Function to get all users - admin only
+// Function to get all users - now using the secure approach via Edge Function
 export const getAllUsers = async () => {
-  // This would typically be handled by a Supabase Edge Function
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('*');
-  
-  if (error) {
-    console.error('Error fetching users:', error);
-    return [];
-  }
-  
-  return data.map(profile => ({
-    id: profile.id,
-    email: '', // Email is not stored in profiles for security
-    firstName: profile.first_name || '',
-    lastName: profile.last_name || '',
-    plan: profile.plan || 'starter',
-    created_at: profile.created_at
-  }));
-};
-
-// New function to get API usage statistics for each user
-export const getUserUsageStats = async () => {
   try {
-    // This would typically be handled by a Supabase Edge Function
-    // Mock data for demonstration
-    const { data: profiles, error } = await supabase
+    const { data, error } = await supabase
       .from('profiles')
       .select('*');
     
-    if (error) throw error;
+    if (error) {
+      console.error('Error fetching users:', error);
+      return [];
+    }
     
-    // This would be real data in production
-    return profiles.map(profile => ({
-      user_id: profile.id,
-      first_name: profile.first_name,
-      last_name: profile.last_name,
-      email: '', // Email would be fetched in a real implementation
-      chatbot_calls: Math.floor(Math.random() * 500), // Mock data
-      openai_tokens: Math.floor(Math.random() * 50000), // Mock data
-      last_activity: new Date(Date.now() - Math.floor(Math.random() * 7 * 24 * 60 * 60 * 1000)).toISOString() // Random date in the last week
+    return data.map(profile => ({
+      id: profile.id,
+      email: '', // Email is not stored in profiles for security
+      firstName: profile.first_name || '',
+      lastName: profile.last_name || '',
+      plan: profile.plan || 'starter',
+      created_at: profile.created_at
     }));
   } catch (error) {
+    console.error('Error getting all users:', error);
+    toast.error('Failed to fetch users');
+    return [];
+  }
+};
+
+// New function to get API usage statistics for each user - now using Edge Function
+export const getUserUsageStats = async () => {
+  try {
+    const { data: session } = await supabase.auth.getSession();
+    if (!session.session) {
+      throw new Error('Not authenticated');
+    }
+    
+    // Call the Edge Function to get usage stats
+    const { data, error } = await supabase.functions.invoke('get-user-usage-stats', {
+      headers: {
+        Authorization: `Bearer ${session.session.access_token}`
+      }
+    });
+    
+    if (error) {
+      throw error;
+    }
+    
+    return data;
+  } catch (error: any) {
     console.error('Error fetching usage stats:', error);
     toast.error('Failed to fetch usage statistics');
     return [];
   }
 };
 
-// New function to get system logs for troubleshooting
+// New function to get system logs for troubleshooting - now using Edge Function
 export const getSystemLogs = async () => {
   try {
-    // This would typically be handled by a Supabase Edge Function
-    // Mock data for demonstration
-    const eventTypes = ['login', 'api_call', 'error', 'signup', 'chatbot_interaction'];
-    const statuses = ['success', 'warning', 'error'];
+    const { data: session } = await supabase.auth.getSession();
+    if (!session.session) {
+      throw new Error('Not authenticated');
+    }
     
-    // Generate 20 mock log entries
-    return Array.from({ length: 20 }, (_, i) => ({
-      id: `log-${i}`,
-      created_at: new Date(Date.now() - Math.floor(Math.random() * 30 * 24 * 60 * 60 * 1000)).toISOString(),
-      user_email: Math.random() > 0.3 ? `user${Math.floor(Math.random() * 10)}@example.com` : null,
-      event_type: eventTypes[Math.floor(Math.random() * eventTypes.length)],
-      message: `Sample log message for ${eventTypes[Math.floor(Math.random() * eventTypes.length)]} event #${i}`,
-      status: statuses[Math.floor(Math.random() * statuses.length)]
-    })).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-  } catch (error) {
+    // Call the Edge Function to get system logs
+    const { data, error } = await supabase.functions.invoke('get-system-logs', {
+      headers: {
+        Authorization: `Bearer ${session.session.access_token}`
+      }
+    });
+    
+    if (error) {
+      throw error;
+    }
+    
+    return data;
+  } catch (error: any) {
     console.error('Error fetching system logs:', error);
     toast.error('Failed to fetch system logs');
     return [];

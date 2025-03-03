@@ -44,11 +44,11 @@ const Admin = () => {
       const userData = await getAllUsers();
       setUsers(userData);
       
-      // Fetch usage statistics
+      // Fetch usage statistics using the Edge Function
       const stats = await getUserUsageStats();
       setUsageStats(stats || []);
       
-      // Fetch system logs
+      // Fetch system logs using the Edge Function
       const logs = await getSystemLogs();
       setSystemLogs(logs || []);
     } catch (error) {
