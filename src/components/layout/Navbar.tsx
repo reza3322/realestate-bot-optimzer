@@ -32,6 +32,7 @@ const NavBarIcon = ({ icon: Icon, ...props }: { icon: LucideIcon }) => (
 const Navbar = () => {
   const [scrolled, setScrolled] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [userProfile, setUserProfile] = useState<any>(null);
   const location = useLocation();
   const navigate = useNavigate();
   
@@ -45,6 +46,37 @@ const Navbar = () => {
     
     return () => {
       window.removeEventListener('scroll', handleScroll);
+    };
+  }, []);
+
+  useEffect(() => {
+    // Check active session on component mount
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        setIsLoggedIn(true);
+        setUserProfile(session.user);
+      } else {
+        setIsLoggedIn(false);
+        setUserProfile(null);
+      }
+    };
+    
+    checkAuth();
+    
+    // Listen for auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session) {
+        setIsLoggedIn(true);
+        setUserProfile(session.user);
+      } else if (event === 'SIGNED_OUT') {
+        setIsLoggedIn(false);
+        setUserProfile(null);
+      }
+    });
+    
+    return () => {
+      subscription.unsubscribe();
     };
   }, []);
   
@@ -98,6 +130,24 @@ const Navbar = () => {
       onClick: () => handleNavigation('/#demo')
     }
   ];
+
+  // Get user initials for avatar
+  const getUserInitials = () => {
+    if (!userProfile) return 'U';
+    
+    const firstName = userProfile.user_metadata?.first_name || '';
+    const lastName = userProfile.user_metadata?.last_name || '';
+    
+    if (firstName && lastName) {
+      return `${firstName[0]}${lastName[0]}`.toUpperCase();
+    } else if (firstName) {
+      return firstName[0].toUpperCase();
+    } else if (userProfile.email) {
+      return userProfile.email[0].toUpperCase();
+    }
+    
+    return 'U';
+  };
   
   return (
     <header className={cn(
@@ -126,7 +176,7 @@ const Navbar = () => {
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="icon" className="rounded-full">
                     <span className="w-9 h-9 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-medium">
-                      AI
+                      {getUserInitials()}
                     </span>
                   </Button>
                 </DropdownMenuTrigger>

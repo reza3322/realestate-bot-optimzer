@@ -42,9 +42,16 @@ const Dashboard = () => {
         const { data: { user } } = await supabase.auth.getUser();
         setUser(user);
         
-        // In a real app, you would fetch the user's plan from the database
-        // For now, we'll use a mock plan
-        setUserPlan('starter');
+        // Determine user plan based on email (for the test users)
+        if (user && user.email) {
+          if (user.email.includes('pro@')) {
+            setUserPlan('professional');
+          } else if (user.email.includes('enterprise@')) {
+            setUserPlan('enterprise');
+          } else {
+            setUserPlan('starter');
+          }
+        }
       } catch (error) {
         console.error('Error fetching user:', error);
         toast.error('Failed to load user data');

@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { supabase } from '@/lib/supabase';
 import { SignInForm } from '@/components/auth/SignInForm';
 import { SignUpForm } from '@/components/auth/SignUpForm';
+import { TestUserSignIn } from '@/components/auth/TestUserSignIn';
 
 const Auth = () => {
   const [session, setSession] = useState(null);
@@ -83,6 +84,7 @@ const Auth = () => {
               
               <TabsContent value="signin" className="mt-0">
                 <SignInForm />
+                <TestUserSignIn />
               </TabsContent>
               
               <TabsContent value="signup" className="mt-0">
