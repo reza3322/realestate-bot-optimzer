@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from 'react';
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -15,15 +16,16 @@ import {
   DropdownMenuGroup 
 } from "@/components/ui/dropdown-menu";
 import { toast } from 'sonner';
+import type { LucideIcon } from 'lucide-react';
 
 interface LocalNavItem {
   name: string;
   url: string;
-  icon: React.ComponentType<any>;
+  icon: LucideIcon;
   onClick: () => void;
 }
 
-const NavBarIcon = ({ icon: Icon, ...props }: { icon: any }) => (
+const NavBarIcon = ({ icon: Icon, ...props }: { icon: LucideIcon }) => (
   <Icon className="h-4 w-4 mr-2" {...props} />
 );
 
@@ -84,10 +86,10 @@ const Navbar = () => {
       onClick: () => handleNavigation('/resources')
     },
     { 
-      name: 'Home', 
-      url: '/', 
+      name: 'Pricing', 
+      url: '/#pricing', 
       icon: Home,
-      onClick: () => handleNavigation('/')
+      onClick: () => handleNavigation('/#pricing')
     },
     { 
       name: 'Contact', 
@@ -112,12 +114,7 @@ const Navbar = () => {
           
           <div className="hidden md:flex md:items-center md:space-x-1">
             <NavBar 
-              items={navItems.map(item => ({
-                name: item.name,
-                url: item.url,
-                icon: item.icon,
-                onClick: item.onClick
-              }))} 
+              items={navItems} 
               className={cn(
                 "ml-auto mr-4",
                 scrolled ? "bg-white/20 dark:bg-gray-800/30" : "bg-white/10 dark:bg-gray-800/20"
