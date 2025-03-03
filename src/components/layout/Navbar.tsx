@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from 'react';
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,14 @@ import {
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
 import { toast } from 'sonner';
+
+// Define the correct NavItem type to match the expected interface
+interface NavItem {
+  name: string;
+  url: string;
+  icon: React.ComponentType<any>;
+  onClick: () => void;
+}
 
 const Navbar = () => {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -64,8 +73,6 @@ const Navbar = () => {
   };
 
   const scrollToSection = (id: string) => {
-    event?.preventDefault();
-    
     if (location.pathname !== '/') {
       navigate(`/${id ? '#' + id : ''}`);
       return;
@@ -77,9 +84,8 @@ const Navbar = () => {
     }
   };
 
-  const handleNavigation = (url: string, event?: React.MouseEvent) => {
-    event?.preventDefault();
-    
+  // Update the handleNavigation function to not accept the event parameter
+  const handleNavigation = (url: string) => {
     if (url.startsWith('/#')) {
       const id = url.substring(2);
       scrollToSection(id);
@@ -88,30 +94,31 @@ const Navbar = () => {
     }
   };
 
-  const navItems = [
+  // Update the navItems array to match the NavItem interface
+  const navItems: NavItem[] = [
     { 
       name: 'Product', 
       url: '/product', 
       icon: Home,
-      onClick: (event) => handleNavigation('/product', event)
+      onClick: () => handleNavigation('/product')
     },
     { 
       name: 'Pricing', 
       url: '/#pricing', 
       icon: CreditCard,
-      onClick: (event) => handleNavigation('/#pricing', event)
+      onClick: () => handleNavigation('/#pricing')
     },
     { 
       name: 'Resources', 
       url: '/resources', 
       icon: FileText,
-      onClick: (event) => handleNavigation('/resources', event)
+      onClick: () => handleNavigation('/resources')
     },
     { 
       name: 'Contact', 
       url: '/#contact', 
       icon: Mail,
-      onClick: (event) => handleNavigation('/#contact', event)
+      onClick: () => handleNavigation('/#contact')
     }
   ];
 
