@@ -23,21 +23,34 @@ const App = () => {
   useEffect(() => {
     // Check current auth status
     const getSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      setUser(session?.user || null);
-      setLoading(false);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        setUser(session?.user || null);
+      } catch (error) {
+        console.error("Error getting session:", error);
+        // Continue even if there's an error with auth
+      } finally {
+        setLoading(false);
+      }
     };
     
     getSession();
     
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        setUser(session?.user || null);
-      }
-    );
-    
-    return () => subscription.unsubscribe();
+    try {
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(
+        (_event, session) => {
+          setUser(session?.user || null);
+        }
+      );
+      
+      return () => subscription?.unsubscribe?.();
+    } catch (error) {
+      console.error("Error setting up auth listener:", error);
+      // Set loading to false if auth listener fails
+      setLoading(false);
+      return () => {};
+    }
   }, []);
 
   // Handle hash navigation when page loads

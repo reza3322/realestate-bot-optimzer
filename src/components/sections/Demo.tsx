@@ -4,7 +4,7 @@ import Chatbot from '@/components/ui/chatbot';
 
 const Demo = () => {
   return (
-    <section className="py-20 bg-secondary/50">
+    <section id="demo" className="py-20 bg-secondary/50">
       <div className="container px-4 mx-auto">
         <div className="max-w-3xl mx-auto text-center mb-12">
           <GradientHeading size="lg" variant="secondary">
@@ -16,7 +16,7 @@ const Demo = () => {
           </p>
         </div>
         
-        <div className="max-w-xl mx-auto">
+        <div className="max-w-xl mx-auto bg-white dark:bg-gray-800 rounded-xl shadow-xl p-4">
           <Chatbot 
             theme="modern"
             variation="blue"
