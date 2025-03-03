@@ -9,3 +9,22 @@ verify_jwt = true
 
 [functions.get-user-usage-stats]
 verify_jwt = true
+
+[functions.web-scraper]
+verify_jwt = true
+
+[functions.ai-chatbot]
+verify_jwt = false
+
+[functions.import-properties]
+verify_jwt = true
+
+[functions.match-leads-to-listings]
+verify_jwt = true
+
+[functions.lead-qualification]
+verify_jwt = true
+
+[functions.process-whatsapp-message]
+verify_jwt = false
+
