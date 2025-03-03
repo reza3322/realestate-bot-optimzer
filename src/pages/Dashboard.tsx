@@ -3,17 +3,26 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/sections/Footer';
-import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Label } from '@/components/ui/label';
-import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
+import DashboardSidebar from '@/components/dashboard/DashboardSidebar';
+import QuickStats from '@/components/dashboard/QuickStats';
+import RecentActivity from '@/components/dashboard/RecentActivity';
+import PropertyListings from '@/components/dashboard/PropertyListings';
+import LeadManagement from '@/components/dashboard/LeadManagement';
+import MarketingAutomation from '@/components/dashboard/MarketingAutomation';
+import Integrations from '@/components/dashboard/Integrations';
+import AccountSettings from '@/components/dashboard/AccountSettings';
+import { PlusCircle, Upload, FileSpreadsheet, Users, Bell, Lock } from 'lucide-react';
 
 const Dashboard = () => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
+  const [userPlan, setUserPlan] = useState('starter'); // starter, professional, enterprise
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -32,6 +41,10 @@ const Dashboard = () => {
         // Get user profile data
         const { data: { user } } = await supabase.auth.getUser();
         setUser(user);
+        
+        // In a real app, you would fetch the user's plan from the database
+        // For now, we'll use a mock plan
+        setUserPlan('starter');
       } catch (error) {
         console.error('Error fetching user:', error);
         toast.error('Failed to load user data');
@@ -52,126 +65,161 @@ const Dashboard = () => {
   }
 
   const firstName = user.user_metadata?.first_name || user.email?.split('@')[0] || 'there';
+  
+  const isPremiumFeature = (requiredPlan) => {
+    const planLevels = {
+      'starter': 1,
+      'professional': 2,
+      'enterprise': 3
+    };
+    
+    return planLevels[userPlan] < planLevels[requiredPlan];
+  };
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="min-h-screen flex flex-col bg-background text-foreground">
       <Navbar />
       
-      <main className="container px-4 py-24">
-        <header className="pb-8 border-b mb-8">
-          <h1 className="text-3xl font-bold mb-2">Dashboard</h1>
-          <p className="text-muted-foreground">
-            Welcome back, {firstName}!
-          </p>
-        </header>
+      <div className="flex flex-1">
+        <DashboardSidebar activeTab={activeTab} setActiveTab={setActiveTab} />
         
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-8">
-          <TabsList className="grid grid-cols-4 w-full max-w-2xl">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="properties">Properties</TabsTrigger>
-            <TabsTrigger value="leads">Leads</TabsTrigger>
-            <TabsTrigger value="settings">Settings</TabsTrigger>
-          </TabsList>
+        <main className="flex-1 p-6 overflow-auto">
+          <header className="pb-6 mb-6">
+            <h1 className="text-3xl font-bold">Dashboard</h1>
+            <p className="text-muted-foreground">
+              Welcome back, {firstName}!
+            </p>
+          </header>
           
-          <TabsContent value="overview" className="space-y-6">
-            <div className="grid md:grid-cols-3 gap-6">
-              <div className="bg-primary/5 p-6 rounded-xl">
-                <h3 className="font-medium mb-1">Active Listings</h3>
-                <p className="text-3xl font-bold">5</p>
-              </div>
-              
-              <div className="bg-primary/5 p-6 rounded-xl">
-                <h3 className="font-medium mb-1">New Leads</h3>
-                <p className="text-3xl font-bold">12</p>
-              </div>
-              
-              <div className="bg-primary/5 p-6 rounded-xl">
-                <h3 className="font-medium mb-1">Conversations</h3>
-                <p className="text-3xl font-bold">8</p>
-              </div>
-            </div>
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+            <TabsList className="hidden">
+              <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="properties">Properties</TabsTrigger>
+              <TabsTrigger value="leads">Leads</TabsTrigger>
+              <TabsTrigger value="marketing">Marketing</TabsTrigger>
+              <TabsTrigger value="integrations">Integrations</TabsTrigger>
+              <TabsTrigger value="settings">Settings</TabsTrigger>
+            </TabsList>
             
-            <div className="rounded-xl border p-6">
-              <h3 className="text-xl font-bold mb-4">Quick Actions</h3>
-              <div className="flex flex-wrap gap-4">
-                <Button>Add New Property</Button>
-                <Button variant="outline">View Analytics</Button>
-                <Button variant="outline">Setup AI Assistant</Button>
-              </div>
-            </div>
-          </TabsContent>
-          
-          <TabsContent value="properties">
-            <div className="text-center py-12">
-              <h3 className="text-xl font-bold mb-2">No Properties Yet</h3>
-              <p className="text-muted-foreground mb-6">
-                Start by adding your first property listing
-              </p>
-              <Button>Add New Property</Button>
-            </div>
-          </TabsContent>
-          
-          <TabsContent value="leads">
-            <div className="text-center py-12">
-              <h3 className="text-xl font-bold mb-2">No Leads Yet</h3>
-              <p className="text-muted-foreground mb-6">
-                Leads will appear here once your AI assistant starts qualifying prospects
-              </p>
-              <Button>Configure AI Assistant</Button>
-            </div>
-          </TabsContent>
-          
-          <TabsContent value="settings">
-            <div className="max-w-2xl space-y-8">
-              <div className="space-y-4">
-                <h3 className="text-xl font-bold">Account Settings</h3>
-                <div className="grid gap-4">
-                  <div className="grid gap-2">
-                    <Label htmlFor="email">Email</Label>
-                    <Input id="email" value={user.email || ''} readOnly />
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="grid gap-2">
-                      <Label htmlFor="firstName">First Name</Label>
-                      <Input 
-                        id="firstName" 
-                        value={user.user_metadata?.first_name || ''} 
-                      />
+            <TabsContent value="overview" className="space-y-6">
+              <QuickStats />
+              <div className="grid md:grid-cols-2 gap-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Recent Activity</CardTitle>
+                    <CardDescription>Latest updates on your platform</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <RecentActivity />
+                  </CardContent>
+                </Card>
+                
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <div>
+                      <CardTitle>Quick Actions</CardTitle>
+                      <CardDescription>Common tasks you might want to perform</CardDescription>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="grid gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <Button 
+                        onClick={() => setActiveTab('properties')} 
+                        className="flex justify-start items-center"
+                        variant="outline" 
+                        size="lg">
+                        <PlusCircle className="mr-2 h-4 w-4" />
+                        Add New Property
+                      </Button>
+                      
+                      <Button 
+                        onClick={() => setActiveTab('properties')} 
+                        className="flex justify-start items-center"
+                        variant="outline" 
+                        size="lg">
+                        <Upload className="mr-2 h-4 w-4" />
+                        Upload Images
+                      </Button>
+                      
+                      <Button 
+                        onClick={() => setActiveTab('properties')} 
+                        className="flex justify-start items-center"
+                        variant="outline" 
+                        size="lg">
+                        <FileSpreadsheet className="mr-2 h-4 w-4" />
+                        Import Properties
+                      </Button>
+                      
+                      <Button 
+                        onClick={() => setActiveTab('leads')} 
+                        className="flex justify-start items-center"
+                        variant="outline" 
+                        size="lg">
+                        <Users className="mr-2 h-4 w-4" />
+                        View All Leads
+                      </Button>
+                      
+                      <Button 
+                        onClick={() => setActiveTab('marketing')} 
+                        className="flex justify-start items-center"
+                        variant={isPremiumFeature('professional') ? "outline" : "outline"}
+                        size="lg">
+                        {isPremiumFeature('professional') && <Lock className="mr-2 h-4 w-4 text-muted-foreground" />}
+                        {!isPremiumFeature('professional') && <Bell className="mr-2 h-4 w-4" />}
+                        {isPremiumFeature('professional') ? 'AI Follow-ups (Pro)' : 'Setup AI Follow-ups'}
+                      </Button>
+                      
+                      <Button 
+                        onClick={() => setActiveTab('settings')} 
+                        className="flex justify-start items-center"
+                        variant="outline" 
+                        size="lg">
+                        {isPremiumFeature('professional') ? (
+                          <>
+                            <Lock className="mr-2 h-4 w-4 text-muted-foreground" />
+                            Invite Team (Pro)
+                          </>
+                        ) : (
+                          <>
+                            <Users className="mr-2 h-4 w-4" />
+                            Manage Team
+                          </>
+                        )}
+                      </Button>
                     </div>
                     
-                    <div className="grid gap-2">
-                      <Label htmlFor="lastName">Last Name</Label>
-                      <Input 
-                        id="lastName" 
-                        value={user.user_metadata?.last_name || ''} 
-                      />
-                    </div>
-                  </div>
-                  
-                  <Button className="w-fit">Update Profile</Button>
-                </div>
+                    {userPlan === 'starter' && (
+                      <Button onClick={() => setActiveTab('settings')} variant="default">
+                        Upgrade to Professional
+                      </Button>
+                    )}
+                  </CardContent>
+                </Card>
               </div>
-              
-              <div className="space-y-4">
-                <h3 className="text-xl font-bold">Subscription</h3>
-                <div className="rounded-xl border p-6">
-                  <div className="flex justify-between items-center mb-4">
-                    <div>
-                      <h4 className="font-bold">Free Trial</h4>
-                      <p className="text-sm text-muted-foreground">7 days remaining</p>
-                    </div>
-                    <Button>Upgrade Plan</Button>
-                  </div>
-                  <div className="h-2 bg-muted rounded overflow-hidden">
-                    <div className="h-full bg-primary w-1/2"></div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </TabsContent>
-        </Tabs>
-      </main>
+            </TabsContent>
+            
+            <TabsContent value="properties">
+              <PropertyListings userPlan={userPlan} isPremiumFeature={isPremiumFeature} />
+            </TabsContent>
+            
+            <TabsContent value="leads">
+              <LeadManagement userPlan={userPlan} isPremiumFeature={isPremiumFeature} />
+            </TabsContent>
+            
+            <TabsContent value="marketing">
+              <MarketingAutomation userPlan={userPlan} isPremiumFeature={isPremiumFeature} />
+            </TabsContent>
+            
+            <TabsContent value="integrations">
+              <Integrations userPlan={userPlan} isPremiumFeature={isPremiumFeature} />
+            </TabsContent>
+            
+            <TabsContent value="settings">
+              <AccountSettings user={user} userPlan={userPlan} />
+            </TabsContent>
+          </Tabs>
+        </main>
+      </div>
       
       <Footer />
     </div>
