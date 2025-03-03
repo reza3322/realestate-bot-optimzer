@@ -64,9 +64,14 @@ const Chatbot = ({
   const baseStyles = getChatStyles(theme, variation);
   const styles = applyFontStyle(baseStyles, fontStyle);
 
-  // Scroll to bottom when messages change
+  // Scroll chat messages to bottom without affecting page scroll
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (messagesEndRef.current) {
+      const chatContainer = messagesEndRef.current.parentElement;
+      if (chatContainer) {
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+      }
+    }
   }, [messages]);
 
   const handleSendMessage = async (message: string) => {
@@ -104,7 +109,7 @@ const Chatbot = ({
       
       {/* Messages Container */}
       <div 
-        className="flex-1 p-4 overflow-y-auto space-y-4 scrollbar-none"
+        className="flex-1 p-4 overflow-y-auto space-y-4 scrollbar-none relative"
         style={{ maxHeight }}
       >
         {messages.map((message, index) => (

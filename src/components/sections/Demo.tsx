@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { GradientHeading } from '@/components/ui/gradient-heading';
 import Chatbot from '@/components/ui/chatbot';
@@ -27,6 +26,12 @@ const Demo = () => {
   const [variation, setVariation] = useState<'default' | 'blue' | 'green' | 'purple'>('blue');
   const [fontStyle, setFontStyle] = useState<'default' | 'serif' | 'mono'>('default');
 
+  // Prevent default form submission behavior
+  const preventScroll = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
   return (
     <section id="demo" className="py-20 bg-secondary/50 relative">
       <div className="container px-4 mx-auto">
@@ -48,7 +53,7 @@ const Demo = () => {
               Chat Design Tools
             </h3>
             
-            <Tabs defaultValue="appearance" className="w-full">
+            <Tabs defaultValue="appearance" className="w-full" onClick={preventScroll}>
               <TabsList className="mb-4 w-full">
                 <TabsTrigger value="appearance" className="flex-1">
                   <Palette className="w-4 h-4 mr-2" />

@@ -1,7 +1,8 @@
+
 import { useEffect, useState } from 'react';
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Home, CreditCard, FileText, Mail } from "lucide-react";
+import { Home, CreditCard, FileText, MessageCircle } from "lucide-react";
 import { NavBar } from "@/components/ui/tubelight-navbar";
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { supabase, signOut } from '@/lib/supabase';
@@ -16,7 +17,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { toast } from 'sonner';
 
-interface LocalNavItem {
+// Match the exact type expected by the NavBar component
+interface NavItem {
   name: string;
   url: string;
   icon: React.ComponentType<any>;
@@ -91,7 +93,7 @@ const Navbar = () => {
     }
   };
 
-  const navItems: LocalNavItem[] = [
+  const navItems: NavItem[] = [
     { 
       name: 'Product', 
       url: '/product', 
@@ -112,9 +114,9 @@ const Navbar = () => {
     },
     { 
       name: 'Contact', 
-      url: '/#contact', 
-      icon: Mail,
-      onClick: () => handleNavigation('/#contact')
+      url: '/#demo', 
+      icon: MessageCircle,
+      onClick: () => handleNavigation('/#demo')
     }
   ];
 

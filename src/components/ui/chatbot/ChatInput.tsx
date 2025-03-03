@@ -24,8 +24,11 @@ const ChatInput = ({
     }
     
     if (message.trim()) {
-      onSendMessage(message.trim());
-      setMessage('');
+      // Call onSendMessage without triggering page scroll
+      setTimeout(() => {
+        onSendMessage(message.trim());
+        setMessage('');
+      }, 0);
     }
   };
 
