@@ -7,8 +7,8 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { signIn, signInWithGoogle, getUserProfile } from '@/lib/supabase';
 
-// The admin email - this is your admin account
-const ADMIN_EMAIL = 'admin@realhomeai.com';
+// Admin emails - these are the only accounts that can access the admin page
+const ADMIN_EMAILS = ['admin@realhomeai.com', 'reza7.mohebbi@gmail.com'];
 
 export function SignInForm() {
   const navigate = useNavigate();
@@ -30,8 +30,8 @@ export function SignInForm() {
         return;
       }
       
-      // Check if this is the admin account - only you should have this email
-      if (data?.user && email.toLowerCase() === ADMIN_EMAIL) {
+      // Check if this is an admin account - only specified emails should have admin access
+      if (data?.user && ADMIN_EMAILS.includes(email.toLowerCase())) {
         toast.success("Welcome back, Admin!");
         navigate('/admin');
         return;
