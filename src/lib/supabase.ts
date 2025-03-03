@@ -1,10 +1,9 @@
-
 import { createClient } from '@supabase/supabase-js';
 import { toast } from 'sonner';
 
-// Use environment variables for Supabase connection
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+// Use hardcoded values for Supabase connection (for development)
+const supabaseUrl = 'https://ckgaqkbsnrvccctqxsqv.supabase.co';
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNrZ2Fxa2JzbnJ2Y2NjdHF4c3F2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDEwMTEyODksImV4cCI6MjA1NjU4NzI4OX0.z62BR5psK8FBR5lfqbnpbFMfQLKgzFCisqDiuWg4MKM';
 
 // Create a Supabase client
 export const supabase = createClient(supabaseUrl, supabaseKey);
