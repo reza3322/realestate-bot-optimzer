@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -36,19 +35,12 @@ export function SignInForm() {
           const role = await getUserRole(data.user.id);
           console.log("User role retrieved:", role);
           
-          // ONLY redirect to admin page if role is strictly 'admin'
           if (role === 'admin') {
             toast.success("Welcome back, Admin!");
-            // Use replace instead of navigate to prevent back button issues
-            setTimeout(() => {
-              navigate('/admin', { replace: true });
-            }, 300);
+            navigate('/admin', { replace: true });
           } else {
             toast.success("Signed in successfully!");
-            // All non-admin users go to dashboard
-            setTimeout(() => {
-              navigate('/dashboard', { replace: true });
-            }, 300);
+            navigate('/dashboard', { replace: true });
           }
         } catch (roleError) {
           console.error("Error getting user role:", roleError);

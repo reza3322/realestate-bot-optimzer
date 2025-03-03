@@ -4,12 +4,13 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { getSession } from '@/lib/supabase';
+import { getSession, getUserRole } from '@/lib/supabase';
 import { SignInForm } from '@/components/auth/SignInForm';
 import { SignUpForm } from '@/components/auth/SignUpForm';
 
 const Auth = () => {
   const [session, setSession] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
   const navigate = useNavigate();
   const location = useLocation();
   const [activeTab, setActiveTab] = useState('signin');
@@ -23,20 +24,39 @@ const Auth = () => {
   }, [location]);
   
   useEffect(() => {
-    getSession().then(({ data: { session } }) => {
-      setSession(session);
-      if (session) {
-        navigate('/dashboard');
-      }
-    });
-
-    const handleStorageChange = () => {
-      getSession().then(({ data: { session } }) => {
+    const checkAuth = async () => {
+      setIsLoading(true);
+      try {
+        const { data: { session } } = await getSession();
         setSession(session);
+        
         if (session) {
-          navigate('/dashboard');
+          // If user is authenticated, check role and redirect accordingly
+          try {
+            const role = await getUserRole(session.user.id);
+            if (role === 'admin') {
+              navigate('/admin', { replace: true });
+            } else {
+              navigate('/dashboard', { replace: true });
+            }
+          } catch (error) {
+            console.error("Error getting user role:", error);
+            // Default to dashboard if role check fails
+            navigate('/dashboard', { replace: true });
+          }
         }
-      });
+      } catch (error) {
+        console.error("Error checking session:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    checkAuth();
+
+    // Listen for auth state changes
+    const handleStorageChange = () => {
+      checkAuth();
     };
     
     window.addEventListener('storage', handleStorageChange);
@@ -45,6 +65,18 @@ const Auth = () => {
       window.removeEventListener('storage', handleStorageChange);
     };
   }, [navigate]);
+
+  // Show loading state while checking authentication
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Checking authentication...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`min-h-screen flex flex-col transition-all duration-300 ${
