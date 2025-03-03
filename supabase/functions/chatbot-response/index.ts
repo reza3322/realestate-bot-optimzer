@@ -15,6 +15,8 @@ serve(async (req) => {
   }
 
   try {
+    console.log('Starting chatbot response function');
+    
     const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
     
     if (!openAIApiKey) {
@@ -29,8 +31,19 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     const supabase = createClient(supabaseUrl, supabaseKey)
 
-    const { message, userId, conversationId, visitorId } = await req.json();
+    // Parse the request body
+    let requestData;
+    try {
+      requestData = await req.json();
+    } catch (error) {
+      console.error('Error parsing request JSON:', error);
+      return new Response(
+        JSON.stringify({ error: 'Invalid JSON in request body' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+      )
+    }
 
+    const { message, userId, conversationId, visitorId } = requestData;
     console.log(`Received message request:`, { message, userId, conversationId, visitorId });
 
     if (!message) {
@@ -63,72 +76,85 @@ serve(async (req) => {
     
     console.log('Sending request to OpenAI API');
     
-    // Use OpenAI API to generate response
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${openAIApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [
-          { 
-            role: 'system', 
-            content: 'You are a helpful real estate assistant. You help potential buyers and sellers with real estate questions. Be friendly, concise, and knowledgeable about property buying, selling, mortgages, and market trends.' 
-          },
-          { role: 'user', content: message }
-        ],
-        max_tokens: 300,
-      }),
-    });
+    try {
+      // Use OpenAI API to generate response
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${openAIApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [
+            { 
+              role: 'system', 
+              content: 'You are a helpful real estate assistant. You help potential buyers and sellers with real estate questions. Be friendly, concise, and knowledgeable about property buying, selling, mortgages, and market trends.' 
+            },
+            { role: 'user', content: message }
+          ],
+          max_tokens: 300,
+        }),
+      });
 
-    console.log('OpenAI API status:', response.status);
-    
-    const data = await response.json();
-    
-    if (!response.ok) {
-      console.error('OpenAI API error:', data);
-      throw new Error(data.error?.message || 'Failed to generate response');
-    }
-    
-    const aiMessage = data.choices[0].message.content;
-    console.log('AI response generated:', aiMessage);
-    
-    // Store the conversation in the database if userId is provided
-    if (userId) {
-      console.log('Storing conversation in database');
+      console.log('OpenAI API status:', response.status);
       
-      const conv_id = conversationId || crypto.randomUUID();
-      
-      const { error: insertError } = await supabase
-        .from('chatbot_conversations')
-        .insert({
-          user_id: userId,
-          visitor_id: visitorId || null,
-          conversation_id: conv_id,
-          message,
-          response: aiMessage,
-        })
-
-      if (insertError) {
-        console.error('Error storing conversation:', insertError)
-      } else {
-        console.log(`Conversation stored with ID: ${conv_id}`);
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('OpenAI API error response:', errorText);
+        try {
+          const errorJson = JSON.parse(errorText);
+          throw new Error(errorJson.error?.message || 'Failed to generate response');
+        } catch (e) {
+          throw new Error(`OpenAI API error (${response.status}): ${errorText.substring(0, 100)}...`);
+        }
       }
-    }
+      
+      const data = await response.json();
+      const aiMessage = data.choices[0].message.content;
+      console.log('AI response generated:', aiMessage);
+      
+      // Store the conversation in the database if userId is provided
+      if (userId) {
+        console.log('Storing conversation in database');
+        
+        const conv_id = conversationId || crypto.randomUUID();
+        
+        const { error: insertError } = await supabase
+          .from('chatbot_conversations')
+          .insert({
+            user_id: userId,
+            visitor_id: visitorId || null,
+            conversation_id: conv_id,
+            message,
+            response: aiMessage,
+          })
 
-    console.log('Returning response to client');
-    
-    return new Response(
-      JSON.stringify({ 
-        response: aiMessage,
-        suggestedFollowUp: getSuggestedFollowUp(message, aiMessage)
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+        if (insertError) {
+          console.error('Error storing conversation:', insertError)
+        } else {
+          console.log(`Conversation stored with ID: ${conv_id}`);
+        }
+      }
+
+      console.log('Returning response to client');
+      
+      return new Response(
+        JSON.stringify({ 
+          response: aiMessage,
+          suggestedFollowUp: getSuggestedFollowUp(message, aiMessage)
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    } catch (error) {
+      console.error('Error calling OpenAI API:', error);
+      return new Response(
+        JSON.stringify({ error: error.message || 'Error communicating with OpenAI' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      )
+    }
   } catch (error) {
-    console.error('Error processing request:', error)
+    console.error('Unexpected error processing request:', error)
     return new Response(
       JSON.stringify({ error: error.message || 'Internal server error' }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
