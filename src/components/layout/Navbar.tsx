@@ -2,8 +2,9 @@
 import { useEffect, useState } from 'react';
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Home, User, Briefcase, FileText } from "lucide-react";
+import { Home, Bot, CreditCard, Mail } from "lucide-react";
 import { NavBar } from "@/components/ui/tubelight-navbar";
+import { Link } from 'react-router-dom';
 
 const Navbar = () => {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -18,10 +19,10 @@ const Navbar = () => {
   }, []);
 
   const navItems = [
-    { name: 'Home', url: '#', icon: Home },
-    { name: 'About', url: '#about', icon: User },
-    { name: 'Projects', url: '#', icon: Briefcase },
-    { name: 'Resume', url: '#', icon: FileText }
+    { name: 'Product', url: '/product', icon: Home },
+    { name: 'Pricing', url: '#pricing', icon: CreditCard },
+    { name: 'Resources', url: '/resources', icon: Bot },
+    { name: 'Contact', url: '#how-it-works', icon: Mail }
   ];
 
   return (

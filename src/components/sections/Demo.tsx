@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import ChatbotDemo from '@/components/ui/ChatbotDemo';
-import { MessageSquare, Instagram, Calendar, Bot } from 'lucide-react';
+import { Bot, Palette, Settings } from 'lucide-react';
 
 const Demo = () => {
   return (
@@ -11,35 +11,35 @@ const Demo = () => {
         <div className="max-w-3xl mx-auto text-center mb-16">
           <h2 className="text-3xl md:text-4xl font-bold mb-4">See It In Action</h2>
           <p className="text-lg text-muted-foreground">
-            Experience how RealAssist.AI engages with leads and automates your workflow.
+            Experience how RealHomeAI engages with leads and automates your workflow.
           </p>
         </div>
 
         <div className="flex flex-col lg:flex-row items-center justify-between gap-12">
           <div className="w-full lg:w-1/2 order-2 lg:order-1">
-            <Tabs defaultValue="website" className="w-full">
+            <Tabs defaultValue="default" className="w-full">
               <TabsList className="grid w-full grid-cols-3 mb-8">
-                <TabsTrigger value="website" className="flex items-center gap-2">
+                <TabsTrigger value="default" className="flex items-center gap-2">
                   <Bot className="h-4 w-4" />
-                  <span>Website Chat</span>
+                  <span>Default</span>
                 </TabsTrigger>
-                <TabsTrigger value="whatsapp" className="flex items-center gap-2">
-                  <MessageSquare className="h-4 w-4" />
-                  <span>WhatsApp</span>
+                <TabsTrigger value="modern" className="flex items-center gap-2">
+                  <Palette className="h-4 w-4" />
+                  <span>Modern</span>
                 </TabsTrigger>
-                <TabsTrigger value="instagram" className="flex items-center gap-2">
-                  <Instagram className="h-4 w-4" />
-                  <span>Instagram</span>
+                <TabsTrigger value="minimal" className="flex items-center gap-2">
+                  <Settings className="h-4 w-4" />
+                  <span>Minimal</span>
                 </TabsTrigger>
               </TabsList>
-              <TabsContent value="website" className="focus:outline-none">
-                <ChatbotDemo />
+              <TabsContent value="default" className="focus:outline-none">
+                <ChatbotDemo theme="default" />
               </TabsContent>
-              <TabsContent value="whatsapp" className="focus:outline-none">
-                <ChatbotDemo />
+              <TabsContent value="modern" className="focus:outline-none">
+                <ChatbotDemo theme="modern" />
               </TabsContent>
-              <TabsContent value="instagram" className="focus:outline-none">
-                <ChatbotDemo />
+              <TabsContent value="minimal" className="focus:outline-none">
+                <ChatbotDemo theme="minimal" />
               </TabsContent>
             </Tabs>
           </div>
@@ -52,7 +52,7 @@ const Demo = () => {
                 <div>
                   <h4 className="font-medium mb-1">Engage Visitors</h4>
                   <p className="text-muted-foreground">
-                    The AI chatbot proactively engages with visitors across your website, WhatsApp, and Instagram.
+                    The AI chatbot proactively engages with visitors across your website with fully customizable UI.
                   </p>
                 </div>
               </div>

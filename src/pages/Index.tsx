@@ -43,7 +43,8 @@ const Index = () => {
       <Navbar />
       <main>
         <Hero />
-        <Features />
+        {/* Features section is currently hidden */}
+        {/* <Features /> */}
         <Benefits />
         <Demo />
         <Cta />
