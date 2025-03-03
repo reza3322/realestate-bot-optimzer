@@ -9,12 +9,19 @@ const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 // Create a Supabase client
 export const supabase = createClient(supabaseUrl, supabaseKey);
 
-// Authentication functions using real Supabase
+// Authentication functions
 export const signIn = async (email: string, password: string) => {
-  return supabase.auth.signInWithPassword({
+  const { data, error } = await supabase.auth.signInWithPassword({
     email,
     password
   });
+  
+  if (error) {
+    toast.error(error.message || 'Failed to sign in');
+    return { data, error };
+  }
+  
+  return { data, error };
 };
 
 export const signInWithGoogle = async () => {
@@ -27,7 +34,7 @@ export const signInWithGoogle = async () => {
 };
 
 export const signUp = async (email: string, password: string, firstName: string, lastName: string) => {
-  return supabase.auth.signUp({
+  const { data, error } = await supabase.auth.signUp({
     email,
     password,
     options: {
@@ -38,25 +45,177 @@ export const signUp = async (email: string, password: string, firstName: string,
       }
     }
   });
+  
+  if (error) {
+    toast.error(error.message || 'Failed to create account');
+    return { data, error };
+  }
+  
+  toast.success("Account created successfully! Please check your email to confirm your account.");
+  
+  return { data, error };
 };
 
 export const signOut = async () => {
-  return supabase.auth.signOut();
+  const { error } = await supabase.auth.signOut();
+  
+  if (error) {
+    toast.error(error.message || 'Failed to sign out');
+  }
+  
+  return { error };
 };
 
 export const resetPassword = async (email: string) => {
-  return supabase.auth.resetPasswordForEmail(email, {
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
     redirectTo: `${window.location.origin}/reset-password`,
   });
+  
+  if (error) {
+    toast.error(error.message || 'Failed to send password reset email');
+  } else {
+    toast.success('Password reset instructions sent to your email');
+  }
+  
+  return { error };
 };
 
 export const getSession = async () => {
   return supabase.auth.getSession();
 };
 
-// Create an enterprise user
+// User data functions
+export const getUserProfile = async (userId: string) => {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', userId)
+    .single();
+    
+  if (error) {
+    console.error('Error fetching user profile:', error);
+  }
+  
+  return { data, error };
+};
+
+export const updateUserProfile = async (userId: string, updates: any) => {
+  const { data, error } = await supabase
+    .from('profiles')
+    .update(updates)
+    .eq('id', userId);
+    
+  if (error) {
+    toast.error(error.message || 'Failed to update profile');
+  } else {
+    toast.success('Profile updated successfully');
+  }
+  
+  return { data, error };
+};
+
+// Lead management functions
+export const getLeads = async () => {
+  const { data, error } = await supabase
+    .from('leads')
+    .select('*')
+    .order('created_at', { ascending: false });
+    
+  if (error) {
+    console.error('Error fetching leads:', error);
+  }
+  
+  return { data: data || [], error };
+};
+
+export const addLead = async (lead: any) => {
+  const { data, error } = await supabase
+    .from('leads')
+    .insert([lead]);
+    
+  if (error) {
+    toast.error(error.message || 'Failed to add lead');
+  } else {
+    toast.success('Lead added successfully');
+  }
+  
+  return { data, error };
+};
+
+export const updateLead = async (id: string, updates: any) => {
+  const { data, error } = await supabase
+    .from('leads')
+    .update(updates)
+    .eq('id', id);
+    
+  if (error) {
+    toast.error(error.message || 'Failed to update lead');
+  } else {
+    toast.success('Lead updated successfully');
+  }
+  
+  return { data, error };
+};
+
+// Property management functions
+export const getProperties = async () => {
+  const { data, error } = await supabase
+    .from('properties')
+    .select('*')
+    .order('created_at', { ascending: false });
+    
+  if (error) {
+    console.error('Error fetching properties:', error);
+  }
+  
+  return { data: data || [], error };
+};
+
+export const addProperty = async (property: any) => {
+  const { data, error } = await supabase
+    .from('properties')
+    .insert([property]);
+    
+  if (error) {
+    toast.error(error.message || 'Failed to add property');
+  } else {
+    toast.success('Property added successfully');
+  }
+  
+  return { data, error };
+};
+
+// Activity tracking
+export const getRecentActivities = async (limit = 10) => {
+  const { data, error } = await supabase
+    .from('activities')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(limit);
+    
+  if (error) {
+    console.error('Error fetching activities:', error);
+  }
+  
+  return { data: data || [], error };
+};
+
+export const logActivity = async (activity: any) => {
+  const { error } = await supabase
+    .from('activities')
+    .insert([activity]);
+    
+  if (error) {
+    console.error('Error logging activity:', error);
+  }
+  
+  return { error };
+};
+
+// Admin functions - special RLS policy needed
 export const createEnterpriseUser = async (email: string, password: string, firstName: string, lastName: string) => {
-  // First, create the user with the normal signUp method
+  // This would typically be handled by a Supabase Edge Function for security
+  // since direct admin operations require special permissions
   const { data, error } = await supabase.auth.admin.createUser({
     email,
     password,
@@ -69,32 +228,31 @@ export const createEnterpriseUser = async (email: string, password: string, firs
   });
   
   if (error) {
-    toast.error(error.message || 'Failed to create user');
-    return false;
+    toast.error(error.message || 'Failed to create enterprise user');
+    return { success: false, error };
   }
   
-  // Update the user's plan to enterprise
-  // This requires appropriate permissions and might need to be handled by an admin API
-  // or serverless function with the right permissions
-  
   toast.success(`Enterprise account created for ${email}`);
-  return true;
+  return { success: true, data };
 };
 
-// Function to get all users (requires admin privileges)
+// Function to get all users - admin only
 export const getAllUsers = async () => {
-  const { data, error } = await supabase.auth.admin.listUsers();
+  // This would typically be handled by a Supabase Edge Function
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('*');
   
   if (error) {
     console.error('Error fetching users:', error);
     return [];
   }
   
-  return data.users.map(user => ({
-    id: user.id,
-    email: user.email,
-    firstName: user.user_metadata?.first_name || '',
-    lastName: user.user_metadata?.last_name || '',
-    plan: user.user_metadata?.plan || 'starter'
+  return data.map(profile => ({
+    id: profile.id,
+    email: '', // Email is not stored in profiles for security
+    firstName: profile.first_name || '',
+    lastName: profile.last_name || '',
+    plan: profile.plan || 'starter'
   }));
 };
