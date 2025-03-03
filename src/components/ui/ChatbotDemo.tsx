@@ -2,9 +2,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { SendIcon, User, Bot, Info } from 'lucide-react';
+import { SendIcon, User, Bot, Info, Settings, Lock } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { useToast } from '@/components/ui/use-toast';
 
 interface Message {
   role: 'user' | 'bot';
@@ -13,16 +14,22 @@ interface Message {
 
 interface ChatbotDemoProps {
   theme?: 'default' | 'modern' | 'minimal';
+  variation?: 'default' | 'blue' | 'green' | 'purple';
+  fontStyle?: 'default' | 'serif' | 'mono';
 }
 
-const ChatbotDemo = ({ theme = 'default' }: ChatbotDemoProps) => {
+const ChatbotDemo = ({ 
+  theme = 'default',
+  variation = 'default',
+  fontStyle = 'default' 
+}: ChatbotDemoProps) => {
+  const { toast } = useToast();
   const [messages, setMessages] = useState<Message[]>([
     { role: 'bot', content: "Hello! I'm RealHomeAI. How can I help you today?" },
   ]);
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
-  const [apiKey, setApiKey] = useState<string | null>(localStorage.getItem('openai-api-key'));
-  const [showApiKeyInput, setShowApiKeyInput] = useState(!apiKey);
+  const [apiKeyStatus, setApiKeyStatus] = useState<'not-set' | 'set' | 'checking'>('checking');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
   const demoResponses = [
@@ -32,6 +39,12 @@ const ChatbotDemo = ({ theme = 'default' }: ChatbotDemoProps) => {
     "Perfect! I've notified your agent and scheduled a viewing for Saturday at 2pm. You'll receive a confirmation email shortly."
   ];
   
+  useEffect(() => {
+    // Check if API key exists in localStorage for demo purposes
+    const hasApiKey = localStorage.getItem('openai-api-key');
+    setApiKeyStatus(hasApiKey ? 'set' : 'not-set');
+  }, []);
+
   useEffect(() => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
@@ -50,22 +63,14 @@ const ChatbotDemo = ({ theme = 'default' }: ChatbotDemoProps) => {
     setIsTyping(true);
     
     try {
-      if (apiKey) {
-        // In a real implementation, you would call OpenAI API here
-        // For demo purposes, we'll simulate a response
-        setTimeout(() => {
-          const responseIndex = Math.min(messages.length - 1, demoResponses.length - 1);
-          setIsTyping(false);
-          setMessages(prev => [...prev, { role: 'bot', content: demoResponses[responseIndex] }]);
-        }, 1500);
-      } else {
-        // Without API key, just use demo responses
+      // For demo purposes we'll use the demo responses
+      // In a production environment, we would call an API endpoint 
+      // that securely uses the OpenAI API with your key
+      setTimeout(() => {
         const responseIndex = Math.min(messages.length - 1, demoResponses.length - 1);
-        setTimeout(() => {
-          setIsTyping(false);
-          setMessages(prev => [...prev, { role: 'bot', content: demoResponses[responseIndex] }]);
-        }, 1500);
-      }
+        setIsTyping(false);
+        setMessages(prev => [...prev, { role: 'bot', content: demoResponses[responseIndex] }]);
+      }, 1500);
     } catch (error) {
       console.error('Error sending message:', error);
       setIsTyping(false);
@@ -80,16 +85,40 @@ const ChatbotDemo = ({ theme = 'default' }: ChatbotDemoProps) => {
     }
   };
 
-  const saveApiKey = (key: string) => {
-    localStorage.setItem('openai-api-key', key);
-    setApiKey(key);
-    setShowApiKeyInput(false);
+  const handleApiKeyCheck = () => {
+    if (apiKeyStatus === 'not-set') {
+      toast({
+        title: "API Key Required",
+        description: "For a live demo, this would connect to a secure backend. In a real implementation, you wouldn't store API keys in the browser.",
+        duration: 5000,
+      });
+    } else {
+      toast({
+        title: "API Key Status",
+        description: "API key is configured. In a production app, this would securely connect to OpenAI through a backend service.",
+        duration: 3000,
+      });
+    }
   };
 
   const getThemeStyles = () => {
+    // Base theme styles
+    let styles = {
+      container: "bg-card border border-border",
+      header: "bg-primary/10 border-b border-border",
+      userBubble: "bg-primary text-primary-foreground rounded-xl rounded-tr-none",
+      botBubble: "bg-secondary text-secondary-foreground rounded-xl rounded-tl-none",
+      inputContainer: "border-t border-border",
+      botIcon: "bg-primary/20 text-primary",
+      userIcon: "bg-secondary text-secondary-foreground",
+      font: "",
+    };
+    
+    // Apply theme variations
     switch (theme) {
       case 'modern':
-        return {
+        styles = {
+          ...styles,
           container: "bg-gradient-to-br from-indigo-50 to-blue-50 dark:from-gray-900 dark:to-gray-800",
           header: "bg-gradient-to-r from-indigo-500 to-blue-600 text-white",
           userBubble: "bg-blue-600 text-white rounded-2xl rounded-tr-none shadow-md",
@@ -98,8 +127,10 @@ const ChatbotDemo = ({ theme = 'default' }: ChatbotDemoProps) => {
           botIcon: "bg-gradient-to-r from-indigo-500 to-blue-600 text-white",
           userIcon: "bg-blue-600 text-white",
         };
+        break;
       case 'minimal':
-        return {
+        styles = {
+          ...styles,
           container: "bg-gray-50 dark:bg-gray-900",
           header: "bg-transparent border-b border-gray-200 dark:border-gray-800 text-gray-900 dark:text-gray-100",
           userBubble: "bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg",
@@ -108,17 +139,50 @@ const ChatbotDemo = ({ theme = 'default' }: ChatbotDemoProps) => {
           botIcon: "bg-transparent border border-gray-300 dark:border-gray-700 text-gray-500 dark:text-gray-400",
           userIcon: "bg-transparent border border-gray-300 dark:border-gray-700 text-gray-500 dark:text-gray-400",
         };
-      default:
-        return {
-          container: "bg-card border border-border",
-          header: "bg-primary/10 border-b border-border",
-          userBubble: "bg-primary text-primary-foreground rounded-xl rounded-tr-none",
-          botBubble: "bg-secondary text-secondary-foreground rounded-xl rounded-tl-none",
-          inputContainer: "border-t border-border",
-          botIcon: "bg-primary/20 text-primary",
-          userIcon: "bg-secondary text-secondary-foreground",
-        };
+        break;
     }
+    
+    // Apply color variations
+    switch (variation) {
+      case 'blue':
+        styles = {
+          ...styles,
+          header: styles.header.replace('from-indigo-500 to-blue-600', 'from-blue-400 to-blue-700').replace('bg-primary/10', 'bg-blue-100 dark:bg-blue-900/30'),
+          userBubble: styles.userBubble.replace('bg-primary', 'bg-blue-600').replace('bg-blue-600', 'bg-blue-600'),
+          botIcon: styles.botIcon.replace('bg-primary/20', 'bg-blue-100 dark:bg-blue-900/30').replace('text-primary', 'text-blue-700 dark:text-blue-400'),
+        };
+        break;
+      case 'green':
+        styles = {
+          ...styles,
+          header: styles.header.replace('from-indigo-500 to-blue-600', 'from-emerald-400 to-green-600').replace('bg-primary/10', 'bg-emerald-100 dark:bg-emerald-900/30'),
+          userBubble: styles.userBubble.replace('bg-primary', 'bg-emerald-600').replace('bg-blue-600', 'bg-emerald-600'),
+          botIcon: styles.botIcon.replace('bg-primary/20', 'bg-emerald-100 dark:bg-emerald-900/30').replace('text-primary', 'text-emerald-700 dark:text-emerald-400'),
+        };
+        break;
+      case 'purple':
+        styles = {
+          ...styles,
+          header: styles.header.replace('from-indigo-500 to-blue-600', 'from-purple-400 to-violet-600').replace('bg-primary/10', 'bg-purple-100 dark:bg-purple-900/30'),
+          userBubble: styles.userBubble.replace('bg-primary', 'bg-purple-600').replace('bg-blue-600', 'bg-purple-600'),
+          botIcon: styles.botIcon.replace('bg-primary/20', 'bg-purple-100 dark:bg-purple-900/30').replace('text-primary', 'text-purple-700 dark:text-purple-400'),
+        };
+        break;
+    }
+    
+    // Apply font styles
+    switch (fontStyle) {
+      case 'serif':
+        styles.font = "font-serif";
+        break;
+      case 'mono':
+        styles.font = "font-mono";
+        break;
+      default:
+        styles.font = "font-sans";
+    }
+    
+    return styles;
   };
 
   const styles = getThemeStyles();
@@ -126,7 +190,8 @@ const ChatbotDemo = ({ theme = 'default' }: ChatbotDemoProps) => {
   return (
     <div className={cn(
       "w-full max-w-md mx-auto rounded-xl shadow-lg overflow-hidden flex flex-col",
-      styles.container
+      styles.container,
+      styles.font
     )}>
       <div className={cn(
         "p-4 flex justify-between items-center",
@@ -140,34 +205,20 @@ const ChatbotDemo = ({ theme = 'default' }: ChatbotDemoProps) => {
                 variant="ghost" 
                 size="icon"
                 className="h-8 w-8"
-                onClick={() => setShowApiKeyInput(!showApiKeyInput)}
+                onClick={handleApiKeyCheck}
               >
-                <Info className="h-4 w-4" />
+                {apiKeyStatus === 'not-set' ? 
+                  <Lock className="h-4 w-4" /> : 
+                  <Settings className="h-4 w-4" />
+                }
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              <p>Configure OpenAI API Key</p>
+              <p>API Configuration</p>
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
       </div>
-      
-      {showApiKeyInput && (
-        <div className="p-4 bg-muted/50 border-b border-border">
-          <p className="text-xs mb-2">Enter your OpenAI API key to enable live AI responses:</p>
-          <div className="flex gap-2">
-            <Input
-              type="password"
-              placeholder="sk-..."
-              value={apiKey || ''}
-              onChange={(e) => setApiKey(e.target.value)}
-              className="text-xs"
-            />
-            <Button size="sm" onClick={() => saveApiKey(apiKey || '')}>Save</Button>
-          </div>
-          <p className="text-xs mt-2 text-muted-foreground">Your API key is stored locally in your browser.</p>
-        </div>
-      )}
       
       <div className="flex-1 p-4 space-y-4 overflow-y-auto max-h-[300px] min-h-[300px]">
         {messages.map((message, i) => (
