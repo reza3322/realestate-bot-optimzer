@@ -28,7 +28,9 @@ export function SignUpForm() {
         return;
       }
       
-      toast.success("Account created! Please check your email to confirm your registration.");
+      toast.success("Account created successfully!");
+      // Redirect to the pricing/plans page instead of showing the message
+      navigate('/#pricing');
     } catch (error: any) {
       toast.error(error.message || "An unexpected error occurred");
     } finally {
@@ -90,6 +92,19 @@ export function SignUpForm() {
       <Button type="submit" className="w-full" disabled={isLoading}>
         {isLoading ? "Creating account..." : "Create Account"}
       </Button>
+      
+      <div className="text-center mt-4">
+        <p className="text-sm text-muted-foreground">
+          By signing up, you agree to our 
+          <Button variant="link" className="p-0 h-auto mx-1 text-sm">
+            Terms of Service
+          </Button>
+          and
+          <Button variant="link" className="p-0 h-auto mx-1 text-sm">
+            Privacy Policy
+          </Button>
+        </p>
+      </div>
     </form>
   );
 }
