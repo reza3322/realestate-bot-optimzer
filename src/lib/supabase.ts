@@ -15,6 +15,15 @@ export const signIn = async (email: string, password: string) => {
   });
 };
 
+export const signInWithGoogle = async () => {
+  return supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      redirectTo: `${window.location.origin}/dashboard`
+    }
+  });
+};
+
 export const signUp = async (email: string, password: string, firstName: string, lastName: string) => {
   return supabase.auth.signUp({
     email,
