@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -16,7 +15,6 @@ const Auth = () => {
   const location = useLocation();
   const [activeTab, setActiveTab] = useState('signin');
   
-  // Get the tab from the URL query parameter or default to signin
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
     const type = searchParams.get('type');
@@ -26,7 +24,6 @@ const Auth = () => {
   }, [location]);
   
   useEffect(() => {
-    // Check active session
     getSession().then(({ data: { session } }) => {
       setSession(session);
       if (session) {
@@ -34,7 +31,6 @@ const Auth = () => {
       }
     });
 
-    // Listen for auth changes
     const handleStorageChange = () => {
       getSession().then(({ data: { session } }) => {
         setSession(session);
@@ -80,8 +76,8 @@ const Auth = () => {
               <InfoIcon className="h-4 w-4 text-blue-600 dark:text-blue-400" />
               <AlertTitle>Important Access Information</AlertTitle>
               <AlertDescription>
-                The Admin Page is restricted to platform administrators only. 
-                Regular users (including enterprise plan users) will be directed to the dashboard.
+                Only the platform creator (admin@realhomeai.com) can access the Admin Page.
+                All other users (including enterprise plan users) will be directed to the dashboard.
               </AlertDescription>
             </Alert>
             
@@ -151,9 +147,9 @@ const Auth = () => {
             <p className="mb-4">For testing purposes, you can use these pre-configured accounts:</p>
             
             <div className="grid gap-4 md:grid-cols-4">
-              <div className="border dark:border-gray-700 rounded-lg p-4">
+              <div className="border dark:border-gray-700 rounded-lg p-4 bg-purple-50 dark:bg-purple-900/20">
                 <h3 className="font-medium">Admin Account</h3>
-                <p className="text-sm text-muted-foreground mb-2">Platform Administrator</p>
+                <p className="text-sm text-muted-foreground mb-2">Platform Creator (Admin Access)</p>
                 <div className="text-sm">
                   <p><strong>Email:</strong> admin@realhomeai.com</p>
                   <p><strong>Password:</strong> admin123</p>
@@ -180,7 +176,7 @@ const Auth = () => {
               
               <div className="border dark:border-gray-700 rounded-lg p-4">
                 <h3 className="font-medium">Enterprise Plan</h3>
-                <p className="text-sm text-muted-foreground mb-2">All features (not admin)</p>
+                <p className="text-sm text-muted-foreground mb-2">Premium features (NO admin access)</p>
                 <div className="text-sm">
                   <p><strong>Email:</strong> enterprise@example.com</p>
                   <p><strong>Password:</strong> password123</p>

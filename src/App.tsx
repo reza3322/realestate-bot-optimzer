@@ -1,4 +1,3 @@
-
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -64,7 +63,7 @@ const App = () => {
     return children;
   };
 
-  // Admin-only route component
+  // Admin-only route component - only the platform creator (admin@realhomeai.com) can access
   const AdminRoute = ({ children }) => {
     if (loading) return <div className="flex justify-center items-center h-screen">Loading...</div>;
     
@@ -72,7 +71,7 @@ const App = () => {
       return <Navigate to="/auth" replace />;
     }
     
-    // Only allow access if the user is the admin
+    // Only allow access if the user is the admin (platform creator)
     if (userEmail.toLowerCase() !== 'admin@realhomeai.com') {
       return <Navigate to="/dashboard" replace />;
     }

@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -34,16 +33,9 @@ export function SignInForm() {
         return;
       }
       
-      // For regular users, check their plan
+      // For all other users (starter, pro, enterprise), redirect to dashboard
       if (data?.user) {
-        const { data: profileData } = await getUserProfile(data.user.id);
-        
         toast.success("Signed in successfully!");
-        
-        // All users (including enterprise) go to the dashboard
-        navigate('/dashboard');
-      } else {
-        // Default redirect if we can't determine the user's profile
         navigate('/dashboard');
       }
     } catch (error: any) {
