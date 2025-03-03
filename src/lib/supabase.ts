@@ -1,4 +1,3 @@
-
 import { createClient } from '@supabase/supabase-js';
 import { toast } from 'sonner';
 
@@ -194,4 +193,43 @@ export const onAuthStateChange = (callback: (event: string, session: any) => voi
       }
     }
   };
+};
+
+// New function to create an enterprise user directly
+export const createEnterpriseUser = (email: string, password: string, firstName: string, lastName: string) => {
+  // Check if user already exists
+  if (mockUsers.some(u => u.email === email)) {
+    toast.error('User already exists');
+    return false;
+  }
+  
+  // Create a new enterprise user
+  const newUser = {
+    id: String(mockUsers.length + 1),
+    email,
+    password,
+    user_metadata: {
+      first_name: firstName,
+      last_name: lastName,
+      plan: 'enterprise' as const
+    }
+  };
+  
+  // Add to mock database
+  mockUsers.push(newUser);
+  
+  toast.success(`Enterprise account created for ${email}`);
+  
+  return true;
+};
+
+// Function to get all users (for admin purposes)
+export const getAllUsers = () => {
+  return mockUsers.map(user => ({
+    id: user.id,
+    email: user.email,
+    firstName: user.user_metadata.first_name,
+    lastName: user.user_metadata.last_name,
+    plan: user.user_metadata.plan
+  }));
 };

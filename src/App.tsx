@@ -12,6 +12,7 @@ import Product from "./pages/Product";
 import Resources from "./pages/Resources";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
+import Admin from "./pages/Admin";
 
 // Create a new query client
 const queryClient = new QueryClient();
@@ -73,6 +74,7 @@ const App = () => {
             <Route path="/product" element={<Product />} />
             <Route path="/resources" element={<Resources />} />
             <Route path="/auth" element={<Auth />} />
+            <Route path="/admin" element={<Admin />} />
             
             {/* Protected routes */}
             <Route 
