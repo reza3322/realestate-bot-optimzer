@@ -1,6 +1,7 @@
 
 import { Brain, Users, Home, Calendar, BellRing, Share2, MessageSquare, Instagram } from 'lucide-react';
 import DisplayCards from '@/components/ui/display-cards';
+import { motion } from 'framer-motion';
 
 const Features = () => {
   const featuresCards = [
@@ -36,31 +37,47 @@ const Features = () => {
     },
   ];
 
-  const features = [
+  // Convert the remaining features to the floating card style
+  const additionalFeatures = [
     {
-      title: 'Appointment Scheduling',
-      description: 'Allows customers to schedule viewings directly with your calendar, reducing booking friction.',
-      icon: Calendar
+      icon: <Calendar className="size-4 text-primary" />,
+      title: "Appointment Scheduling",
+      description: "Allows customers to schedule viewings directly with your calendar, reducing booking friction.",
+      date: "Time-saving",
+      iconClassName: "text-primary",
+      titleClassName: "text-primary",
     },
     {
-      title: 'Listing Alerts',
-      description: 'Notifies leads when new properties matching their criteria are listed, keeping them engaged.',
-      icon: BellRing
+      icon: <BellRing className="size-4 text-primary" />,
+      title: "Listing Alerts",
+      description: "Notifies leads when new properties matching their criteria are listed, keeping them engaged.",
+      date: "Auto notifications",
+      iconClassName: "text-primary",
+      titleClassName: "text-primary",
     },
     {
-      title: 'Social Integration',
-      description: 'Connects with WhatsApp and Instagram to capture and qualify leads from social media.',
-      icon: Share2
+      icon: <Share2 className="size-4 text-primary" />,
+      title: "Social Integration",
+      description: "Connects with WhatsApp and Instagram to capture and qualify leads from social media.",
+      date: "Multi-channel",
+      iconClassName: "text-primary",
+      titleClassName: "text-primary",
     },
     {
-      title: 'Instagram Inquiries',
-      description: 'Responds to Instagram DMs and comments about properties, capturing interest 24/7.',
-      icon: Instagram
+      icon: <Instagram className="size-4 text-primary" />,
+      title: "Instagram Inquiries",
+      description: "Responds to Instagram DMs and comments about properties, capturing interest 24/7.",
+      date: "Social media",
+      iconClassName: "text-primary",
+      titleClassName: "text-primary",
     },
     {
-      title: 'Analytics Dashboard',
-      description: 'Tracks which listings get the most engagement to optimize your marketing strategy.',
-      icon: Brain
+      icon: <Brain className="size-4 text-primary" />,
+      title: "Analytics Dashboard",
+      description: "Tracks which listings get the most engagement to optimize your marketing strategy.",
+      date: "Data-driven",
+      iconClassName: "text-primary",
+      titleClassName: "text-primary",
     },
   ];
 
@@ -82,20 +99,32 @@ const Features = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-10">
-          {features.map((feature, index) => (
-            <div 
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-10">
+          {additionalFeatures.map((feature, index) => (
+            <motion.div 
               key={feature.title}
-              className="bg-background/60 backdrop-blur-sm border border-border rounded-xl p-6 hover:bg-muted/80 transition-colors duration-300 hover:scale-105 transform transition-transform"
+              className="relative flex h-36 w-full -skew-y-[4deg] select-none flex-col justify-between rounded-xl border border-border bg-background/70 backdrop-blur-sm px-4 py-3 transition-all duration-500"
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ 
+                opacity: 1, 
+                y: 0,
+                transition: { delay: index * 0.1, duration: 0.5 }
+              }}
+              viewport={{ once: true, margin: "-100px" }}
+              whileHover={{ 
+                y: -5, 
+                transition: { duration: 0.2 } 
+              }}
             >
-              <div className="flex items-center gap-3 mb-4">
-                <span className="p-2 rounded-full bg-primary/10 text-primary">
-                  <feature.icon className="w-5 h-5" />
+              <div className="flex items-center gap-3">
+                <span className="relative inline-block rounded-full bg-primary/20 p-3">
+                  {React.cloneElement(feature.icon, { className: "w-5 h-5" })}
                 </span>
-                <h3 className="font-semibold text-lg">{feature.title}</h3>
+                <p className="text-lg font-medium">{feature.title}</p>
               </div>
-              <p className="text-muted-foreground">{feature.description}</p>
-            </div>
+              <p className="whitespace-normal text-muted-foreground">{feature.description}</p>
+              <p className="text-sm text-muted-foreground">{feature.date}</p>
+            </motion.div>
           ))}
         </div>
       </div>
