@@ -1,4 +1,5 @@
 
+import React from 'react';
 import { Brain, Users, Home, Calendar, BellRing, Share2, MessageSquare, Instagram } from 'lucide-react';
 import DisplayCards from '@/components/ui/display-cards';
 import { motion } from 'framer-motion';
