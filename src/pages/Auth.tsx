@@ -4,7 +4,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { supabase } from '@/lib/supabase';
+import { getSession } from '@/lib/supabase';
 import { SignInForm } from '@/components/auth/SignInForm';
 import { SignUpForm } from '@/components/auth/SignUpForm';
 import { TestUserSignIn } from '@/components/auth/TestUserSignIn';
@@ -26,7 +26,7 @@ const Auth = () => {
   
   useEffect(() => {
     // Check active session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    getSession().then(({ data: { session } }) => {
       setSession(session);
       if (session) {
         navigate('/dashboard');
@@ -34,16 +34,20 @@ const Auth = () => {
     });
 
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
+    const handleStorageChange = () => {
+      getSession().then(({ data: { session } }) => {
         setSession(session);
         if (session) {
           navigate('/dashboard');
         }
-      }
-    );
-
-    return () => subscription.unsubscribe();
+      });
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+    };
   }, [navigate]);
 
   return (

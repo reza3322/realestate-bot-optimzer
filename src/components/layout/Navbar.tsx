@@ -1,11 +1,10 @@
-
 import { useEffect, useState } from 'react';
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Home, CreditCard, FileText, MessageCircle } from "lucide-react";
 import { NavBar } from "@/components/ui/tubelight-navbar";
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { supabase, signOut } from '@/lib/supabase';
+import { signOut, getSession } from '@/lib/supabase';
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -52,7 +51,7 @@ const Navbar = () => {
   useEffect(() => {
     // Check active session on component mount
     const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session } } = await getSession();
       if (session) {
         setIsLoggedIn(true);
         setUserProfile(session.user);
@@ -64,19 +63,15 @@ const Navbar = () => {
     
     checkAuth();
     
-    // Listen for auth state changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_IN' && session) {
-        setIsLoggedIn(true);
-        setUserProfile(session.user);
-      } else if (event === 'SIGNED_OUT') {
-        setIsLoggedIn(false);
-        setUserProfile(null);
-      }
-    });
+    // Listen for auth state changes using local storage events
+    const handleStorageChange = () => {
+      checkAuth();
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
     
     return () => {
-      subscription.unsubscribe();
+      window.removeEventListener('storage', handleStorageChange);
     };
   }, []);
   

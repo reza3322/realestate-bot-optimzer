@@ -5,7 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { supabase } from '@/lib/supabase';
+import { getSession, onAuthStateChange } from '@/lib/supabase';
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import Product from "./pages/Product";
@@ -22,23 +22,22 @@ const App = () => {
 
   useEffect(() => {
     // Check current auth status
-    const getSession = async () => {
+    const checkSession = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const { data: { session } } = await getSession();
         setUser(session?.user || null);
       } catch (error) {
         console.error("Error getting session:", error);
-        // Continue even if there's an error with auth
       } finally {
         setLoading(false);
       }
     };
     
-    getSession();
+    checkSession();
     
     // Listen for auth changes
     try {
-      const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      const { data: { subscription } } = onAuthStateChange(
         (_event, session) => {
           setUser(session?.user || null);
         }
@@ -47,7 +46,6 @@ const App = () => {
       return () => subscription?.unsubscribe?.();
     } catch (error) {
       console.error("Error setting up auth listener:", error);
-      // Set loading to false if auth listener fails
       setLoading(false);
       return () => {};
     }
