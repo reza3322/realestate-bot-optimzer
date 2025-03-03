@@ -20,6 +20,7 @@ const ChatInput = ({
   const handleSubmit = (e?: React.MouseEvent) => {
     if (e) {
       e.preventDefault();
+      e.stopPropagation(); // Prevent event from bubbling up
     }
     
     if (message.trim()) {
@@ -31,6 +32,7 @@ const ChatInput = ({
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
+      e.stopPropagation(); // Prevent event from bubbling up
       handleSubmit();
     }
   };

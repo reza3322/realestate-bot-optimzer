@@ -33,8 +33,14 @@ const Index = () => {
 
   // Fix for the hash navigation to prevent unwanted scrolling
   useEffect(() => {
-    // Only scroll if there's a specific hash that the user navigated to
+    // Only scroll if there's a specific hash that the user navigated to intentionally
     if (window.location.hash && window.location.hash !== '#' && window.location.hash !== '#pricing') {
+      // Clear the hash on initial page load to prevent auto-scrolling
+      if (performance.navigation.type === 1) { // 1 is PAGE_RELOAD
+        window.history.replaceState(null, '', window.location.pathname);
+        return;
+      }
+      
       const id = window.location.hash.substring(1);
       setTimeout(() => {
         const element = document.getElementById(id);
