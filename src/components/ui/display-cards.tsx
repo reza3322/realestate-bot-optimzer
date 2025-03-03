@@ -34,7 +34,7 @@ function DisplayCard({
         </span>
         <p className={cn("text-lg font-medium", titleClassName)}>{title}</p>
       </div>
-      <p className="whitespace-nowrap text-lg">{description}</p>
+      <p className="whitespace-normal text-sm sm:text-base md:text-lg break-words">{description}</p>
       <p className="text-muted-foreground">{date}</p>
     </div>
   );
