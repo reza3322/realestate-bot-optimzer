@@ -1,128 +1,88 @@
 
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1'
+// Follow this setup guide to integrate the Deno runtime into your application:
+// https://deno.com/deploy/docs/serve-function
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.33.1';
+import { corsHeaders } from '../_shared/cors.ts';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+console.log("Create Enterprise User function initialized");
 
-serve(async (req) => {
-  // Handle CORS preflight requests
+const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+
+Deno.serve(async (req) => {
+  // This is needed if you're planning to invoke your function from a browser.
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response('ok', { headers: corsHeaders });
   }
 
   try {
-    // Create a Supabase client with the Supabase URL and key
-    const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
-    const supabase = createClient(supabaseUrl, supabaseKey);
-
-    // Get the JWT token from the request headers
-    const authHeader = req.headers.get('Authorization') || '';
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return new Response(
-        JSON.stringify({ error: 'Missing or invalid authorization header' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
-      );
-    }
-
-    const token = authHeader.replace('Bearer ', '');
+    console.log("Request received to create enterprise user");
     
-    // Verify the token and get the user
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    // Create a Supabase client with the Admin key
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
     
-    if (authError || !user) {
-      console.error('Authentication error:', authError);
-      return new Response(
-        JSON.stringify({ error: 'Authentication failed', details: authError?.message }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
-      );
-    }
-
-    // Get user profile to check if they have admin privileges (this is a simplified check)
-    // In a real application, you would have a more robust role-based system
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('plan')
-      .eq('id', user.id)
-      .single();
-
-    if (profileError) {
-      console.error('Error fetching user profile:', profileError);
-      return new Response(
-        JSON.stringify({ error: 'Failed to verify admin privileges', details: profileError.message }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
-      );
-    }
-
-    // Check if the user has admin privileges (enterprise plan for this example)
-    // You would typically have a dedicated admin role field in your profiles table
-    if (profile.plan !== 'enterprise') {
-      return new Response(
-        JSON.stringify({ error: 'Insufficient privileges. Only enterprise users can perform this action.' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 }
-      );
-    }
-
-    // Parse the request body
-    const { email, password, firstName, lastName, plan } = await req.json();
-
+    // Get and validate the request payload
+    const { email, password, firstName, lastName, plan = 'starter' } = await req.json();
+    
     if (!email || !password || !firstName || !lastName) {
+      console.error("Missing required fields", { email, firstName, lastName, password: !!password });
       return new Response(
-        JSON.stringify({ error: 'Missing required fields' }),
+        JSON.stringify({ 
+          success: false, 
+          error: "Missing required fields: email, password, firstName, and lastName are required" 
+        }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
       );
     }
-
-    // Create the user using the admin API
+    
+    console.log(`Creating user with email: ${email}`);
+    
+    // Step 1: Create the user with the Supabase auth API
     const { data: userData, error: userError } = await supabase.auth.admin.createUser({
       email,
       password,
-      email_confirm: true,
+      email_confirm: true, // Auto-confirm the email
       user_metadata: {
         first_name: firstName,
         last_name: lastName,
-        plan: plan || 'starter'
+        plan
       }
     });
-
+    
     if (userError) {
-      console.error('Error creating user:', userError);
+      console.error("Error creating user:", userError);
       return new Response(
-        JSON.stringify({ error: 'Failed to create user', details: userError.message }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+        JSON.stringify({ success: false, error: userError.message }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
       );
     }
-
-    // Log the admin action for auditing
-    await supabase.from('activities').insert({
-      user_id: user.id,
-      action: 'create_user',
-      details: `Created user ${email} with ${plan || 'starter'} plan`,
-      target_id: userData.user.id,
-      created_at: new Date().toISOString()
-    });
-
-    // Return success response
+    
+    console.log("User created successfully, updating role to admin");
+    
+    // Step 2: Update the user's role to 'admin' in the profiles table
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .update({ role: 'admin' })
+      .eq('id', userData.user.id);
+    
+    if (profileError) {
+      console.error("Error updating user profile role:", profileError);
+      // We don't return an error here because the user was already created successfully
+      // Just log the error and continue
+    }
+    
+    console.log("Enterprise user creation completed successfully");
+    
     return new Response(
-      JSON.stringify({ 
-        success: true, 
-        message: `User ${email} created successfully`,
-        user: {
-          id: userData.user.id,
-          email: userData.user.email,
-          plan: plan || 'starter'
-        }
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+      JSON.stringify({ success: true, data: userData }),
+      { headers: { ...corsHeaders, 'Content-Type': 'Application/json' }, status: 200 }
     );
+    
   } catch (error) {
-    console.error('Unexpected error:', error.message);
+    console.error("Unexpected error in create-enterprise-user:", error.message);
     return new Response(
-      JSON.stringify({ error: 'Internal server error', details: error.message }),
+      JSON.stringify({ success: false, error: error.message }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     );
   }
-})
+});

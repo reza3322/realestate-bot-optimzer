@@ -1,2 +1,11 @@
 
 project_id = "ckgaqkbsnrvccctqxsqv"
+
+[functions.create-enterprise-user]
+verify_jwt = true
+
+[functions.get-system-logs]
+verify_jwt = true
+
+[functions.get-user-usage-stats]
+verify_jwt = true
