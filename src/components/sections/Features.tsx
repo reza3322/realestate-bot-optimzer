@@ -2,7 +2,6 @@
 import React from 'react';
 import { Brain, Users, Home, Calendar, BellRing, Share2, MessageSquare, Instagram } from 'lucide-react';
 import DisplayCards from '@/components/ui/display-cards';
-import { motion } from 'framer-motion';
 
 const Features = () => {
   // Define features with proper staggered positions for cascading stacked effect
@@ -14,7 +13,7 @@ const Features = () => {
       date: "24/7 availability",
       iconClassName: "text-primary",
       titleClassName: "text-primary",
-      className: "[grid-area:stack] z-[80] grayscale-[100%] hover:grayscale-0 before:absolute before:w-full before:h-full before:content-[''] before:bg-background/50 before:rounded-xl before:top-0 before:left-0 hover:before:opacity-0 before:transition-opacity before:duration-700 hover:-translate-y-6 transition-all duration-500",
+      className: "[grid-area:stack] z-[80] grayscale-[100%] hover:grayscale-0 before:absolute before:w-full before:h-full before:content-[''] before:bg-background/50 before:rounded-xl before:top-0 before:left-0 hover:before:opacity-0 before:transition-opacity before:duration-700 hover:-translate-y-10 transition-all duration-500",
     },
     {
       icon: <Home className="size-4 text-primary" />,
@@ -23,7 +22,7 @@ const Features = () => {
       date: "AI-powered",
       iconClassName: "text-primary",
       titleClassName: "text-primary",
-      className: "[grid-area:stack] translate-x-6 translate-y-6 z-[70] grayscale-[100%] hover:grayscale-0 before:absolute before:w-full before:h-full before:content-[''] before:bg-background/50 before:rounded-xl before:top-0 before:left-0 hover:before:opacity-0 before:transition-opacity before:duration-700 hover:-translate-y-3 transition-all duration-500",
+      className: "[grid-area:stack] translate-x-12 translate-y-10 z-[70] grayscale-[100%] hover:grayscale-0 before:absolute before:w-full before:h-full before:content-[''] before:bg-background/50 before:rounded-xl before:top-0 before:left-0 hover:before:opacity-0 before:transition-opacity before:duration-700 hover:-translate-y-1 transition-all duration-500",
     },
     {
       icon: <MessageSquare className="size-4 text-primary" />,
@@ -32,7 +31,7 @@ const Features = () => {
       date: "Always on",
       iconClassName: "text-primary",
       titleClassName: "text-primary",
-      className: "[grid-area:stack] translate-x-12 translate-y-12 z-[60] grayscale-[100%] hover:grayscale-0 before:absolute before:w-full before:h-full before:content-[''] before:bg-background/50 before:rounded-xl before:top-0 before:left-0 hover:before:opacity-0 before:transition-opacity before:duration-700 hover:translate-y-6 transition-all duration-500",
+      className: "[grid-area:stack] translate-x-24 translate-y-20 z-[60] grayscale-[100%] hover:grayscale-0 before:absolute before:w-full before:h-full before:content-[''] before:bg-background/50 before:rounded-xl before:top-0 before:left-0 hover:before:opacity-0 before:transition-opacity before:duration-700 hover:translate-y-10 transition-all duration-500",
     },
     {
       icon: <Calendar className="size-4 text-primary" />,
@@ -41,7 +40,7 @@ const Features = () => {
       date: "Time-saving",
       iconClassName: "text-primary",
       titleClassName: "text-primary",
-      className: "[grid-area:stack] translate-x-18 translate-y-18 z-[50] grayscale-[100%] hover:grayscale-0 before:absolute before:w-full before:h-full before:content-[''] before:bg-background/50 before:rounded-xl before:top-0 before:left-0 hover:before:opacity-0 before:transition-opacity before:duration-700 hover:translate-y-12 transition-all duration-500",
+      className: "[grid-area:stack] translate-x-36 translate-y-30 z-[50] grayscale-[100%] hover:grayscale-0 before:absolute before:w-full before:h-full before:content-[''] before:bg-background/50 before:rounded-xl before:top-0 before:left-0 hover:before:opacity-0 before:transition-opacity before:duration-700 hover:translate-y-20 transition-all duration-500",
     },
     {
       icon: <BellRing className="size-4 text-primary" />,
@@ -50,7 +49,7 @@ const Features = () => {
       date: "Auto notifications",
       iconClassName: "text-primary",
       titleClassName: "text-primary",
-      className: "[grid-area:stack] translate-x-24 translate-y-24 z-[40] grayscale-[100%] hover:grayscale-0 before:absolute before:w-full before:h-full before:content-[''] before:bg-background/50 before:rounded-xl before:top-0 before:left-0 hover:before:opacity-0 before:transition-opacity before:duration-700 hover:translate-y-18 transition-all duration-500",
+      className: "[grid-area:stack] translate-x-48 translate-y-40 z-[40] grayscale-[100%] hover:grayscale-0 before:absolute before:w-full before:h-full before:content-[''] before:bg-background/50 before:rounded-xl before:top-0 before:left-0 hover:before:opacity-0 before:transition-opacity before:duration-700 hover:translate-y-30 transition-all duration-500",
     },
     {
       icon: <Share2 className="size-4 text-primary" />,
@@ -59,7 +58,7 @@ const Features = () => {
       date: "Multi-channel",
       iconClassName: "text-primary",
       titleClassName: "text-primary",
-      className: "[grid-area:stack] translate-x-30 translate-y-30 z-[30] grayscale-[100%] hover:grayscale-0 before:absolute before:w-full before:h-full before:content-[''] before:bg-background/50 before:rounded-xl before:top-0 before:left-0 hover:before:opacity-0 before:transition-opacity before:duration-700 hover:translate-y-24 transition-all duration-500",
+      className: "[grid-area:stack] translate-x-60 translate-y-50 z-[30] grayscale-[100%] hover:grayscale-0 before:absolute before:w-full before:h-full before:content-[''] before:bg-background/50 before:rounded-xl before:top-0 before:left-0 hover:before:opacity-0 before:transition-opacity before:duration-700 hover:translate-y-40 transition-all duration-500",
     },
     {
       icon: <Instagram className="size-4 text-primary" />,
@@ -68,7 +67,7 @@ const Features = () => {
       date: "Social media",
       iconClassName: "text-primary",
       titleClassName: "text-primary",
-      className: "[grid-area:stack] translate-x-36 translate-y-36 z-[20] grayscale-[100%] hover:grayscale-0 before:absolute before:w-full before:h-full before:content-[''] before:bg-background/50 before:rounded-xl before:top-0 before:left-0 hover:before:opacity-0 before:transition-opacity before:duration-700 hover:translate-y-30 transition-all duration-500",
+      className: "[grid-area:stack] translate-x-72 translate-y-60 z-[20] grayscale-[100%] hover:grayscale-0 before:absolute before:w-full before:h-full before:content-[''] before:bg-background/50 before:rounded-xl before:top-0 before:left-0 hover:before:opacity-0 before:transition-opacity before:duration-700 hover:translate-y-50 transition-all duration-500",
     },
     {
       icon: <Brain className="size-4 text-primary" />,
@@ -77,22 +76,22 @@ const Features = () => {
       date: "Data-driven",
       iconClassName: "text-primary",
       titleClassName: "text-primary",
-      className: "[grid-area:stack] translate-x-42 translate-y-42 z-[10] grayscale-[100%] hover:grayscale-0 before:absolute before:w-full before:h-full before:content-[''] before:bg-background/50 before:rounded-xl before:top-0 before:left-0 hover:before:opacity-0 before:transition-opacity before:duration-700 hover:translate-y-36 transition-all duration-500",
+      className: "[grid-area:stack] translate-x-84 translate-y-70 z-[10] grayscale-[100%] hover:grayscale-0 before:absolute before:w-full before:h-full before:content-[''] before:bg-background/50 before:rounded-xl before:top-0 before:left-0 hover:before:opacity-0 before:transition-opacity before:duration-700 hover:translate-y-60 transition-all duration-500",
     },
   ];
 
   return (
-    <section id="features" className="py-20 bg-secondary/50">
+    <section id="features" className="py-12 bg-secondary/50">
       <div className="container px-4 mx-auto">
-        <div className="max-w-3xl mx-auto text-center mb-16">
+        <div className="max-w-3xl mx-auto text-center mb-8">
           <h2 className="text-3xl md:text-4xl font-bold mb-4">Powerful Features</h2>
           <p className="text-lg text-muted-foreground">
             Every feature is designed to streamline your real estate operations and enhance customer experience.
           </p>
         </div>
 
-        <div className="flex min-h-[600px] w-full items-center justify-center">
-          <div className="w-full max-w-4xl">
+        <div className="flex min-h-[500px] w-full items-center justify-center">
+          <div className="w-full max-w-3xl">
             <DisplayCards cards={allFeatures} />
           </div>
         </div>
