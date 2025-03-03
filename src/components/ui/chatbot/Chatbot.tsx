@@ -50,7 +50,7 @@ const Chatbot = ({
   botName = 'RealHomeAI Assistant',
   welcomeMessage = "Hi there! I'm your RealHomeAI assistant. How can I help you today?",
   placeholderText = "Type your message...",
-  maxHeight = "500px",
+  maxHeight = "400px",
   onSendMessage
 }: ChatbotProps) => {
   const [messages, setMessages] = useState<Message[]>([
@@ -95,6 +95,7 @@ const Chatbot = ({
   return (
     <div className={cn(
       'flex flex-col overflow-hidden rounded-lg shadow-md',
+      'h-[500px]', // Fixed height
       styles.container,
       styles.font,
       className
@@ -107,10 +108,10 @@ const Chatbot = ({
         apiKeyStatus="not-set"
       />
       
-      {/* Messages Container */}
+      {/* Messages Container - Fixed height with overflow */}
       <div 
         className="flex-1 p-4 overflow-y-auto space-y-4 scrollbar-none relative"
-        style={{ maxHeight }}
+        style={{ height: `calc(100% - 120px)` }} // Subtract header and input heights
       >
         {messages.map((message, index) => (
           <ChatMessage 

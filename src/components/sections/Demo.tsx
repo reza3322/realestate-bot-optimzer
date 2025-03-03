@@ -1,6 +1,7 @@
+
 import { useState } from 'react';
 import { GradientHeading } from '@/components/ui/gradient-heading';
-import Chatbot from '@/components/ui/chatbot';
+import Chatbot from '@/components/ui/chatbot/Chatbot';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   Palette, 
@@ -157,13 +158,12 @@ const Demo = () => {
             </div>
           </div>
           
-          {/* Chat preview */}
+          {/* Chat preview - fixed height container */}
           <div className="md:col-span-3 bg-white dark:bg-gray-800 rounded-xl shadow-xl p-4">
             <Chatbot 
               theme={theme}
               variation={variation}
               fontStyle={fontStyle}
-              maxHeight="400px"
               welcomeMessage="👋 Hi there! I'm your RealHomeAI assistant. I can help you find properties, answer questions about listings, and even schedule viewings. Try asking me about available properties or how I can help with your real estate needs!"
               placeholderText="Type your message here..."
             />

@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from 'react';
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -6,105 +5,77 @@ import { Home, CreditCard, FileText, MessageCircle } from "lucide-react";
 import { NavBar } from "@/components/ui/tubelight-navbar";
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { supabase, signOut } from '@/lib/supabase';
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { 
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuLabel, 
+  DropdownMenuSeparator, 
+  DropdownMenuTrigger, 
+  DropdownMenuGroup 
 } from "@/components/ui/dropdown-menu";
 import { toast } from 'sonner';
 
-// Match the exact type expected by the NavBar component
-interface NavItem {
+interface LocalNavItem {
   name: string;
   url: string;
   icon: React.ComponentType<any>;
   onClick: () => void;
 }
 
+const NavBarIcon = ({ icon: Icon, ...props }: { icon: any }) => (
+  <Icon className="h-4 w-4 mr-2" {...props} />
+);
+
 const Navbar = () => {
-  const [isScrolled, setIsScrolled] = useState(false);
-  const [user, setUser] = useState(null);
+  const [scrolled, setScrolled] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
   
   useEffect(() => {
     const handleScroll = () => {
-      setIsScrolled(window.scrollY > 20);
+      const offset = window.scrollY;
+      setScrolled(offset > 10);
     };
     
     window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
+    
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+    };
   }, []);
   
-  useEffect(() => {
-    const getUser = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      setUser(session?.user || null);
-    };
-    
-    getUser();
-    
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        setUser(session?.user || null);
+  const handleNavigation = (path: string) => {
+    if (path.startsWith('/#') && location.pathname === '/') {
+      const element = document.getElementById(path.substring(2));
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth' });
       }
-    );
-    
-    return () => subscription.unsubscribe();
-  }, []);
-
+    } else {
+      navigate(path);
+    }
+  };
+  
   const handleSignOut = async () => {
     try {
       const { error } = await signOut();
-      if (error) {
-        toast.error(error.message || "Failed to sign out");
-        return;
-      }
+      if (error) throw error;
       
-      toast.success("Signed out successfully");
+      toast.success('Signed out successfully');
+      setIsLoggedIn(false);
       navigate('/');
     } catch (error: any) {
-      toast.error(error.message || "An unexpected error occurred");
+      toast.error(error.message || 'Error signing out');
     }
   };
-
-  const scrollToSection = (id: string) => {
-    if (location.pathname !== '/') {
-      navigate(`/${id ? '#' + id : ''}`);
-      return;
-    }
-    
-    const element = document.getElementById(id);
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  };
-
-  const handleNavigation = (url: string) => {
-    if (url.startsWith('/#')) {
-      const id = url.substring(2);
-      scrollToSection(id);
-    } else {
-      navigate(url);
-    }
-  };
-
-  const navItems: NavItem[] = [
+  
+  const navItems: LocalNavItem[] = [
     { 
       name: 'Product', 
       url: '/product', 
-      icon: Home,
-      onClick: () => handleNavigation('/product')
-    },
-    { 
-      name: 'Pricing', 
-      url: '/#pricing', 
       icon: CreditCard,
-      onClick: () => handleNavigation('/#pricing')
+      onClick: () => handleNavigation('/product')
     },
     { 
       name: 'Resources', 
@@ -113,87 +84,85 @@ const Navbar = () => {
       onClick: () => handleNavigation('/resources')
     },
     { 
+      name: 'Home', 
+      url: '/', 
+      icon: Home,
+      onClick: () => handleNavigation('/')
+    },
+    { 
       name: 'Contact', 
       url: '/#demo', 
       icon: MessageCircle,
       onClick: () => handleNavigation('/#demo')
     }
   ];
-
-  const getUserInitials = () => {
-    if (!user || !user.user_metadata) return '?';
-    
-    const firstName = user.user_metadata.first_name || '';
-    const lastName = user.user_metadata.last_name || '';
-    
-    return (firstName.charAt(0) + lastName.charAt(0)).toUpperCase();
-  };
-
+  
   return (
     <header className={cn(
-      "fixed top-0 left-0 right-0 z-40 transition-all duration-300",
-      isScrolled ? "py-3 bg-background/80 backdrop-blur-md shadow-sm" : "py-5"
+      "sticky top-0 z-50 w-full transition-all duration-300",
+      scrolled ? "bg-background/95 backdrop-blur-sm shadow-sm" : "bg-transparent"
     )}>
-      <div className="container flex items-center justify-between">
-        <Link to="/" className="flex items-center gap-2">
-          <span className="font-bold text-xl">RealHomeAI</span>
-        </Link>
-        
-        <NavBar items={navItems} className="hidden md:flex" />
-        
-        <div className="flex items-center gap-4">
-          {user ? (
-            <>
-              <Button 
-                variant="ghost" 
-                onClick={() => navigate('/dashboard')}
-                className="hidden sm:flex"
-              >
-                Dashboard
-              </Button>
+      <div className="container px-4 mx-auto">
+        <div className="flex items-center justify-between h-16">
+          <Link to="/" className="flex items-center space-x-2">
+            <span className="text-xl font-medium bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+              RealHomeAI
+            </span>
+          </Link>
+          
+          <div className="hidden md:flex md:items-center md:space-x-1">
+            <NavBar 
+              items={navItems.map(item => ({
+                name: item.name,
+                url: item.url,
+                icon: item.icon,
+                onClick: item.onClick
+              }))} 
+              className={cn(
+                "ml-auto mr-4",
+                scrolled ? "bg-white/20 dark:bg-gray-800/30" : "bg-white/10 dark:bg-gray-800/20"
+              )}
+            />
+            
+            {isLoggedIn ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Avatar className="cursor-pointer">
-                    <AvatarImage src={user.user_metadata?.avatar_url} />
-                    <AvatarFallback>{getUserInitials()}</AvatarFallback>
-                  </Avatar>
+                  <Button variant="ghost" size="icon" className="rounded-full">
+                    <span className="w-9 h-9 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-medium">
+                      AI
+                    </span>
+                  </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuLabel>My Account</DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onSelect={() => navigate('/dashboard')}>
-                    Dashboard
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => navigate('/profile')}>
-                    Profile
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onSelect={handleSignOut}>
-                    Sign out
-                  </DropdownMenuItem>
+                  <DropdownMenuGroup>
+                    <DropdownMenuItem onClick={() => navigate('/dashboard')}>
+                      Dashboard
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleSignOut}>
+                      Sign out
+                    </DropdownMenuItem>
+                  </DropdownMenuGroup>
                 </DropdownMenuContent>
               </DropdownMenu>
-            </>
-          ) : (
-            <>
-              <Button 
-                variant="outline" 
-                className="hidden sm:flex"
-                onClick={() => navigate('/dashboard')}
-              >
-                Sign In
-              </Button>
-              <Button onClick={() => navigate('/auth')}>
-                Get Started
-              </Button>
-            </>
-          )}
-        </div>
-      </div>
-      
-      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-background/80 backdrop-blur-md shadow-lg py-2">
-        <div className="container">
-          <NavBar items={navItems} />
+            ) : (
+              <div className="flex space-x-2">
+                <Button variant="ghost" onClick={() => navigate('/auth?type=signin')}>
+                  Sign in
+                </Button>
+                <Button onClick={() => navigate('/auth?type=signup')}>
+                  Get Started
+                </Button>
+              </div>
+            )}
+          </div>
+          
+          <div className="md:hidden">
+            <Button size="sm" onClick={() => navigate('/auth?type=signup')}>
+              Get Started
+            </Button>
+          </div>
         </div>
       </div>
     </header>
