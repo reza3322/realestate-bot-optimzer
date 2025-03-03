@@ -125,7 +125,22 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
   };
   
   const generateEmbedCode = () => {
-    return `<script src="https://realhome.ai/chatbot.js?user=${userId}"></script>`;
+    const params = new URLSearchParams({
+      user: userId,
+      theme: settings.theme,
+      variation: settings.variation,
+      font: settings.fontFamily,
+      position: settings.position,
+      fontSize: settings.fontSize.toString(),
+      botName: encodeURIComponent(settings.botName),
+      welcomeMessage: encodeURIComponent(settings.welcomeMessage),
+      placeholderText: encodeURIComponent(settings.placeholderText),
+      primaryColor: encodeURIComponent(settings.primaryColor.replace('#', '')),
+      botIcon: settings.botIcon,
+      enabled: settings.enabled.toString()
+    });
+    
+    return `<script src="https://realhome.ai/chatbot.js?${params.toString()}"></script>`;
   };
 
   const testChatbot = async () => {

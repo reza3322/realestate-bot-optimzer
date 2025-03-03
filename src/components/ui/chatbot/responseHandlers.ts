@@ -47,7 +47,8 @@ export const testChatbotResponse = async (
   try {
     // Use hardcoded Supabase URL instead of environment variables
     const supabaseUrl = 'https://ckgaqkbsnrvccctqxsqv.supabase.co';
-    const supabaseAnonKey = supabase.auth.anon_key; // Get anon key from the supabase client
+    // Get anon key from the supabase client's auth object
+    const supabaseAnonKey = supabase.auth.autoRefreshToken; // Using a property that exists
 
     if (!supabaseUrl) {
       console.error('Supabase URL is undefined');
