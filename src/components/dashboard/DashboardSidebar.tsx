@@ -8,7 +8,8 @@ import {
   MessageSquare, 
   Settings, 
   ChartBar,
-  Link as LinkIcon
+  Link as LinkIcon,
+  MessageCircle
 } from "lucide-react";
 
 interface DashboardSidebarProps {
@@ -37,6 +38,11 @@ const DashboardSidebar = ({ activeTab, setActiveTab }: DashboardSidebarProps) =>
       name: "Marketing",
       icon: MessageSquare,
       value: "marketing"
+    },
+    {
+      name: "Chatbot",
+      icon: MessageCircle,
+      value: "chatbot"
     },
     {
       name: "Integrations",

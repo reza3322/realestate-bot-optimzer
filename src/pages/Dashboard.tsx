@@ -16,6 +16,7 @@ import LeadManagement from '@/components/dashboard/LeadManagement';
 import MarketingAutomation from '@/components/dashboard/MarketingAutomation';
 import Integrations from '@/components/dashboard/Integrations';
 import AccountSettings from '@/components/dashboard/AccountSettings';
+import ChatbotSettings from '@/components/dashboard/ChatbotSettings';
 import { PlusCircle, Upload, FileSpreadsheet, Users, Bell, Lock } from 'lucide-react';
 
 const Dashboard = () => {
@@ -163,6 +164,7 @@ const Dashboard = () => {
               <TabsTrigger value="properties">Properties</TabsTrigger>
               <TabsTrigger value="leads">Leads</TabsTrigger>
               <TabsTrigger value="marketing">Marketing</TabsTrigger>
+              <TabsTrigger value="chatbot">Chatbot</TabsTrigger>
               <TabsTrigger value="integrations">Integrations</TabsTrigger>
               <TabsTrigger value="settings">Settings</TabsTrigger>
             </TabsList>
@@ -274,6 +276,14 @@ const Dashboard = () => {
             
             <TabsContent value="marketing">
               <MarketingAutomation userPlan={userPlan} isPremiumFeature={isPremiumFeature} />
+            </TabsContent>
+            
+            <TabsContent value="chatbot">
+              <ChatbotSettings 
+                userId={user.id} 
+                userPlan={userPlan} 
+                isPremiumFeature={isPremiumFeature} 
+              />
             </TabsContent>
             
             <TabsContent value="integrations">
