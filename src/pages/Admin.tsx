@@ -1,5 +1,5 @@
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/sections/Footer';
@@ -10,6 +10,7 @@ import { createEnterpriseUser, getAllUsers } from '@/lib/supabase';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Loader2 } from 'lucide-react';
 
 const Admin = () => {
   const navigate = useNavigate();
@@ -17,8 +18,29 @@ const Admin = () => {
   const [password, setPassword] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
   
-  const handleCreateEnterpriseUser = (e: React.FormEvent) => {
+  useEffect(() => {
+    // Fetch users on component mount
+    const fetchUsers = async () => {
+      setLoading(true);
+      try {
+        const userData = await getAllUsers();
+        setUsers(userData);
+      } catch (error) {
+        console.error('Error fetching users:', error);
+        toast.error('Failed to load users. Make sure you have admin privileges.');
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchUsers();
+  }, []);
+  
+  const handleCreateEnterpriseUser = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!email || !password || !firstName || !lastName) {
@@ -26,18 +48,27 @@ const Admin = () => {
       return;
     }
     
-    const success = createEnterpriseUser(email, password, firstName, lastName);
-    if (success) {
-      // Clear form
-      setEmail('');
-      setPassword('');
-      setFirstName('');
-      setLastName('');
+    setCreating(true);
+    try {
+      const success = await createEnterpriseUser(email, password, firstName, lastName);
+      if (success) {
+        // Clear form
+        setEmail('');
+        setPassword('');
+        setFirstName('');
+        setLastName('');
+        
+        // Refresh user list
+        const userData = await getAllUsers();
+        setUsers(userData);
+      }
+    } catch (error) {
+      console.error('Error creating user:', error);
+      toast.error('Failed to create user. Make sure you have admin privileges.');
+    } finally {
+      setCreating(false);
     }
   };
-  
-  // Get all users for display
-  const users = getAllUsers();
 
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col">
@@ -100,8 +131,15 @@ const Admin = () => {
                   />
                 </div>
                 
-                <Button type="submit" className="w-full">
-                  Create Enterprise Account
+                <Button type="submit" className="w-full" disabled={creating}>
+                  {creating ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Creating...
+                    </>
+                  ) : (
+                    "Create Enterprise Account"
+                  )}
                 </Button>
               </form>
             </CardContent>
@@ -115,36 +153,50 @@ const Admin = () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="border rounded-md">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead>Plan</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {users.map((user) => (
-                      <TableRow key={user.id}>
-                        <TableCell>{user.firstName} {user.lastName}</TableCell>
-                        <TableCell>{user.email}</TableCell>
-                        <TableCell>
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                            user.plan === 'enterprise' 
-                              ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300' 
-                              : user.plan === 'professional'
-                                ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300'
-                                : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300'
-                          }`}>
-                            {user.plan.charAt(0).toUpperCase() + user.plan.slice(1)}
-                          </span>
-                        </TableCell>
+              {loading ? (
+                <div className="flex justify-center items-center py-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                </div>
+              ) : (
+                <div className="border rounded-md">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Email</TableHead>
+                        <TableHead>Plan</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+                    </TableHeader>
+                    <TableBody>
+                      {users.length > 0 ? (
+                        users.map((user) => (
+                          <TableRow key={user.id}>
+                            <TableCell>{user.firstName} {user.lastName}</TableCell>
+                            <TableCell>{user.email}</TableCell>
+                            <TableCell>
+                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                user.plan === 'enterprise' 
+                                  ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300' 
+                                  : user.plan === 'professional'
+                                    ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300'
+                                    : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300'
+                              }`}>
+                                {user.plan.charAt(0).toUpperCase() + user.plan.slice(1)}
+                              </span>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      ) : (
+                        <TableRow>
+                          <TableCell colSpan={3} className="text-center py-4 text-muted-foreground">
+                            No users found
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
