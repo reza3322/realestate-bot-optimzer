@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from 'react';
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -64,8 +65,10 @@ const Navbar = () => {
     checkAuth();
     
     // Listen for auth state changes using local storage events
-    const handleStorageChange = () => {
-      checkAuth();
+    const handleStorageChange = (event) => {
+      if (event.key === 'mock_supabase_session') {
+        checkAuth();
+      }
     };
     
     window.addEventListener('storage', handleStorageChange);

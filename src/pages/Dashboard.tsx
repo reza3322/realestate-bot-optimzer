@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '@/components/layout/Navbar';
@@ -6,7 +5,7 @@ import Footer from '@/components/sections/Footer';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { supabase } from '@/lib/supabase';
+import { getSession } from '@/lib/supabase';
 import { toast } from 'sonner';
 import DashboardSidebar from '@/components/dashboard/DashboardSidebar';
 import QuickStats from '@/components/dashboard/QuickStats';
@@ -31,26 +30,18 @@ const Dashboard = () => {
         setLoading(true);
         
         // Check if there's an active session
-        const { data: { session } } = await supabase.auth.getSession();
+        const { data: { session } } = await getSession();
         
         if (!session) {
           navigate('/auth');
           return;
         }
         
-        // Get user profile data
-        const { data: { user } } = await supabase.auth.getUser();
-        setUser(user);
+        setUser(session.user);
         
-        // Determine user plan based on email (for the test users)
-        if (user && user.email) {
-          if (user.email.includes('pro@')) {
-            setUserPlan('professional');
-          } else if (user.email.includes('enterprise@')) {
-            setUserPlan('enterprise');
-          } else {
-            setUserPlan('starter');
-          }
+        // Determine user plan from user metadata
+        if (session.user && session.user.user_metadata) {
+          setUserPlan(session.user.user_metadata.plan || 'starter');
         }
       } catch (error) {
         console.error('Error fetching user:', error);

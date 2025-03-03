@@ -5,7 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { getSession, onAuthStateChange } from '@/lib/supabase';
+import { getSession } from '@/lib/supabase';
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import Product from "./pages/Product";
@@ -36,27 +36,18 @@ const App = () => {
     checkSession();
     
     // Listen for auth changes
-    try {
-      const { data: { subscription } } = onAuthStateChange(
-        (_event, session) => {
-          setUser(session?.user || null);
-        }
-      );
-      
-      return () => subscription?.unsubscribe?.();
-    } catch (error) {
-      console.error("Error setting up auth listener:", error);
-      setLoading(false);
-      return () => {};
-    }
-  }, []);
-
-  // Force clear any URL hashes on app init
-  useEffect(() => {
-    // If there's a hash and it's a page reload/initial load, clear it
-    if (window.location.hash) {
-      window.history.replaceState(null, '', window.location.pathname);
-    }
+    const handleStorageChange = (event) => {
+      if (event.key === 'mock_supabase_session') {
+        checkSession();
+      }
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    
+    // Return cleanup function
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+    };
   }, []);
 
   // Protected route component

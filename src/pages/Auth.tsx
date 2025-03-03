@@ -7,7 +7,6 @@ import { Button } from '@/components/ui/button';
 import { getSession } from '@/lib/supabase';
 import { SignInForm } from '@/components/auth/SignInForm';
 import { SignUpForm } from '@/components/auth/SignUpForm';
-import { TestUserSignIn } from '@/components/auth/TestUserSignIn';
 
 const Auth = () => {
   const [session, setSession] = useState(null);
@@ -88,7 +87,6 @@ const Auth = () => {
               
               <TabsContent value="signin" className="mt-0">
                 <SignInForm />
-                <TestUserSignIn />
               </TabsContent>
               
               <TabsContent value="signup" className="mt-0">
@@ -132,6 +130,42 @@ const Auth = () => {
                   </Button>
                 </>
               )}
+            </div>
+          </div>
+        </div>
+        
+        <div className="mt-8 max-w-5xl mx-auto">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow p-6">
+            <h2 className="text-xl font-semibold mb-4">Available Mock Users</h2>
+            <p className="mb-4">For testing purposes, you can use these pre-configured accounts:</p>
+            
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="border dark:border-gray-700 rounded-lg p-4">
+                <h3 className="font-medium">Starter Plan</h3>
+                <p className="text-sm text-muted-foreground mb-2">Basic features</p>
+                <div className="text-sm">
+                  <p><strong>Email:</strong> starter@example.com</p>
+                  <p><strong>Password:</strong> password123</p>
+                </div>
+              </div>
+              
+              <div className="border dark:border-gray-700 rounded-lg p-4">
+                <h3 className="font-medium">Professional Plan</h3>
+                <p className="text-sm text-muted-foreground mb-2">Advanced features</p>
+                <div className="text-sm">
+                  <p><strong>Email:</strong> pro@example.com</p>
+                  <p><strong>Password:</strong> password123</p>
+                </div>
+              </div>
+              
+              <div className="border dark:border-gray-700 rounded-lg p-4">
+                <h3 className="font-medium">Enterprise Plan</h3>
+                <p className="text-sm text-muted-foreground mb-2">All features</p>
+                <div className="text-sm">
+                  <p><strong>Email:</strong> enterprise@example.com</p>
+                  <p><strong>Password:</strong> password123</p>
+                </div>
+              </div>
             </div>
           </div>
         </div>

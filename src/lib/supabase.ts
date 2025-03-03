@@ -1,3 +1,4 @@
+
 import { createClient } from '@supabase/supabase-js';
 import { toast } from 'sonner';
 
@@ -8,20 +9,20 @@ const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'placeholder-key';
 // Create client anyway for future use if credentials are provided
 export const supabase = createClient(supabaseUrl, supabaseKey);
 
-// Mock user data for local testing
-interface MockUser {
+// Mock database of users with their plans
+export interface MockUser {
   id: string;
   email: string;
   password: string;
   user_metadata: {
     first_name: string;
     last_name: string;
-    plan: string;
+    plan: 'starter' | 'professional' | 'enterprise';
   };
 }
 
 // Mock database of users
-const mockUsers: MockUser[] = [
+export const mockUsers: MockUser[] = [
   {
     id: '1',
     email: 'starter@example.com',
@@ -125,15 +126,29 @@ export const signUp = async (email: string, password: string, firstName: string,
     user_metadata: {
       first_name: firstName,
       last_name: lastName,
-      plan: 'starter'
+      plan: 'starter' as const
     }
   };
   
   // Add to mock database
   mockUsers.push(newUser);
   
+  // Auto sign in
+  const session = {
+    user: {
+      id: newUser.id,
+      email: newUser.email,
+      user_metadata: newUser.user_metadata
+    }
+  };
+  
+  localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(session));
+  
   return {
-    data: { user: newUser },
+    data: { 
+      user: newUser,
+      session
+    },
     error: null
   };
 };
@@ -160,43 +175,23 @@ export const onAuthStateChange = (callback: (event: string, session: any) => voi
   const session = getStoredSession();
   callback(session ? 'SIGNED_IN' : 'SIGNED_OUT', session);
   
-  // This would normally set up a listener, but we'll keep it simple
+  // Set up storage event listener
+  const storageListener = (e: StorageEvent) => {
+    if (e.key === LOCAL_STORAGE_KEY) {
+      const newSession = e.newValue ? JSON.parse(e.newValue) : null;
+      callback(newSession ? 'SIGNED_IN' : 'SIGNED_OUT', newSession);
+    }
+  };
+  
+  window.addEventListener('storage', storageListener);
+  
   return {
     data: {
       subscription: {
-        unsubscribe: () => {}
+        unsubscribe: () => {
+          window.removeEventListener('storage', storageListener);
+        }
       }
     }
   };
-};
-
-// Test user functionality
-export const signInAsTestUser = async (planType: 'starter' | 'professional' | 'enterprise') => {
-  try {
-    let email;
-    
-    switch (planType) {
-      case 'professional':
-        email = 'pro@example.com';
-        break;
-      case 'enterprise':
-        email = 'enterprise@example.com';
-        break;
-      default:
-        email = 'starter@example.com';
-    }
-    
-    const { data, error } = await signIn(email, 'password123');
-    
-    if (error) {
-      throw error;
-    }
-    
-    toast.success(`Signed in as test ${planType.toUpperCase()} user`);
-    return { data, error: null };
-    
-  } catch (error: any) {
-    toast.error(`Error signing in as test user: ${error.message}`);
-    return { data: null, error };
-  }
 };
