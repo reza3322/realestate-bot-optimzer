@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+
+import { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -8,6 +9,7 @@ import { signIn, signInWithGoogle, getUserRole } from '@/lib/supabase';
 
 export function SignInForm() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -35,22 +37,30 @@ export function SignInForm() {
           const role = await getUserRole(data.user.id);
           console.log("User role retrieved:", role);
           
+          localStorage.setItem('userRole', role || 'user');
+          
+          // Display success message but don't navigate yet
+          // Navigation will be handled by the Auth component
           if (role === 'admin') {
             toast.success("Welcome back, Admin!");
-            navigate('/admin', { replace: true });
           } else {
             toast.success("Signed in successfully!");
-            navigate('/dashboard', { replace: true });
           }
+          
+          // Trigger storage event to notify other components about auth change
+          window.dispatchEvent(new Event('supabase.auth.signin'));
+          
         } catch (roleError) {
           console.error("Error getting user role:", roleError);
           toast.success("Signed in successfully!");
-          navigate('/dashboard', { replace: true });
+          localStorage.setItem('userRole', 'user');
+          window.dispatchEvent(new Event('supabase.auth.signin'));
         }
       } else {
         console.warn("Sign in succeeded but no user data returned");
         toast.success("Signed in successfully!");
-        navigate('/dashboard', { replace: true });
+        localStorage.setItem('userRole', 'user');
+        window.dispatchEvent(new Event('supabase.auth.signin'));
       }
     } catch (error: any) {
       console.error("Unexpected error during sign in:", error);

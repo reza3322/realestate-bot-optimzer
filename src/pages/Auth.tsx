@@ -23,46 +23,67 @@ const Auth = () => {
     }
   }, [location]);
   
-  useEffect(() => {
-    const checkAuth = async () => {
-      setIsLoading(true);
-      try {
-        const { data: { session } } = await getSession();
-        setSession(session);
-        
-        if (session) {
-          // If user is authenticated, check role and redirect accordingly
-          try {
-            const role = await getUserRole(session.user.id);
-            if (role === 'admin') {
-              navigate('/admin', { replace: true });
-            } else {
-              navigate('/dashboard', { replace: true });
-            }
-          } catch (error) {
-            console.error("Error getting user role:", error);
-            // Default to dashboard if role check fails
+  // Handle auth state changes
+  const checkAuthAndRedirect = async () => {
+    console.log("Checking authentication status");
+    setIsLoading(true);
+    
+    try {
+      const { data: { session } } = await getSession();
+      console.log("Session check result:", session ? "Authenticated" : "Not authenticated");
+      
+      setSession(session);
+      
+      if (session) {
+        // If user is authenticated, check role and redirect
+        try {
+          // Get role from local storage first (for faster response)
+          let role = localStorage.getItem('userRole');
+          
+          // If not in localStorage, fetch from database
+          if (!role) {
+            role = await getUserRole(session.user.id);
+            localStorage.setItem('userRole', role || 'user');
+          }
+          
+          console.log("User role for redirect:", role);
+          
+          // Use replace: true to prevent back button issues
+          if (role === 'admin') {
+            console.log("Redirecting to admin");
+            navigate('/admin', { replace: true });
+          } else {
+            console.log("Redirecting to dashboard");
             navigate('/dashboard', { replace: true });
           }
+        } catch (error) {
+          console.error("Error determining user role:", error);
+          navigate('/dashboard', { replace: true });
         }
-      } catch (error) {
-        console.error("Error checking session:", error);
-      } finally {
-        setIsLoading(false);
       }
-    };
-
-    checkAuth();
-
-    // Listen for auth state changes
-    const handleStorageChange = () => {
-      checkAuth();
+    } catch (error) {
+      console.error("Error checking authentication:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  useEffect(() => {
+    // Check auth status on initial page load
+    checkAuthAndRedirect();
+    
+    // Listen for auth state changes, including our custom event
+    const handleAuthChange = () => {
+      console.log("Auth state change detected");
+      checkAuthAndRedirect();
     };
     
-    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('storage', handleAuthChange);
+    window.addEventListener('supabase.auth.signin', handleAuthChange);
     
     return () => {
-      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('storage', handleAuthChange);
+      window.removeEventListener('supabase.auth.signin', handleAuthChange);
     };
   }, [navigate]);
 
