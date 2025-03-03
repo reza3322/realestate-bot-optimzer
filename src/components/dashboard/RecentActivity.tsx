@@ -2,112 +2,134 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 
-const activities = [
-  {
-    id: 1,
-    type: 'lead',
-    description: 'New lead from AI chatbot',
-    name: 'John Smith',
-    email: 'john@example.com',
-    time: '10 minutes ago',
-    score: 85
-  },
-  {
-    id: 2,
-    type: 'property',
-    description: 'Property view requested',
-    name: 'Sarah Johnson',
-    propertyName: 'Skyline Apartment',
-    time: '45 minutes ago',
-    score: 92
-  },
-  {
-    id: 3,
-    type: 'message',
-    description: 'AI assistant responded to inquiry',
-    name: 'Michael Brown',
-    message: 'About property financing options',
-    time: '2 hours ago',
-    score: 65
-  },
-  {
-    id: 4,
-    type: 'lead',
-    description: 'Returning visitor',
-    name: 'Emily Davis',
-    email: 'emily@example.com',
-    time: '4 hours ago',
-    score: 78
-  },
-  {
-    id: 5,
-    type: 'property',
-    description: 'New property added',
-    propertyName: 'Garden Villa',
-    address: '123 Garden Street',
-    time: 'Yesterday',
-    score: null
-  }
-];
+interface Activity {
+  id: string;
+  type: string;
+  description: string;
+  created_at: string;
+  user_id: string;
+  target_id?: string;
+  target_type?: string;
+}
 
-const RecentActivity = () => {
+interface RecentActivityProps {
+  activities: Activity[];
+}
+
+const RecentActivity = ({ activities }: RecentActivityProps) => {
+  // If no activities are available yet, show sample data
+  const displayActivities = activities.length > 0 
+    ? activities 
+    : [
+        {
+          id: "1",
+          type: 'lead',
+          description: 'New lead from AI chatbot',
+          created_at: new Date(Date.now() - 10 * 60 * 1000).toISOString(), // 10 minutes ago
+          user_id: "1",
+          target_type: "lead",
+          target_id: "1"
+        },
+        {
+          id: "2",
+          type: 'property',
+          description: 'Property view requested',
+          created_at: new Date(Date.now() - 45 * 60 * 1000).toISOString(), // 45 minutes ago
+          user_id: "1",
+          target_type: "property",
+          target_id: "1"
+        }
+      ];
+
   // Helper function to get the initials for the avatar
-  const getInitials = (name: string) => {
-    return name
-      .split(' ')
-      .map(part => part[0])
-      .join('')
-      .toUpperCase();
+  const getInitials = (type: string) => {
+    switch (type) {
+      case 'lead':
+        return 'LD';
+      case 'property':
+        return 'PR';
+      case 'message':
+        return 'MS';
+      default:
+        return 'AC';
+    }
   };
   
-  // Helper function to get the badge color based on score
-  const getScoreBadge = (score: number | null) => {
-    if (score === null) return null;
-    
-    if (score >= 80) {
-      return <Badge className="bg-green-500">High {score}%</Badge>;
-    } else if (score >= 60) {
-      return <Badge className="bg-yellow-500">Medium {score}%</Badge>;
-    } else {
-      return <Badge variant="outline">Low {score}%</Badge>;
+  // Helper function to get the badge color based on type
+  const getActivityBadge = (type: string) => {
+    switch (type) {
+      case 'lead':
+        return <Badge className="bg-green-500">Lead</Badge>;
+      case 'property':
+        return <Badge className="bg-blue-500">Property</Badge>;
+      case 'message':
+        return <Badge variant="outline">Message</Badge>;
+      default:
+        return <Badge variant="outline">Activity</Badge>;
+    }
+  };
+
+  // Format time relative to now
+  const formatRelativeTime = (timestamp: string) => {
+    try {
+      const now = new Date();
+      const time = new Date(timestamp);
+      const diffMs = now.getTime() - time.getTime();
+      
+      // Convert to appropriate time unit
+      const diffSecs = Math.floor(diffMs / 1000);
+      if (diffSecs < 60) return `${diffSecs} seconds ago`;
+      
+      const diffMins = Math.floor(diffSecs / 60);
+      if (diffMins < 60) return `${diffMins} minutes ago`;
+      
+      const diffHours = Math.floor(diffMins / 60);
+      if (diffHours < 24) return `${diffHours} hours ago`;
+      
+      const diffDays = Math.floor(diffHours / 24);
+      if (diffDays < 7) return `${diffDays} days ago`;
+      
+      // If more than a week, return the date
+      return time.toLocaleDateString();
+    } catch (error) {
+      console.error("Error formatting date:", error);
+      return "Unknown time";
     }
   };
 
   return (
     <div className="space-y-4">
-      {activities.map((activity) => (
+      {displayActivities.map((activity) => (
         <div key={activity.id} className="flex items-start space-x-4 pb-4 border-b">
           <Avatar className="h-10 w-10">
-            <AvatarImage src="" alt={activity.name || activity.propertyName} />
-            <AvatarFallback>{activity.name ? getInitials(activity.name) : 'P'}</AvatarFallback>
+            <AvatarImage src="" alt={activity.type} />
+            <AvatarFallback>{getInitials(activity.type)}</AvatarFallback>
           </Avatar>
           
           <div className="flex-1 space-y-1">
             <div className="flex items-center justify-between">
               <p className="text-sm font-medium leading-none">
-                {activity.name || activity.propertyName}
+                {activity.description}
               </p>
-              <p className="text-xs text-muted-foreground">{activity.time}</p>
+              <p className="text-xs text-muted-foreground">{formatRelativeTime(activity.created_at)}</p>
             </div>
             
-            <p className="text-sm text-muted-foreground">{activity.description}</p>
-            
-            {activity.email && (
-              <p className="text-xs">{activity.email}</p>
-            )}
-            
-            {activity.propertyName && !activity.name && (
-              <p className="text-xs">{activity.address}</p>
-            )}
-            
-            {activity.message && (
-              <p className="text-xs italic">"{activity.message}"</p>
+            {activity.target_id && (
+              <p className="text-xs text-muted-foreground">
+                ID: {activity.target_id.substring(0, 8)}...
+              </p>
             )}
           </div>
           
-          {activity.score !== null && getScoreBadge(activity.score)}
+          {getActivityBadge(activity.type)}
         </div>
       ))}
+      
+      {displayActivities.length === 0 && (
+        <div className="text-center py-6 text-muted-foreground">
+          No recent activities to display
+        </div>
+      )}
     </div>
   );
 };

@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -10,21 +10,54 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { User } from "@supabase/supabase-js";
 import { toast } from "sonner";
 import { Lock, CreditCard, Users, HelpCircle } from "lucide-react";
+import { updateUserProfile } from "@/lib/supabase";
 
 interface AccountSettingsProps {
   user: User;
   userPlan: string;
+  userProfile?: any;
 }
 
-const AccountSettings = ({ user, userPlan }: AccountSettingsProps) => {
-  const [firstName, setFirstName] = useState(user.user_metadata?.first_name || "");
-  const [lastName, setLastName] = useState(user.user_metadata?.last_name || "");
-  const [phone, setPhone] = useState(user.user_metadata?.phone || "");
-  const [company, setCompany] = useState(user.user_metadata?.company || "");
+const AccountSettings = ({ user, userPlan, userProfile }: AccountSettingsProps) => {
+  const [firstName, setFirstName] = useState(userProfile?.first_name || user.user_metadata?.first_name || "");
+  const [lastName, setLastName] = useState(userProfile?.last_name || user.user_metadata?.last_name || "");
+  const [phone, setPhone] = useState(userProfile?.phone || user.user_metadata?.phone || "");
+  const [company, setCompany] = useState(userProfile?.company || user.user_metadata?.company || "");
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Update form if profile changes
+  useEffect(() => {
+    if (userProfile) {
+      setFirstName(userProfile.first_name || "");
+      setLastName(userProfile.last_name || "");
+      setPhone(userProfile.phone || "");
+      setCompany(userProfile.company || "");
+    }
+  }, [userProfile]);
   
-  const handleUpdateProfile = () => {
-    // In a real app, this would update the user profile in Supabase
-    toast.success("Profile updated successfully");
+  const handleUpdateProfile = async () => {
+    try {
+      setIsSaving(true);
+      
+      // Update profile in Supabase
+      const { error } = await updateUserProfile(user.id, {
+        first_name: firstName,
+        last_name: lastName,
+        phone,
+        company
+      });
+      
+      if (error) {
+        throw error;
+      }
+      
+      toast.success("Profile updated successfully");
+    } catch (error) {
+      console.error("Error updating profile:", error);
+      toast.error("Failed to update profile");
+    } finally {
+      setIsSaving(false);
+    }
   };
   
   // Plan details based on the user's subscription
@@ -115,7 +148,7 @@ const AccountSettings = ({ user, userPlan }: AccountSettingsProps) => {
             <CardHeader>
               <div className="flex items-center gap-4">
                 <Avatar className="h-16 w-16">
-                  <AvatarImage src="" alt={`${firstName} ${lastName}`} />
+                  <AvatarImage src={userProfile?.avatar_url || ""} alt={`${firstName} ${lastName}`} />
                   <AvatarFallback>{getInitials(firstName, lastName)}</AvatarFallback>
                 </Avatar>
                 <div>
@@ -176,7 +209,12 @@ const AccountSettings = ({ user, userPlan }: AccountSettingsProps) => {
             </CardContent>
             <CardFooter className="flex justify-between">
               <Button variant="outline">Cancel</Button>
-              <Button onClick={handleUpdateProfile}>Save Changes</Button>
+              <Button 
+                onClick={handleUpdateProfile}
+                disabled={isSaving}
+              >
+                {isSaving ? "Saving..." : "Save Changes"}
+              </Button>
             </CardFooter>
           </Card>
           

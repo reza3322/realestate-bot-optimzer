@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '@/components/layout/Navbar';
@@ -5,7 +6,7 @@ import Footer from '@/components/sections/Footer';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { getSession } from '@/lib/supabase';
+import { getSession, getUserProfile, getUserRole, getLeads, getProperties, getRecentActivities } from '@/lib/supabase';
 import { toast } from 'sonner';
 import DashboardSidebar from '@/components/dashboard/DashboardSidebar';
 import QuickStats from '@/components/dashboard/QuickStats';
@@ -21,7 +22,16 @@ const Dashboard = () => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
-  const [userPlan, setUserPlan] = useState('starter'); // starter, professional, enterprise
+  const [userPlan, setUserPlan] = useState('starter');
+  const [userProfile, setUserProfile] = useState(null);
+  const [stats, setStats] = useState({
+    totalLeads: 0,
+    activeConversations: 0,
+    websiteVisitors: 0,
+    totalProperties: 0,
+    featuredProperties: 0
+  });
+  const [activities, setActivities] = useState([]);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -39,9 +49,29 @@ const Dashboard = () => {
         
         setUser(session.user);
         
-        // Determine user plan from user metadata
-        if (session.user && session.user.user_metadata) {
-          setUserPlan(session.user.user_metadata.plan || 'starter');
+        // Fetch user profile from profiles table
+        if (session.user) {
+          const { data: profileData, error: profileError } = await getUserProfile(session.user.id);
+          
+          if (profileError) {
+            console.error('Error fetching profile:', profileError);
+          } else if (profileData) {
+            setUserProfile(profileData);
+            setUserPlan(profileData.plan || 'starter');
+          }
+          
+          // Get user role
+          const role = await getUserRole(session.user.id);
+          if (role === 'admin') {
+            navigate('/admin');
+            return;
+          }
+          
+          // Fetch stats
+          await fetchStats(session.user.id);
+          
+          // Fetch recent activities
+          await fetchActivities(session.user.id);
         }
       } catch (error) {
         console.error('Error fetching user:', error);
@@ -54,6 +84,44 @@ const Dashboard = () => {
     getUser();
   }, [navigate]);
   
+  const fetchStats = async (userId) => {
+    try {
+      // Get lead count
+      const { data: leadsData } = await getLeads();
+      
+      // Get property count
+      const { data: propertiesData } = await getProperties();
+      
+      // Calculate statistics
+      const totalLeads = leadsData?.length || 0;
+      const totalProperties = propertiesData?.length || 0;
+      const featuredProperties = propertiesData?.filter(p => p.featured)?.length || 0;
+      
+      // Set statistics (some values are still estimated as they would require additional tables)
+      setStats({
+        totalLeads,
+        activeConversations: Math.min(12, Math.floor(totalLeads * 0.4)), // Approximation
+        websiteVisitors: Math.floor(Math.random() * 300) + 200, // Random for now
+        totalProperties,
+        featuredProperties
+      });
+      
+    } catch (error) {
+      console.error('Error fetching stats:', error);
+    }
+  };
+  
+  const fetchActivities = async (userId) => {
+    try {
+      const { data } = await getRecentActivities(5);
+      if (data) {
+        setActivities(data);
+      }
+    } catch (error) {
+      console.error('Error fetching activities:', error);
+    }
+  };
+  
   if (loading) {
     return <div className="flex justify-center items-center h-screen">Loading...</div>;
   }
@@ -62,7 +130,7 @@ const Dashboard = () => {
     return <div className="flex justify-center items-center h-screen">You need to be logged in to access this page</div>;
   }
 
-  const firstName = user.user_metadata?.first_name || user.email?.split('@')[0] || 'there';
+  const firstName = userProfile?.first_name || user.user_metadata?.first_name || user.email?.split('@')[0] || 'there';
   
   const isPremiumFeature = (requiredPlan) => {
     const planLevels = {
@@ -100,7 +168,7 @@ const Dashboard = () => {
             </TabsList>
             
             <TabsContent value="overview" className="space-y-6">
-              <QuickStats />
+              <QuickStats stats={stats} />
               <div className="grid md:grid-cols-2 gap-6">
                 <Card>
                   <CardHeader>
@@ -108,7 +176,7 @@ const Dashboard = () => {
                     <CardDescription>Latest updates on your platform</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <RecentActivity />
+                    <RecentActivity activities={activities} />
                   </CardContent>
                 </Card>
                 
@@ -213,7 +281,7 @@ const Dashboard = () => {
             </TabsContent>
             
             <TabsContent value="settings">
-              <AccountSettings user={user} userPlan={userPlan} />
+              <AccountSettings user={user} userPlan={userPlan} userProfile={userProfile} />
             </TabsContent>
           </Tabs>
         </main>
