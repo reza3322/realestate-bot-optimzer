@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button';
 import { getSession } from '@/lib/supabase';
 import { SignInForm } from '@/components/auth/SignInForm';
 import { SignUpForm } from '@/components/auth/SignUpForm';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { InfoIcon } from 'lucide-react';
 
 const Auth = () => {
   const [session, setSession] = useState(null);
@@ -73,6 +75,14 @@ const Auth = () => {
                 Sign in to your account or create a new one
               </p>
             </div>
+            
+            <Alert className="mb-4 border border-blue-200 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-900">
+              <InfoIcon className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              <AlertTitle>Admin Access</AlertTitle>
+              <AlertDescription>
+                Enterprise users are automatically redirected to the Admin page. Use the enterprise@example.com account for admin access.
+              </AlertDescription>
+            </Alert>
             
             <Tabs 
               defaultValue={activeTab} 
@@ -158,9 +168,9 @@ const Auth = () => {
                 </div>
               </div>
               
-              <div className="border dark:border-gray-700 rounded-lg p-4">
-                <h3 className="font-medium">Enterprise Plan</h3>
-                <p className="text-sm text-muted-foreground mb-2">All features</p>
+              <div className="border dark:border-gray-700 rounded-lg p-4 ring-2 ring-primary ring-offset-2">
+                <h3 className="font-medium">Enterprise Plan (Admin Access)</h3>
+                <p className="text-sm text-muted-foreground mb-2">All features + Admin Dashboard</p>
                 <div className="text-sm">
                   <p><strong>Email:</strong> enterprise@example.com</p>
                   <p><strong>Password:</strong> password123</p>

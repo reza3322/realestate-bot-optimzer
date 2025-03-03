@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { signIn, signInWithGoogle } from '@/lib/supabase';
+import { signIn, signInWithGoogle, getUserProfile } from '@/lib/supabase';
 
 export function SignInForm() {
   const navigate = useNavigate();
@@ -20,15 +20,29 @@ export function SignInForm() {
     try {
       setIsLoading(true);
       
-      const { error } = await signIn(email, password);
+      const { error, data } = await signIn(email, password);
       
       if (error) {
         toast.error(error.message || "Failed to sign in");
         return;
       }
       
-      toast.success("Signed in successfully!");
-      navigate('/dashboard');
+      // Check user profile to determine if they should go to admin page
+      if (data?.user) {
+        const { data: profileData } = await getUserProfile(data.user.id);
+        
+        toast.success("Signed in successfully!");
+        
+        // If user has enterprise plan, redirect them to admin page
+        if (profileData?.plan === 'enterprise') {
+          navigate('/admin');
+        } else {
+          navigate('/dashboard');
+        }
+      } else {
+        // Default redirect if we can't determine the user's plan
+        navigate('/dashboard');
+      }
     } catch (error: any) {
       toast.error(error.message || "An unexpected error occurred");
     } finally {
