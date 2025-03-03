@@ -1,83 +1,253 @@
 
-import { Button } from '@/components/ui/button';
-import { Check } from 'lucide-react';
+import { useState, useRef } from 'react';
+import { Check, Star } from 'lucide-react';
+import { motion } from 'framer-motion';
+import confetti from 'canvas-confetti';
+import { cn } from '@/lib/utils';
+import { Button, buttonVariants } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+
+interface PricingPlan {
+  name: string;
+  price: string;
+  yearlyPrice: string;
+  period: string;
+  features: string[];
+  description: string;
+  buttonText: string;
+  href: string;
+  isPopular: boolean;
+}
+
+const pricingPlans: PricingPlan[] = [
+  {
+    name: "STARTER",
+    price: "99",
+    yearlyPrice: "89",
+    period: "per month",
+    features: [
+      "AI Chatbot integration",
+      "Basic CRM functionality",
+      "Lead qualification",
+      "Email notifications",
+      "Basic analytics dashboard",
+    ],
+    description: "Perfect for individual agents and small agencies",
+    buttonText: "Start Free Trial",
+    href: "#",
+    isPopular: false,
+  },
+  {
+    name: "PROFESSIONAL",
+    price: "299",
+    yearlyPrice: "269",
+    period: "per month",
+    features: [
+      "Everything in Starter",
+      "AI Agent integration",
+      "Advanced CRM functionality",
+      "30 qualified leads per month",
+      "Automated follow-ups",
+      "Property matching engine",
+      "Priority support",
+    ],
+    description: "Ideal for growing teams and established agencies",
+    buttonText: "Get Started",
+    href: "#",
+    isPopular: true,
+  },
+  {
+    name: "ENTERPRISE",
+    price: "599",
+    yearlyPrice: "539",
+    period: "per month",
+    features: [
+      "Everything in Professional",
+      "Social media AI agent",
+      "Unlimited qualified leads",
+      "Custom integrations",
+      "Dedicated account manager",
+      "White-label solutions",
+      "Advanced analytics",
+      "API access",
+    ],
+    description: "For large agencies with specific needs",
+    buttonText: "Contact Sales",
+    href: "#",
+    isPopular: false,
+  },
+];
 
 const Cta = () => {
-  const features = [
-    "Unlimited leads qualification",
-    "WhatsApp & Instagram integration",
-    "24/7 customer engagement",
-    "Property recommendation engine",
-    "Appointment scheduling",
-    "Analytics dashboard"
-  ];
+  const [isMonthly, setIsMonthly] = useState(true);
+  const switchRef = useRef<HTMLButtonElement>(null);
+
+  // Check if we're on desktop (for animations)
+  const useMediaQuery = (query: string): boolean => {
+    const [matches, setMatches] = useState(false);
+    
+    useState(() => {
+      const media = window.matchMedia(query);
+      if (media.matches !== matches) {
+        setMatches(media.matches);
+      }
+      
+      const listener = () => setMatches(media.matches);
+      window.addEventListener("resize", listener);
+      return () => window.removeEventListener("resize", listener);
+    });
+    
+    return matches;
+  };
+  
+  const isDesktop = useMediaQuery("(min-width: 768px)");
+
+  const handleToggle = (checked: boolean) => {
+    setIsMonthly(!checked);
+    if (checked && switchRef.current) {
+      const rect = switchRef.current.getBoundingClientRect();
+      const x = rect.left + rect.width / 2;
+      const y = rect.top + rect.height / 2;
+
+      confetti({
+        particleCount: 50,
+        spread: 60,
+        origin: {
+          x: x / window.innerWidth,
+          y: y / window.innerHeight,
+        },
+        colors: [
+          "hsl(var(--primary))",
+          "hsl(var(--accent))",
+          "hsl(var(--secondary))",
+          "hsl(var(--muted))",
+        ],
+        ticks: 200,
+        gravity: 1.2,
+        decay: 0.94,
+        startVelocity: 30,
+        shapes: ["circle"],
+      });
+    }
+  };
 
   return (
     <section id="pricing" className="py-20">
-      <div className="container px-4 mx-auto">
-        <div className="max-w-5xl mx-auto">
-          <div className="bg-card border border-border rounded-2xl shadow-lg overflow-hidden">
-            <div className="flex flex-col lg:flex-row">
-              <div className="w-full lg:w-1/2 p-8 md:p-12">
-                <h2 className="text-3xl font-bold mb-4">Ready to transform your real estate business?</h2>
-                <p className="text-muted-foreground mb-6">
-                  Start automating your lead qualification and customer engagement today.
+      <div className="container">
+        <div className="text-center space-y-4 mb-12">
+          <h2 className="text-4xl font-bold tracking-tight sm:text-5xl">
+            Simple, Transparent Pricing
+          </h2>
+          <p className="text-muted-foreground text-lg max-w-3xl mx-auto">
+            Choose the plan that works for you. All plans include access to our platform, lead generation tools, and dedicated support.
+          </p>
+        </div>
+
+        <div className="flex justify-center mb-10">
+          <div className="flex items-center gap-3">
+            <span className="font-semibold">Monthly</span>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <Switch
+                ref={switchRef as any}
+                checked={!isMonthly}
+                onCheckedChange={handleToggle}
+                className="relative"
+              />
+            </label>
+            <span className="font-semibold">
+              Annual billing <span className="text-primary">(Save 10%)</span>
+            </span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-7xl mx-auto">
+          {pricingPlans.map((plan, index) => (
+            <motion.div
+              key={index}
+              initial={{ y: 50, opacity: 0 }}
+              whileInView={
+                isDesktop
+                  ? {
+                      y: plan.isPopular ? -20 : 0,
+                      opacity: 1,
+                      x: index === 2 ? -30 : index === 0 ? 30 : 0,
+                      scale: index === 0 || index === 2 ? 0.94 : 1.0,
+                    }
+                  : { y: 0, opacity: 1 }
+              }
+              viewport={{ once: true }}
+              transition={{
+                duration: 1.6,
+                type: "spring",
+                stiffness: 100,
+                damping: 30,
+                delay: index * 0.1 + 0.3,
+                opacity: { duration: 0.5 },
+              }}
+              className={cn(
+                "rounded-2xl border p-6 bg-background text-center flex flex-col relative",
+                plan.isPopular ? "border-primary border-2" : "border-border",
+                !plan.isPopular && "mt-5",
+                index === 0 || index === 2
+                  ? "z-0 transform-gpu"
+                  : "z-10",
+                index === 0 && "origin-right",
+                index === 2 && "origin-left"
+              )}
+            >
+              {plan.isPopular && (
+                <div className="absolute top-0 right-0 bg-primary py-0.5 px-2 rounded-bl-xl rounded-tr-xl flex items-center">
+                  <Star className="text-primary-foreground h-4 w-4 fill-current" />
+                  <span className="text-primary-foreground ml-1 font-sans font-semibold text-xs">
+                    Popular
+                  </span>
+                </div>
+              )}
+              <div className="flex-1 flex flex-col">
+                <p className="text-base font-semibold text-muted-foreground">
+                  {plan.name}
+                </p>
+                <div className="mt-6 flex items-center justify-center gap-x-2">
+                  <span className="text-5xl font-bold tracking-tight text-foreground">
+                    €{isMonthly ? plan.price : plan.yearlyPrice}
+                  </span>
+                  <span className="text-sm font-semibold leading-6 tracking-wide text-muted-foreground">
+                    / {plan.period}
+                  </span>
+                </div>
+
+                <p className="text-xs leading-5 text-muted-foreground mt-1">
+                  {isMonthly ? "billed monthly" : "billed annually"}
                 </p>
 
-                <div className="space-y-3 mb-8">
-                  {features.map((feature) => (
-                    <div key={feature} className="flex items-start gap-3">
-                      <Check className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
-                      <span>{feature}</span>
-                    </div>
+                <ul className="mt-6 space-y-3">
+                  {plan.features.map((feature, idx) => (
+                    <li key={idx} className="flex items-start gap-2">
+                      <Check className="h-4 w-4 text-primary mt-1 flex-shrink-0" />
+                      <span className="text-left text-sm">{feature}</span>
+                    </li>
                   ))}
-                </div>
+                </ul>
 
-                <div className="flex flex-col sm:flex-row gap-4">
-                  <Button size="lg" className="w-full sm:w-auto">
-                    Start Free Trial
+                <div className="mt-auto pt-8">
+                  <Button 
+                    variant={plan.isPopular ? "default" : "outline"} 
+                    size="lg"
+                    className={cn(
+                      "w-full group relative overflow-hidden",
+                      "transform-gpu transition-all duration-300 ease-out hover:ring-2 hover:ring-primary hover:ring-offset-1 hover:bg-primary hover:text-primary-foreground"
+                    )}
+                  >
+                    {plan.buttonText}
                   </Button>
-                  <Button size="lg" variant="outline" className="w-full sm:w-auto">
-                    Schedule Demo
-                  </Button>
-                </div>
-              </div>
-
-              <div className="w-full lg:w-1/2 bg-primary/5 p-8 md:p-12 flex flex-col justify-center">
-                <div className="bg-card border border-border rounded-xl p-6 shadow-sm">
-                  <div className="flex items-baseline mb-4">
-                    <span className="text-4xl font-bold">$299</span>
-                    <span className="text-muted-foreground ml-2">/month</span>
-                  </div>
-                  <h3 className="text-xl font-medium mb-2">Professional Plan</h3>
-                  <p className="text-muted-foreground mb-6">
-                    Everything you need to automate your real estate operations.
+                  <p className="mt-4 text-xs leading-5 text-muted-foreground">
+                    {plan.description}
                   </p>
-                  <ul className="space-y-3 mb-6">
-                    <li className="flex items-start gap-3">
-                      <Check className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
-                      <span>All features included</span>
-                    </li>
-                    <li className="flex items-start gap-3">
-                      <Check className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
-                      <span>Unlimited user accounts</span>
-                    </li>
-                    <li className="flex items-start gap-3">
-                      <Check className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
-                      <span>Priority support</span>
-                    </li>
-                    <li className="flex items-start gap-3">
-                      <Check className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
-                      <span>Custom branding</span>
-                    </li>
-                  </ul>
-                  <div className="text-xs text-muted-foreground">
-                    14-day free trial, no credit card required
-                  </div>
                 </div>
               </div>
-            </div>
-          </div>
+            </motion.div>
+          ))}
         </div>
       </div>
     </section>
