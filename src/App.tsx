@@ -5,7 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { getSession } from '@/lib/supabase';
+import { getSession, getUserRole } from '@/lib/supabase';
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import Product from "./pages/Product";
@@ -17,13 +17,10 @@ import Admin from "./pages/Admin";
 // Create a new query client
 const queryClient = new QueryClient();
 
-// Admin emails - these are the only accounts that can access the admin page
-const ADMIN_EMAILS = ['admin@realhomeai.com', 'reza7.mohebbi@gmail.com'];
-
 const App = () => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [userEmail, setUserEmail] = useState('');
+  const [userRole, setUserRole] = useState('');
 
   useEffect(() => {
     // Check current auth status
@@ -31,7 +28,13 @@ const App = () => {
       try {
         const { data: { session } } = await getSession();
         setUser(session?.user || null);
-        setUserEmail(session?.user?.email || '');
+        
+        // If user is authenticated, fetch their role
+        if (session?.user) {
+          const role = await getUserRole(session.user.id);
+          setUserRole(role || 'user');
+          console.log("User role:", role);
+        }
       } catch (error) {
         console.error("Error getting session:", error);
       } finally {
@@ -67,7 +70,7 @@ const App = () => {
     return children;
   };
 
-  // Admin-only route component - only specific emails can access
+  // Admin-only route component - only users with admin role can access
   const AdminRoute = ({ children }) => {
     if (loading) return <div className="flex justify-center items-center h-screen">Loading...</div>;
     
@@ -75,8 +78,8 @@ const App = () => {
       return <Navigate to="/auth" replace />;
     }
     
-    // Only allow access if the user is an admin
-    if (!ADMIN_EMAILS.includes(userEmail.toLowerCase())) {
+    // Only allow access if the user has admin role
+    if (userRole !== 'admin') {
       return <Navigate to="/dashboard" replace />;
     }
     
@@ -102,7 +105,7 @@ const App = () => {
                 loading ? (
                   <div className="flex justify-center items-center h-screen">Loading...</div>
                 ) : user ? (
-                  ADMIN_EMAILS.includes(userEmail.toLowerCase()) ? (
+                  userRole === 'admin' ? (
                     <Navigate to="/admin" replace />
                   ) : (
                     <Navigate to="/dashboard" replace />

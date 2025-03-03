@@ -5,10 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { signIn, signInWithGoogle, getUserProfile } from '@/lib/supabase';
-
-// Admin emails - these are the only accounts that can access the admin page
-const ADMIN_EMAILS = ['admin@realhomeai.com', 'reza7.mohebbi@gmail.com'];
+import { signIn, signInWithGoogle, getUserRole } from '@/lib/supabase';
 
 export function SignInForm() {
   const navigate = useNavigate();
@@ -30,23 +27,24 @@ export function SignInForm() {
         return;
       }
       
-      // Check if this is an admin account - only specified emails should have admin access
-      if (data?.user && ADMIN_EMAILS.includes(email.toLowerCase())) {
-        toast.success("Welcome back, Admin!");
-        // Use replace instead of navigate to prevent back button issues
-        setTimeout(() => {
-          navigate('/admin', { replace: true });
-        }, 300);
-        return;
-      }
-      
-      // For all other users, redirect to dashboard
+      // If login successful, check user role
       if (data?.user) {
-        toast.success("Signed in successfully!");
-        // Use replace instead of navigate to prevent back button issues
-        setTimeout(() => {
-          navigate('/dashboard', { replace: true });
-        }, 300);
+        const role = await getUserRole(data.user.id);
+        
+        // Redirect based on role
+        if (role === 'admin') {
+          toast.success("Welcome back, Admin!");
+          // Use replace instead of navigate to prevent back button issues
+          setTimeout(() => {
+            navigate('/admin', { replace: true });
+          }, 300);
+        } else {
+          toast.success("Signed in successfully!");
+          // Use replace instead of navigate to prevent back button issues
+          setTimeout(() => {
+            navigate('/dashboard', { replace: true });
+          }, 300);
+        }
       }
     } catch (error: any) {
       toast.error(error.message || "An unexpected error occurred");
