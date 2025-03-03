@@ -1,18 +1,57 @@
 
-import { useUser } from '@clerk/clerk-react';
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/sections/Footer';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useState } from 'react';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { supabase } from '@/lib/supabase';
+import { toast } from 'sonner';
 
 const Dashboard = () => {
-  const { user } = useUser();
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
+  const navigate = useNavigate();
 
-  if (!user) {
+  useEffect(() => {
+    const getUser = async () => {
+      try {
+        setLoading(true);
+        
+        // Check if there's an active session
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (!session) {
+          navigate('/auth');
+          return;
+        }
+        
+        // Get user profile data
+        const { data: { user } } = await supabase.auth.getUser();
+        setUser(user);
+      } catch (error) {
+        console.error('Error fetching user:', error);
+        toast.error('Failed to load user data');
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    getUser();
+  }, [navigate]);
+  
+  if (loading) {
     return <div className="flex justify-center items-center h-screen">Loading...</div>;
   }
+
+  if (!user) {
+    return <div className="flex justify-center items-center h-screen">You need to be logged in to access this page</div>;
+  }
+
+  const firstName = user.user_metadata?.first_name || user.email?.split('@')[0] || 'there';
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -22,7 +61,7 @@ const Dashboard = () => {
         <header className="pb-8 border-b mb-8">
           <h1 className="text-3xl font-bold mb-2">Dashboard</h1>
           <p className="text-muted-foreground">
-            Welcome back, {user.firstName || user.username}!
+            Welcome back, {firstName}!
           </p>
         </header>
         
@@ -89,18 +128,24 @@ const Dashboard = () => {
                 <div className="grid gap-4">
                   <div className="grid gap-2">
                     <Label htmlFor="email">Email</Label>
-                    <Input id="email" value={user.emailAddresses[0]?.emailAddress || ''} readOnly />
+                    <Input id="email" value={user.email || ''} readOnly />
                   </div>
                   
                   <div className="grid grid-cols-2 gap-4">
                     <div className="grid gap-2">
                       <Label htmlFor="firstName">First Name</Label>
-                      <Input id="firstName" value={user.firstName || ''} />
+                      <Input 
+                        id="firstName" 
+                        value={user.user_metadata?.first_name || ''} 
+                      />
                     </div>
                     
                     <div className="grid gap-2">
                       <Label htmlFor="lastName">Last Name</Label>
-                      <Input id="lastName" value={user.lastName || ''} />
+                      <Input 
+                        id="lastName" 
+                        value={user.user_metadata?.last_name || ''} 
+                      />
                     </div>
                   </div>
                   

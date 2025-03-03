@@ -2,16 +2,26 @@
 import { useEffect, useState } from 'react';
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Home, CreditCard, FileText, Mail, User } from "lucide-react";
+import { Home, CreditCard, FileText, Mail } from "lucide-react";
 import { NavBar } from "@/components/ui/tubelight-navbar";
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { useAuth, UserButton } from '@clerk/clerk-react';
+import { supabase, signOut } from '@/lib/supabase';
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { 
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger 
+} from "@/components/ui/dropdown-menu";
+import { toast } from 'sonner';
 
 const Navbar = () => {
   const [isScrolled, setIsScrolled] = useState(false);
+  const [user, setUser] = useState(null);
   const location = useLocation();
   const navigate = useNavigate();
-  const { isSignedIn } = useAuth();
   
   useEffect(() => {
     const handleScroll = () => {
@@ -21,6 +31,40 @@ const Navbar = () => {
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+  
+  useEffect(() => {
+    // Get current user
+    const getUser = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      setUser(session?.user || null);
+    };
+    
+    getUser();
+    
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        setUser(session?.user || null);
+      }
+    );
+    
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleSignOut = async () => {
+    try {
+      const { error } = await signOut();
+      if (error) {
+        toast.error(error.message || "Failed to sign out");
+        return;
+      }
+      
+      toast.success("Signed out successfully");
+      navigate('/');
+    } catch (error: any) {
+      toast.error(error.message || "An unexpected error occurred");
+    }
+  };
 
   const navItems = [
     { name: 'Product', url: '/product', icon: Home },
@@ -51,6 +95,15 @@ const Navbar = () => {
     }
   };
 
+  const getUserInitials = () => {
+    if (!user || !user.user_metadata) return '?';
+    
+    const firstName = user.user_metadata.first_name || '';
+    const lastName = user.user_metadata.last_name || '';
+    
+    return (firstName.charAt(0) + lastName.charAt(0)).toUpperCase();
+  };
+
   return (
     <header className={cn(
       "fixed top-0 left-0 right-0 z-40 transition-all duration-300",
@@ -70,7 +123,7 @@ const Navbar = () => {
         />
         
         <div className="flex items-center gap-4">
-          {isSignedIn ? (
+          {user ? (
             <>
               <Button 
                 variant="ghost" 
@@ -79,7 +132,28 @@ const Navbar = () => {
               >
                 Dashboard
               </Button>
-              <UserButton afterSignOutUrl="/" />
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Avatar className="cursor-pointer">
+                    <AvatarImage src={user.user_metadata?.avatar_url} />
+                    <AvatarFallback>{getUserInitials()}</AvatarFallback>
+                  </Avatar>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuLabel>My Account</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onSelect={() => navigate('/dashboard')}>
+                    Dashboard
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => navigate('/profile')}>
+                    Profile
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onSelect={handleSignOut}>
+                    Sign out
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </>
           ) : (
             <>

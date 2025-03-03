@@ -1,14 +1,13 @@
 
 import { useState } from 'react';
-import { useSignIn } from '@clerk/clerk-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
+import { signIn } from '@/lib/supabase';
 
 export function SignInForm() {
-  const { signIn, isLoaded, setActive } = useSignIn();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -17,27 +16,20 @@ export function SignInForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!isLoaded) {
-      return;
-    }
-
     try {
       setIsLoading(true);
       
-      const result = await signIn.create({
-        identifier: email,
-        password,
-      });
+      const { error } = await signIn(email, password);
       
-      if (result.status === "complete") {
-        await setActive({ session: result.createdSessionId });
-        toast.success("Signed in successfully!");
-        navigate('/dashboard');
-      } else {
-        toast.error("Something went wrong. Please try again.");
+      if (error) {
+        toast.error(error.message || "Failed to sign in");
+        return;
       }
+      
+      toast.success("Signed in successfully!");
+      navigate('/dashboard');
     } catch (error: any) {
-      toast.error(error.errors?.[0]?.message || "Failed to sign in");
+      toast.error(error.message || "An unexpected error occurred");
     } finally {
       setIsLoading(false);
     }

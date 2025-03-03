@@ -1,14 +1,13 @@
 
 import { useState } from 'react';
-import { useSignUp } from '@clerk/clerk-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
+import { signUp } from '@/lib/supabase';
 
 export function SignUpForm() {
-  const { signUp, isLoaded, setActive } = useSignUp();
   const navigate = useNavigate();
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -19,29 +18,19 @@ export function SignUpForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!isLoaded) {
-      return;
-    }
-
     try {
       setIsLoading(true);
       
-      const result = await signUp.create({
-        firstName,
-        lastName,
-        emailAddress: email,
-        password,
-      });
+      const { error } = await signUp(email, password, firstName, lastName);
       
-      if (result.status === "complete") {
-        await setActive({ session: result.createdSessionId });
-        toast.success("Account created successfully!");
-        navigate('/dashboard');
-      } else {
-        toast.error("Something went wrong. Please try again.");
+      if (error) {
+        toast.error(error.message || "Failed to create account");
+        return;
       }
+      
+      toast.success("Account created! Please check your email to confirm your registration.");
     } catch (error: any) {
-      toast.error(error.errors?.[0]?.message || "Failed to sign up");
+      toast.error(error.message || "An unexpected error occurred");
     } finally {
       setIsLoading(false);
     }
