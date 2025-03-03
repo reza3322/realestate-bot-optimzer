@@ -1,5 +1,6 @@
 
 import { Message } from './types';
+import { supabase } from '@/lib/supabase';
 
 // Demo responses for testing the chatbot
 export const demoResponses = [
@@ -44,9 +45,9 @@ export const testChatbotResponse = async (
   userId: string
 ): Promise<{ response: string; error?: string }> => {
   try {
-    // Use actual Supabase URL from environment variables
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-    const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+    // Use hardcoded Supabase URL instead of environment variables
+    const supabaseUrl = 'https://ckgaqkbsnrvccctqxsqv.supabase.co';
+    const supabaseAnonKey = supabase.auth.anon_key; // Get anon key from the supabase client
 
     if (!supabaseUrl) {
       console.error('Supabase URL is undefined');
