@@ -20,6 +20,7 @@ const queryClient = new QueryClient();
 const App = () => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [userEmail, setUserEmail] = useState('');
 
   useEffect(() => {
     // Check current auth status
@@ -27,6 +28,7 @@ const App = () => {
       try {
         const { data: { session } } = await getSession();
         setUser(session?.user || null);
+        setUserEmail(session?.user?.email || '');
       } catch (error) {
         console.error("Error getting session:", error);
       } finally {
@@ -51,12 +53,28 @@ const App = () => {
     };
   }, []);
 
-  // Protected route component
+  // Protected route component for general user authentication
   const ProtectedRoute = ({ children }) => {
     if (loading) return <div className="flex justify-center items-center h-screen">Loading...</div>;
     
     if (!user) {
       return <Navigate to="/auth" replace />;
+    }
+    
+    return children;
+  };
+
+  // Admin-only route component
+  const AdminRoute = ({ children }) => {
+    if (loading) return <div className="flex justify-center items-center h-screen">Loading...</div>;
+    
+    if (!user) {
+      return <Navigate to="/auth" replace />;
+    }
+    
+    // Only allow access if the user is the admin
+    if (userEmail.toLowerCase() !== 'admin@realhomeai.com') {
+      return <Navigate to="/dashboard" replace />;
     }
     
     return children;
@@ -74,9 +92,18 @@ const App = () => {
             <Route path="/product" element={<Product />} />
             <Route path="/resources" element={<Resources />} />
             <Route path="/auth" element={<Auth />} />
-            <Route path="/admin" element={<Admin />} />
             
-            {/* Protected routes */}
+            {/* Admin-only route */}
+            <Route 
+              path="/admin" 
+              element={
+                <AdminRoute>
+                  <Admin />
+                </AdminRoute>
+              } 
+            />
+            
+            {/* Protected routes for all authenticated users */}
             <Route 
               path="/dashboard" 
               element={

@@ -27,20 +27,23 @@ export function SignInForm() {
         return;
       }
       
-      // Check user profile to determine if they should go to admin page
+      // Check if this is the admin account (platform creator)
+      if (data?.user && email.toLowerCase() === 'admin@realhomeai.com') {
+        toast.success("Welcome back, Admin!");
+        navigate('/admin');
+        return;
+      }
+      
+      // For regular users, check their plan
       if (data?.user) {
         const { data: profileData } = await getUserProfile(data.user.id);
         
         toast.success("Signed in successfully!");
         
-        // If user has enterprise plan, redirect them to admin page
-        if (profileData?.plan === 'enterprise') {
-          navigate('/admin');
-        } else {
-          navigate('/dashboard');
-        }
+        // All users (including enterprise) go to the dashboard
+        navigate('/dashboard');
       } else {
-        // Default redirect if we can't determine the user's plan
+        // Default redirect if we can't determine the user's profile
         navigate('/dashboard');
       }
     } catch (error: any) {

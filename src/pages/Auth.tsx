@@ -78,9 +78,10 @@ const Auth = () => {
             
             <Alert className="mb-4 border border-blue-200 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-900">
               <InfoIcon className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-              <AlertTitle>Admin Access</AlertTitle>
+              <AlertTitle>Important Access Information</AlertTitle>
               <AlertDescription>
-                Enterprise users are automatically redirected to the Admin page. Use the enterprise@example.com account for admin access.
+                The Admin Page is restricted to platform administrators only. 
+                Regular users (including enterprise plan users) will be directed to the dashboard.
               </AlertDescription>
             </Alert>
             
@@ -149,7 +150,16 @@ const Auth = () => {
             <h2 className="text-xl font-semibold mb-4">Available Mock Users</h2>
             <p className="mb-4">For testing purposes, you can use these pre-configured accounts:</p>
             
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-4">
+              <div className="border dark:border-gray-700 rounded-lg p-4">
+                <h3 className="font-medium">Admin Account</h3>
+                <p className="text-sm text-muted-foreground mb-2">Platform Administrator</p>
+                <div className="text-sm">
+                  <p><strong>Email:</strong> admin@realhomeai.com</p>
+                  <p><strong>Password:</strong> admin123</p>
+                </div>
+              </div>
+              
               <div className="border dark:border-gray-700 rounded-lg p-4">
                 <h3 className="font-medium">Starter Plan</h3>
                 <p className="text-sm text-muted-foreground mb-2">Basic features</p>
@@ -168,9 +178,9 @@ const Auth = () => {
                 </div>
               </div>
               
-              <div className="border dark:border-gray-700 rounded-lg p-4 ring-2 ring-primary ring-offset-2">
-                <h3 className="font-medium">Enterprise Plan (Admin Access)</h3>
-                <p className="text-sm text-muted-foreground mb-2">All features + Admin Dashboard</p>
+              <div className="border dark:border-gray-700 rounded-lg p-4">
+                <h3 className="font-medium">Enterprise Plan</h3>
+                <p className="text-sm text-muted-foreground mb-2">All features (not admin)</p>
                 <div className="text-sm">
                   <p><strong>Email:</strong> enterprise@example.com</p>
                   <p><strong>Password:</strong> password123</p>
