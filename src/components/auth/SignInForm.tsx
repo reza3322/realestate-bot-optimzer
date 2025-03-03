@@ -33,14 +33,20 @@ export function SignInForm() {
       // Check if this is an admin account - only specified emails should have admin access
       if (data?.user && ADMIN_EMAILS.includes(email.toLowerCase())) {
         toast.success("Welcome back, Admin!");
-        navigate('/admin');
+        // Use replace instead of navigate to prevent back button issues
+        setTimeout(() => {
+          navigate('/admin', { replace: true });
+        }, 300);
         return;
       }
       
       // For all other users, redirect to dashboard
       if (data?.user) {
         toast.success("Signed in successfully!");
-        navigate('/dashboard');
+        // Use replace instead of navigate to prevent back button issues
+        setTimeout(() => {
+          navigate('/dashboard', { replace: true });
+        }, 300);
       }
     } catch (error: any) {
       toast.error(error.message || "An unexpected error occurred");
@@ -57,6 +63,8 @@ export function SignInForm() {
       if (error) {
         toast.error(error.message || "Failed to sign in with Google");
       }
+      
+      // Google sign-in will be handled by the callback and router
     } catch (error: any) {
       toast.error(error.message || "An unexpected error occurred");
     } finally {

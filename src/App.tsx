@@ -94,7 +94,24 @@ const App = () => {
             <Route path="/" element={<Index />} />
             <Route path="/product" element={<Product />} />
             <Route path="/resources" element={<Resources />} />
-            <Route path="/auth" element={<Auth />} />
+            
+            {/* Auth route - redirect to dashboard/admin if already logged in */}
+            <Route 
+              path="/auth" 
+              element={
+                loading ? (
+                  <div className="flex justify-center items-center h-screen">Loading...</div>
+                ) : user ? (
+                  ADMIN_EMAILS.includes(userEmail.toLowerCase()) ? (
+                    <Navigate to="/admin" replace />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                ) : (
+                  <Auth />
+                )
+              } 
+            />
             
             {/* Admin-only route */}
             <Route 
