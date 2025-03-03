@@ -1,8 +1,7 @@
-
 import { useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import ChatbotDemo from '@/components/ui/ChatbotDemo';
-import { Bot, Palette, Settings, Type, ColorSwatch } from 'lucide-react';
+import { Bot, Palette, Settings, Type } from 'lucide-react';
 
 const Demo = () => {
   return (
@@ -42,7 +41,7 @@ const Demo = () => {
                   <h3 className="text-sm font-medium mb-2">Color Scheme</h3>
                   <TabsList className="grid w-full grid-cols-3">
                     <TabsTrigger value="color-default" className="flex items-center gap-2 text-xs">
-                      <ColorSwatch className="h-3 w-3" />
+                      <div className="w-3 h-3 bg-primary rounded-full"></div>
                       <span>Default</span>
                     </TabsTrigger>
                     <TabsTrigger value="color-green" className="flex items-center gap-2 text-xs">
@@ -75,7 +74,6 @@ const Demo = () => {
                 </div>
               </div>
               
-              {/* Default theme with color variations */}
               <TabsContent value="theme-default" className="focus:outline-none">
                 <ChatbotDemo theme="default" variation="default" fontStyle="default" />
               </TabsContent>
@@ -86,7 +84,6 @@ const Demo = () => {
                 <ChatbotDemo theme="minimal" variation="default" fontStyle="default" />
               </TabsContent>
               
-              {/* Color variations */}
               <TabsContent value="color-default" className="focus:outline-none">
                 <ChatbotDemo theme="default" variation="default" fontStyle="default" />
               </TabsContent>
@@ -97,7 +94,6 @@ const Demo = () => {
                 <ChatbotDemo theme="default" variation="purple" fontStyle="default" />
               </TabsContent>
               
-              {/* Font variations */}
               <TabsContent value="font-default" className="focus:outline-none">
                 <ChatbotDemo theme="default" variation="default" fontStyle="default" />
               </TabsContent>
