@@ -19,37 +19,37 @@ interface Feature {
 const features: Feature[] = [
   {
     id: 1,
-    icon: <Users className="h-8 w-8 text-primary" />,
+    icon: <Users className="h-10 w-10 text-primary" />,
     title: "Lead Qualification",
     description: "AI-powered system automatically qualifies leads based on behavior and profile data."
   },
   {
     id: 2,
-    icon: <Home className="h-8 w-8 text-primary" />,
+    icon: <Home className="h-10 w-10 text-primary" />,
     title: "Property Matching",
     description: "Smart algorithm matches potential buyers with properties that meet their preferences."
   },
   {
     id: 3,
-    icon: <MessageCircle className="h-8 w-8 text-primary" />,
+    icon: <MessageCircle className="h-10 w-10 text-primary" />,
     title: "24/7 Customer Service",
     description: "AI chatbot provides instant support and information to clients at any time of day."
   },
   {
     id: 4,
-    icon: <BarChart className="h-8 w-8 text-primary" />,
+    icon: <BarChart className="h-10 w-10 text-primary" />,
     title: "Performance Analytics",
     description: "Real-time analytics and reports to track your business performance and growth."
   },
   {
     id: 5,
-    icon: <Clock className="h-8 w-8 text-primary" />,
+    icon: <Clock className="h-10 w-10 text-primary" />,
     title: "Automated Scheduling",
     description: "Intelligent scheduling system for property viewings and client meetings."
   },
   {
     id: 6,
-    icon: <Lock className="h-8 w-8 text-primary" />,
+    icon: <Lock className="h-10 w-10 text-primary" />,
     title: "Secure Document Handling",
     description: "Encrypted storage and sharing of sensitive client and property documents."
   }
@@ -125,7 +125,7 @@ const FeatureCarousel = () => {
           <AnimatePresence mode="wait">
             <motion.div 
               key={currentIndex} 
-              className="flex flex-col md:flex-row justify-center gap-8"
+              className="flex flex-col md:flex-row justify-center gap-12"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
@@ -134,22 +134,22 @@ const FeatureCarousel = () => {
               {currentFeatures.map((feature) => (
                 <motion.div 
                   key={feature.id}
-                  className="bg-white/50 backdrop-blur-sm rounded-xl p-6 shadow-lg border border-gray-100 flex flex-col items-center text-center w-full md:w-1/2"
-                  whileHover={{ y: -5, boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)' }}
+                  className="flex flex-col items-center text-center w-full md:w-1/2"
+                  whileHover={{ y: -5 }}
                   transition={{ type: "spring", stiffness: 300 }}
                 >
                   <div className="bg-primary/10 p-4 rounded-full mb-4">
                     {feature.icon}
                   </div>
-                  <h3 className="text-xl font-bold mb-2">{feature.title}</h3>
-                  <p className="text-muted-foreground">{feature.description}</p>
+                  <h3 className="text-2xl font-bold mb-3">{feature.title}</h3>
+                  <p className="text-muted-foreground text-lg">{feature.description}</p>
                 </motion.div>
               ))}
             </motion.div>
           </AnimatePresence>
         </div>
 
-        <div className="flex justify-center space-x-2 mt-6">
+        <div className="flex justify-center space-x-2 mt-8">
           {Array.from({ length: dotCount }).map((_, index) => (
             <button
               key={index}
