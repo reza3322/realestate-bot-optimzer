@@ -1,3 +1,4 @@
+
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -15,6 +16,9 @@ import Admin from "./pages/Admin";
 
 // Create a new query client
 const queryClient = new QueryClient();
+
+// Admin emails - these are the only accounts that can access the admin page
+const ADMIN_EMAILS = ['admin@realhomeai.com', 'reza7.mohebbi@gmail.com'];
 
 const App = () => {
   const [user, setUser] = useState(null);
@@ -63,7 +67,7 @@ const App = () => {
     return children;
   };
 
-  // Admin-only route component - only the platform creator (admin@realhomeai.com) can access
+  // Admin-only route component - only specific emails can access
   const AdminRoute = ({ children }) => {
     if (loading) return <div className="flex justify-center items-center h-screen">Loading...</div>;
     
@@ -71,8 +75,8 @@ const App = () => {
       return <Navigate to="/auth" replace />;
     }
     
-    // Only allow access if the user is the admin (platform creator)
-    if (userEmail.toLowerCase() !== 'admin@realhomeai.com') {
+    // Only allow access if the user is an admin
+    if (!ADMIN_EMAILS.includes(userEmail.toLowerCase())) {
       return <Navigate to="/dashboard" replace />;
     }
     
