@@ -31,23 +31,14 @@ const Index = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Fix for the hash navigation to prevent unwanted scrolling
+  // Explicitly reset scroll position on page load/reload
   useEffect(() => {
-    // Only scroll if there's a specific hash that the user navigated to intentionally
-    if (window.location.hash && window.location.hash !== '#' && window.location.hash !== '#pricing') {
-      // Clear the hash on initial page load to prevent auto-scrolling
-      if (performance.navigation.type === 1) { // 1 is PAGE_RELOAD
-        window.history.replaceState(null, '', window.location.pathname);
-        return;
-      }
-      
-      const id = window.location.hash.substring(1);
-      setTimeout(() => {
-        const element = document.getElementById(id);
-        if (element) {
-          element.scrollIntoView({ behavior: 'smooth' });
-        }
-      }, 100);
+    // Force scroll to top when component mounts
+    window.scrollTo(0, 0);
+    
+    // Prevent hash-based navigation on initial page load
+    if (window.location.hash) {
+      window.history.replaceState(null, '', window.location.pathname);
     }
   }, []);
 

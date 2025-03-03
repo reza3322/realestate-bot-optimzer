@@ -53,24 +53,11 @@ const App = () => {
     }
   }, []);
 
-  // Handle hash navigation when page loads, but avoid unwanted scrolling
+  // Force clear any URL hashes on app init
   useEffect(() => {
-    // Check if there's a hash in the URL
+    // If there's a hash and it's a page reload/initial load, clear it
     if (window.location.hash) {
-      // If it's a page reload, clear the hash to prevent auto-scrolling
-      if (performance.navigation.type === 1) { // 1 is PAGE_RELOAD
-        window.history.replaceState(null, '', window.location.pathname);
-        return;
-      }
-      
-      // For intentional navigation with hash, handle it properly
-      const id = window.location.hash.substring(1);
-      setTimeout(() => {
-        const element = document.getElementById(id);
-        if (element) {
-          element.scrollIntoView({ behavior: 'smooth' });
-        }
-      }, 100);
+      window.history.replaceState(null, '', window.location.pathname);
     }
   }, []);
 

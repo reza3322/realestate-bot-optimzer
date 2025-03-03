@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from 'react';
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -17,8 +16,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { toast } from 'sonner';
 
-// Define the correct NavItem type to match the expected interface
-interface NavItem {
+interface LocalNavItem {
   name: string;
   url: string;
   icon: React.ComponentType<any>;
@@ -84,7 +82,6 @@ const Navbar = () => {
     }
   };
 
-  // Update the handleNavigation function to not accept the event parameter
   const handleNavigation = (url: string) => {
     if (url.startsWith('/#')) {
       const id = url.substring(2);
@@ -94,8 +91,7 @@ const Navbar = () => {
     }
   };
 
-  // Update the navItems array to match the NavItem interface
-  const navItems: NavItem[] = [
+  const navItems: LocalNavItem[] = [
     { 
       name: 'Product', 
       url: '/product', 
