@@ -9,7 +9,8 @@ import Footer from '@/components/sections/Footer';
 import { Button } from '@/components/ui/button';
 import { ArrowUp } from 'lucide-react';
 import ContactForm from '@/components/sections/ContactForm';
-import Pricing from '@/components/sections/Pricing';
+// Import Features component but don't use it now as it might have issues
+import Features from '@/components/sections/Features';
 
 const Index = () => {
   // Back to top button visibility control
@@ -48,7 +49,6 @@ const Index = () => {
         {/* <Features /> */}
         <Benefits />
         <Demo />
-        <Pricing />
         
         {/* Contact section */}
         <section id="contact" className="py-20 bg-background">

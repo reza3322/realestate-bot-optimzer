@@ -1,55 +1,63 @@
 
+import { useState, useRef, KeyboardEvent } from 'react';
+import { Send } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
-import { SendIcon } from 'lucide-react';
-import { useState } from 'react';
 
 interface ChatInputProps {
-  inputContainerStyle: string;
+  inputContainerStyle?: string;
   onSendMessage: (message: string) => void;
+  placeholderText?: string;
 }
 
-const ChatInput = ({ inputContainerStyle, onSendMessage }: ChatInputProps) => {
-  const [inputValue, setInputValue] = useState('');
+const ChatInput = ({ 
+  inputContainerStyle, 
+  onSendMessage,
+  placeholderText = "Type a message..." 
+}: ChatInputProps) => {
+  const [message, setMessage] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  const handleSend = () => {
-    if (inputValue.trim()) {
-      onSendMessage(inputValue);
-      setInputValue('');
+  const handleSubmit = () => {
+    if (message.trim()) {
+      onSendMessage(message.trim());
+      setMessage('');
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      handleSend();
+      handleSubmit();
     }
   };
 
   return (
     <div className={cn(
-      "p-4",
+      "border-t p-3 flex items-center gap-2",
       inputContainerStyle
     )}>
-      <div className="flex items-center gap-2">
-        <textarea
-          value={inputValue}
-          onChange={(e) => setInputValue(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Type your message..."
-          className="flex-1 min-h-10 max-h-24 bg-background border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary resize-none"
-          rows={1}
-        />
-        <Button 
-          type="button" 
-          size="icon" 
-          onClick={handleSend}
-          disabled={!inputValue.trim()}
-        >
-          <SendIcon className="h-4 w-4" />
-          <span className="sr-only">Send message</span>
-        </Button>
-      </div>
+      <input
+        ref={inputRef}
+        type="text"
+        value={message}
+        onChange={(e) => setMessage(e.target.value)}
+        onKeyDown={handleKeyDown}
+        placeholder={placeholderText}
+        className="flex-1 bg-transparent border border-input rounded-md h-10 px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ring"
+      />
+      <button
+        onClick={handleSubmit}
+        disabled={!message.trim()}
+        className={cn(
+          "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors h-10 w-10",
+          "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+          message.trim() 
+            ? "text-primary-foreground bg-primary hover:bg-primary/90" 
+            : "text-muted-foreground bg-secondary hover:bg-secondary/80"
+        )}
+      >
+        <Send className="h-5 w-5" />
+      </button>
     </div>
   );
 };

@@ -8,7 +8,6 @@ import { Button, buttonVariants } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '@clerk/clerk-react';
 import { toast } from 'sonner';
 
 interface PricingPlan {
@@ -86,7 +85,8 @@ const Cta = () => {
   const [isMonthly, setIsMonthly] = useState(true);
   const switchRef = useRef<HTMLButtonElement>(null);
   const navigate = useNavigate();
-  const { isSignedIn } = useAuth();
+  // Remove clerk auth and use a simple state for auth status
+  const [isSignedIn, setIsSignedIn] = useState(false);
 
   // Check if we're on desktop (for animations)
   const useMediaQuery = (query: string): boolean => {

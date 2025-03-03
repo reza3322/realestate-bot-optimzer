@@ -7,7 +7,7 @@ import ChatInput from './ChatInput';
 import TypingIndicator from './TypingIndicator';
 import { getChatStyles, applyFontStyle } from './chatStyles';
 import { Message } from './types';
-import { useDemoResponse } from './responseHandlers';
+import { demoResponses } from './responseHandlers';
 
 interface ChatbotProps {
   apiKey?: string;
@@ -21,6 +21,26 @@ interface ChatbotProps {
   maxHeight?: string;
   onSendMessage?: (message: string) => void;
 }
+
+// Custom hook for demo response generation
+const useDemoResponse = () => {
+  const generateDemoResponse = async (message: string): Promise<string> => {
+    // Simple logic for demo purposes
+    // In a real app, this would call an API
+    
+    // Get a random response from the demo responses
+    const randomIndex = Math.floor(Math.random() * demoResponses.length);
+    
+    // Add a small delay to simulate thinking
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        resolve(demoResponses[randomIndex]);
+      }, 500);
+    });
+  };
+
+  return { generateDemoResponse };
+};
 
 const Chatbot = ({
   className,
@@ -110,6 +130,7 @@ const Chatbot = ({
       <ChatInput 
         inputContainerStyle={styles.inputContainer}
         onSendMessage={handleSendMessage}
+        placeholderText={placeholderText}
       />
     </div>
   );

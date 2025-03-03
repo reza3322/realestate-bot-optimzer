@@ -22,6 +22,7 @@ const Demo = () => {
             variation="blue"
             maxHeight="400px"
             welcomeMessage="👋 Hi there! I'm your RealHomeAI assistant. I can help you find properties, answer questions about listings, and even schedule viewings. Try asking me about available properties or how I can help with your real estate needs!"
+            placeholderText="Type your message here..."
           />
         </div>
       </div>
