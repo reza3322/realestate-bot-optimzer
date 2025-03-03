@@ -44,10 +44,22 @@ export const testChatbotResponse = async (
   userId: string
 ): Promise<{ response: string; error?: string }> => {
   try {
-    const response = await fetch('/api/v1/chatbot-response', {
+    // Use actual Supabase URL from environment variables
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+    if (!supabaseUrl) {
+      console.error('Supabase URL is undefined');
+      return { response: '', error: 'Supabase URL is not configured' };
+    }
+
+    console.log(`Making request to: ${supabaseUrl}/functions/v1/chatbot-response`);
+    
+    const response = await fetch(`${supabaseUrl}/functions/v1/chatbot-response`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Authorization': `Bearer ${supabaseAnonKey}`,
       },
       body: JSON.stringify({
         message,
@@ -56,18 +68,42 @@ export const testChatbotResponse = async (
       }),
     });
 
+    // Log response details for debugging
+    console.log('Response status:', response.status);
+    console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+    
     if (!response.ok) {
       let errorMessage = `Server error: ${response.status}`;
-      try {
-        const errorData = await response.json();
-        errorMessage = errorData.error || errorMessage;
-      } catch (e) {
-        // If we can't parse JSON, try to get text
-        const errorText = await response.text();
-        errorMessage = `Server error: ${response.status} - ${errorText.substring(0, 100)}`;
+      const contentType = response.headers.get('content-type');
+      
+      if (contentType && contentType.includes('application/json')) {
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorMessage;
+        } catch (e) {
+          console.error('Error parsing JSON error response:', e);
+        }
+      } else {
+        // If not JSON, try to get text
+        try {
+          const errorText = await response.text();
+          console.error('Non-JSON error response:', errorText);
+          errorMessage = `Server error: ${response.status} - ${errorText.substring(0, 100)}`;
+        } catch (e) {
+          console.error('Error getting response text:', e);
+        }
       }
+      
       console.error('Test chatbot error:', errorMessage);
       return { response: '', error: errorMessage };
+    }
+
+    const contentType = response.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+      console.error('Non-JSON response received:', contentType);
+      const text = await response.text();
+      console.error('Response text (first 200 chars):', text.substring(0, 200));
+      return { response: '', error: 'Invalid response format from server' };
     }
 
     const data = await response.json();

@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import Chatbot from "@/components/ui/chatbot/Chatbot";
 import { MessageCircle, Bot, Headphones, MessageSquare, BrainCircuit } from "lucide-react";
+import { testChatbotResponse } from "@/components/ui/chatbot/responseHandlers";
 
 interface ChatbotSettingsProps {
   userId: string;
@@ -82,11 +82,10 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
           .single();
         
         if (error) {
-          if (error.code !== "PGRST116") { // PGRST116 is "row not found" error
+          if (error.code !== "PGRST116") {
             console.error("Error fetching chatbot settings:", error);
             toast.error("Error loading chatbot settings");
           }
-          // If settings don't exist yet, we'll use the defaults
         } else if (data) {
           setSettings(data.settings);
         }
@@ -137,25 +136,13 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
 
     setIsTesting(true);
     try {
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chatbot-response`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
-        },
-        body: JSON.stringify({
-          message: testMessage,
-          userId: userId
-        })
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to get response from chatbot');
+      const { response, error } = await testChatbotResponse(testMessage, userId);
+      
+      if (error) {
+        throw new Error(error);
       }
 
-      const data = await response.json();
-      setTestResponse(data.response);
+      setTestResponse(response);
       toast.success("Test message processed successfully");
     } catch (error) {
       console.error("Error testing chatbot:", error);
@@ -193,7 +180,6 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
       </div>
       
       <div className="grid md:grid-cols-5 gap-6">
-        {/* Settings Column */}
         <div className="md:col-span-3 space-y-6">
           <Card>
             <CardHeader>
@@ -442,7 +428,6 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
           </Card>
         </div>
         
-        {/* Preview Column */}
         <div className="md:col-span-2">
           <div className="sticky top-6 space-y-4">
             <Card>
