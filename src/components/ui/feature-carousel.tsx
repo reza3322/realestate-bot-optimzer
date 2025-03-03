@@ -2,10 +2,9 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, Users, Home, MessageCircle, BarChart, Clock, Lock } from 'lucide-react';
+import { Users, Home, MessageCircle, BarChart, Clock, Lock } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { GradientHeading } from '@/components/ui/gradient-heading';
-import { Button } from '@/components/ui/button';
 
 // Feature type definition
 interface Feature {
@@ -57,33 +56,21 @@ const features: Feature[] = [
 
 const FeatureCarousel = () => {
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [autoplay, setAutoplay] = useState(true);
 
+  // Auto-rotate features
   useEffect(() => {
-    if (!autoplay) return;
-    
     const interval = setInterval(() => {
       setCurrentIndex((prevIndex) => (prevIndex + 2) % features.length);
     }, 5000);
     
     return () => clearInterval(interval);
-  }, [autoplay]);
+  }, []);
 
   // Display two features at a time
   const currentFeatures = [
     features[currentIndex],
     features[(currentIndex + 1) % features.length]
   ];
-
-  const nextSlide = () => {
-    setAutoplay(false);
-    setCurrentIndex((prevIndex) => (prevIndex + 2) % features.length);
-  };
-
-  const prevSlide = () => {
-    setAutoplay(false);
-    setCurrentIndex((prevIndex) => (prevIndex - 2 + features.length) % features.length);
-  };
 
   const dotCount = Math.ceil(features.length / 2);
   const activeDot = Math.floor(currentIndex / 2);
@@ -99,71 +86,57 @@ const FeatureCarousel = () => {
         </p>
       </div>
 
-      <div className="relative px-4 sm:px-6">
-        <div className="flex justify-between absolute top-1/2 -translate-y-1/2 w-full px-4 z-10">
-          <Button 
-            onClick={prevSlide} 
-            size="icon" 
-            variant="secondary" 
-            className="rounded-full shadow-lg"
-            aria-label="Previous features"
-          >
-            <ChevronLeft className="h-6 w-6" />
-          </Button>
-          <Button 
-            onClick={nextSlide} 
-            size="icon" 
-            variant="secondary" 
-            className="rounded-full shadow-lg"
-            aria-label="Next features"
-          >
-            <ChevronRight className="h-6 w-6" />
-          </Button>
-        </div>
+      <div className="overflow-hidden py-8 px-4">
+        <AnimatePresence mode="wait">
+          <div className="flex flex-col md:flex-row justify-center gap-12">
+            {currentFeatures.map((feature, idx) => (
+              <motion.div 
+                key={`${currentIndex}-${feature.id}`}
+                className="flex flex-col items-center text-center w-full md:w-1/2"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ 
+                  opacity: 1, 
+                  y: 0,
+                  transition: {
+                    delay: idx * 0.2, // Staggered animation with small delay
+                    duration: 0.5
+                  }
+                }}
+                exit={{ 
+                  opacity: 0, 
+                  y: -20,
+                  transition: {
+                    delay: idx * 0.1,
+                    duration: 0.3
+                  }
+                }}
+                whileHover={{ y: -5 }}
+                transition={{ type: "spring", stiffness: 300 }}
+              >
+                <div className="bg-primary/10 p-4 rounded-full mb-4">
+                  {feature.icon}
+                </div>
+                <h3 className="text-2xl font-bold mb-3">{feature.title}</h3>
+                <p className="text-muted-foreground text-lg">{feature.description}</p>
+              </motion.div>
+            ))}
+          </div>
+        </AnimatePresence>
+      </div>
 
-        <div className="overflow-hidden py-8">
-          <AnimatePresence mode="wait">
-            <motion.div 
-              key={currentIndex} 
-              className="flex flex-col md:flex-row justify-center gap-12"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.5 }}
-            >
-              {currentFeatures.map((feature) => (
-                <motion.div 
-                  key={feature.id}
-                  className="flex flex-col items-center text-center w-full md:w-1/2"
-                  whileHover={{ y: -5 }}
-                  transition={{ type: "spring", stiffness: 300 }}
-                >
-                  <div className="bg-primary/10 p-4 rounded-full mb-4">
-                    {feature.icon}
-                  </div>
-                  <h3 className="text-2xl font-bold mb-3">{feature.title}</h3>
-                  <p className="text-muted-foreground text-lg">{feature.description}</p>
-                </motion.div>
-              ))}
-            </motion.div>
-          </AnimatePresence>
-        </div>
-
-        <div className="flex justify-center space-x-2 mt-8">
-          {Array.from({ length: dotCount }).map((_, index) => (
-            <button
-              key={index}
-              onClick={() => {
-                setAutoplay(false);
-                setCurrentIndex(index * 2);
-              }}
-              className={`h-2 rounded-full transition-all ${
-                index === activeDot ? 'w-8 bg-primary' : 'w-2 bg-primary/30'
-              }`}
-              aria-label={`Go to slide ${index + 1}`}
-            />
-          ))}
-        </div>
+      <div className="flex justify-center space-x-2 mt-8">
+        {Array.from({ length: dotCount }).map((_, index) => (
+          <button
+            key={index}
+            onClick={() => {
+              setCurrentIndex(index * 2);
+            }}
+            className={`h-2 rounded-full transition-all ${
+              index === activeDot ? 'w-8 bg-primary' : 'w-2 bg-primary/30'
+            }`}
+            aria-label={`Go to slide ${index + 1}`}
+          />
+        ))}
       </div>
     </div>
   );
