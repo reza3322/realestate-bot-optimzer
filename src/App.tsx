@@ -1,10 +1,9 @@
-
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { toast } from "sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { getSession, getUserRole } from '@/lib/supabase';
 import Index from "./pages/Index";
@@ -18,77 +17,106 @@ import Admin from "./pages/Admin";
 // Create a new query client
 const queryClient = new QueryClient();
 
-const App = () => {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [userRole, setUserRole] = useState('');
+// Component to handle authenticated routes
+const AuthenticatedRoute = ({ children, requiredRole = null }) => {
+  const [isLoading, setIsLoading] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [userRole, setUserRole] = useState(null);
+  const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
-    // Check current auth status
-    const checkSession = async () => {
+    const checkAuth = async () => {
       try {
-        const { data: { session } } = await getSession();
-        setUser(session?.user || null);
+        // First check localStorage for faster response
+        const cachedRole = localStorage.getItem('userRole');
         
-        // If user is authenticated, fetch their role
-        if (session?.user) {
-          const role = await getUserRole(session.user.id);
-          setUserRole(role || 'user');
-          console.log("User role:", role);
+        // Check session
+        const { data: { session } } = await getSession();
+        
+        if (!session) {
+          console.log("No active session found, redirecting to auth");
+          setIsAuthenticated(false);
+          setIsLoading(false);
+          // Only navigate if we're not already on the auth page
+          if (location.pathname !== '/auth') {
+            navigate('/auth', { replace: true });
+          }
+          return;
         }
+        
+        // We have a session, so user is authenticated
+        setIsAuthenticated(true);
+        
+        // Get user role if needed for role-based access
+        if (requiredRole) {
+          // Use cached role from localStorage if available
+          if (cachedRole) {
+            console.log("Using cached role from localStorage:", cachedRole);
+            setUserRole(cachedRole);
+            
+            // If required role doesn't match, redirect
+            if (requiredRole && cachedRole !== requiredRole) {
+              console.log(`Required role ${requiredRole} doesn't match user role ${cachedRole}, redirecting`);
+              if (cachedRole === 'admin') {
+                navigate('/admin', { replace: true });
+              } else {
+                navigate('/dashboard', { replace: true });
+              }
+            }
+            
+          } else {
+            // No cached role, fetch from server
+            const role = await getUserRole(session.user.id);
+            console.log("Fetched role from server:", role);
+            setUserRole(role);
+            localStorage.setItem('userRole', role || 'user');
+            
+            // If required role doesn't match, redirect
+            if (requiredRole && role !== requiredRole) {
+              console.log(`Required role ${requiredRole} doesn't match user role ${role}, redirecting`);
+              if (role === 'admin') {
+                navigate('/admin', { replace: true });
+              } else {
+                navigate('/dashboard', { replace: true });
+              }
+            }
+          }
+        }
+        
       } catch (error) {
-        console.error("Error getting session:", error);
+        console.error("Error checking authentication:", error);
+        setIsAuthenticated(false);
       } finally {
-        setLoading(false);
+        setIsLoading(false);
       }
     };
     
-    checkSession();
-    
-    // Listen for auth changes
-    const handleStorageChange = (event) => {
-      if (event.key === 'mock_supabase_session') {
-        checkSession();
-      }
-    };
-    
-    window.addEventListener('storage', handleStorageChange);
-    
-    // Return cleanup function
-    return () => {
-      window.removeEventListener('storage', handleStorageChange);
-    };
-  }, []);
-
-  // Protected route component for general user authentication
-  const ProtectedRoute = ({ children }) => {
-    if (loading) return <div className="flex justify-center items-center h-screen">Loading...</div>;
-    
-    if (!user) {
-      return <Navigate to="/auth" replace />;
-    }
-    
+    checkAuth();
+  }, [navigate, requiredRole, location.pathname]);
+  
+  // Show loading state
+  if (isLoading) {
+    return <div className="flex justify-center items-center h-screen">
+      <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto"></div>
+    </div>;
+  }
+  
+  // For role-based access, ensure user has required role
+  if (requiredRole && userRole !== requiredRole) {
+    return <Navigate to="/auth" replace />;
+  }
+  
+  // If authenticated (and has required role if specified), render children
+  if (isAuthenticated) {
     return children;
-  };
+  }
+  
+  // Otherwise redirect to auth page
+  return <Navigate to="/auth" replace />;
+};
 
-  // Admin-only route component - ONLY users with 'admin' role can access
-  const AdminRoute = ({ children }) => {
-    if (loading) return <div className="flex justify-center items-center h-screen">Loading...</div>;
-    
-    if (!user) {
-      return <Navigate to="/auth" replace />;
-    }
-    
-    // Strictly enforce admin role check - redirect all non-admin users
-    if (userRole !== 'admin') {
-      console.log("Access denied: Not an admin user, redirecting to dashboard");
-      toast.error("Access denied: Admin privileges required");
-      return <Navigate to="/dashboard" replace />;
-    }
-    
-    return children;
-  };
-
+const App = () => {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
@@ -100,42 +128,25 @@ const App = () => {
             <Route path="/" element={<Index />} />
             <Route path="/product" element={<Product />} />
             <Route path="/resources" element={<Resources />} />
+            <Route path="/auth" element={<Auth />} />
             
-            {/* Auth route - redirect to dashboard/admin if already logged in */}
-            <Route 
-              path="/auth" 
-              element={
-                loading ? (
-                  <div className="flex justify-center items-center h-screen">Loading...</div>
-                ) : user ? (
-                  userRole === 'admin' ? (
-                    <Navigate to="/admin" replace />
-                  ) : (
-                    <Navigate to="/dashboard" replace />
-                  )
-                ) : (
-                  <Auth />
-                )
-              } 
-            />
-            
-            {/* Admin-only route - strictly for 'admin' role users */}
+            {/* Admin route */}
             <Route 
               path="/admin" 
               element={
-                <AdminRoute>
+                <AuthenticatedRoute requiredRole="admin">
                   <Admin />
-                </AdminRoute>
+                </AuthenticatedRoute>
               } 
             />
             
-            {/* Protected routes for all authenticated users */}
+            {/* Authenticated routes */}
             <Route 
               path="/dashboard" 
               element={
-                <ProtectedRoute>
+                <AuthenticatedRoute>
                   <Dashboard />
-                </ProtectedRoute>
+                </AuthenticatedRoute>
               } 
             />
             
