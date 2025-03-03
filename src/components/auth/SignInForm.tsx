@@ -1,3 +1,4 @@
+
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -26,14 +27,14 @@ export function SignInForm() {
         return;
       }
       
-      // Check if this is the admin account (platform creator)
+      // Check if this is the admin account 
       if (data?.user && email.toLowerCase() === 'admin@realhomeai.com') {
         toast.success("Welcome back, Admin!");
         navigate('/admin');
         return;
       }
       
-      // For all other users (starter, pro, enterprise), redirect to dashboard
+      // For all other users, redirect to dashboard
       if (data?.user) {
         toast.success("Signed in successfully!");
         navigate('/dashboard');
