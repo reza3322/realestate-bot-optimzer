@@ -18,7 +18,11 @@ serve(async (req) => {
     const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
     
     if (!openAIApiKey) {
-      throw new Error('OpenAI API key is not configured');
+      console.error('OpenAI API key is not configured');
+      return new Response(
+        JSON.stringify({ error: 'OpenAI API key is not configured in Supabase project' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      )
     }
     
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
@@ -26,6 +30,8 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey)
 
     const { message, userId, conversationId, visitorId } = await req.json();
+
+    console.log(`Received message request:`, { message, userId, conversationId, visitorId });
 
     if (!message) {
       return new Response(
@@ -39,16 +45,23 @@ serve(async (req) => {
     // Get chatbot settings if userId is provided
     let chatbotSettings = null;
     if (userId) {
-      const { data: settings } = await supabase
+      const { data: settings, error: settingsError } = await supabase
         .from('chatbot_settings')
         .select('settings')
         .eq('user_id', userId)
         .single();
       
+      if (settingsError) {
+        console.log(`Error fetching settings: ${settingsError.message}`);
+      }
+      
       if (settings) {
         chatbotSettings = settings.settings;
+        console.log(`Retrieved chatbot settings:`, chatbotSettings);
       }
     }
+    
+    console.log('Sending request to OpenAI API');
     
     // Use OpenAI API to generate response
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -70,6 +83,8 @@ serve(async (req) => {
       }),
     });
 
+    console.log('OpenAI API status:', response.status);
+    
     const data = await response.json();
     
     if (!response.ok) {
@@ -78,24 +93,33 @@ serve(async (req) => {
     }
     
     const aiMessage = data.choices[0].message.content;
+    console.log('AI response generated:', aiMessage);
     
     // Store the conversation in the database if userId is provided
     if (userId) {
+      console.log('Storing conversation in database');
+      
+      const conv_id = conversationId || crypto.randomUUID();
+      
       const { error: insertError } = await supabase
         .from('chatbot_conversations')
         .insert({
           user_id: userId,
           visitor_id: visitorId || null,
-          conversation_id: conversationId || crypto.randomUUID(),
+          conversation_id: conv_id,
           message,
           response: aiMessage,
         })
 
       if (insertError) {
         console.error('Error storing conversation:', insertError)
+      } else {
+        console.log(`Conversation stored with ID: ${conv_id}`);
       }
     }
 
+    console.log('Returning response to client');
+    
     return new Response(
       JSON.stringify({ 
         response: aiMessage,

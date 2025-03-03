@@ -67,6 +67,9 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [previewTab, setPreviewTab] = useState<"desktop" | "mobile">("desktop");
+  const [testMessage, setTestMessage] = useState("");
+  const [testResponse, setTestResponse] = useState("");
+  const [isTesting, setIsTesting] = useState(false);
   
   useEffect(() => {
     const fetchSettings = async () => {
@@ -125,7 +128,43 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
   const generateEmbedCode = () => {
     return `<script src="https://realhome.ai/chatbot.js?user=${userId}"></script>`;
   };
-  
+
+  const testChatbot = async () => {
+    if (!testMessage.trim()) {
+      toast.error("Please enter a test message");
+      return;
+    }
+
+    setIsTesting(true);
+    try {
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chatbot-response`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
+        },
+        body: JSON.stringify({
+          message: testMessage,
+          userId: userId
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to get response from chatbot');
+      }
+
+      const data = await response.json();
+      setTestResponse(data.response);
+      toast.success("Test message processed successfully");
+    } catch (error) {
+      console.error("Error testing chatbot:", error);
+      toast.error(`Error testing chatbot: ${error.message}`);
+    } finally {
+      setIsTesting(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-32">
@@ -168,7 +207,6 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
                   <Select 
                     value={settings.theme} 
                     onValueChange={(value) => setSettings({...settings, theme: value})}
-                    disabled={isPremiumFeature('professional')}
                   >
                     <SelectTrigger id="theme">
                       <SelectValue placeholder="Select theme" />
@@ -176,7 +214,7 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
                     <SelectContent>
                       {THEMES.map((theme) => (
                         <SelectItem key={theme.value} value={theme.value}>
-                          {theme.label} {isPremiumFeature('professional') && theme.value !== 'default' ? '(Pro)' : ''}
+                          {theme.label}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -188,7 +226,6 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
                   <Select 
                     value={settings.variation} 
                     onValueChange={(value) => setSettings({...settings, variation: value})}
-                    disabled={isPremiumFeature('professional')}
                   >
                     <SelectTrigger id="color">
                       <SelectValue placeholder="Select color" />
@@ -196,7 +233,7 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
                     <SelectContent>
                       {COLORS.map((color) => (
                         <SelectItem key={color.value} value={color.value}>
-                          {color.label} {isPremiumFeature('professional') && color.value !== 'default' ? '(Pro)' : ''}
+                          {color.label}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -212,14 +249,12 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
                       value={settings.primaryColor}
                       onChange={(e) => setSettings({...settings, primaryColor: e.target.value})}
                       className="w-12 h-10 p-1"
-                      disabled={isPremiumFeature('professional')}
                     />
                     <Input 
                       type="text" 
                       value={settings.primaryColor}
                       onChange={(e) => setSettings({...settings, primaryColor: e.target.value})}
                       className="flex-1"
-                      disabled={isPremiumFeature('professional')}
                     />
                   </div>
                 </div>
@@ -251,7 +286,6 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
                   <Select 
                     value={settings.fontFamily} 
                     onValueChange={(value) => setSettings({...settings, fontFamily: value})}
-                    disabled={isPremiumFeature('professional')}
                   >
                     <SelectTrigger id="fontFamily">
                       <SelectValue placeholder="Select font" />
@@ -259,7 +293,7 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
                     <SelectContent>
                       {FONT_FAMILIES.map((font) => (
                         <SelectItem key={font.value} value={font.value} className={font.value}>
-                          {font.label} {isPremiumFeature('professional') && font.value !== 'default' ? '(Pro)' : ''}
+                          {font.label}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -292,7 +326,6 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
                   step={1}
                   value={[settings.fontSize]}
                   onValueChange={(value) => setSettings({...settings, fontSize: value[0]})}
-                  disabled={isPremiumFeature('professional')}
                 />
               </div>
             </CardContent>
@@ -334,6 +367,42 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
                   placeholder="Type your message..."
                 />
               </div>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardHeader>
+              <CardTitle>Test Chatbot</CardTitle>
+              <CardDescription>Send a test message to verify the OpenAI API integration</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="testMessage">Test Message</Label>
+                <div className="flex gap-2">
+                  <Input 
+                    id="testMessage" 
+                    value={testMessage}
+                    onChange={(e) => setTestMessage(e.target.value)}
+                    placeholder="Enter a test message..."
+                    className="flex-1"
+                  />
+                  <Button 
+                    onClick={testChatbot} 
+                    disabled={isTesting}
+                  >
+                    {isTesting ? "Testing..." : "Send Test"}
+                  </Button>
+                </div>
+              </div>
+              
+              {testResponse && (
+                <div className="space-y-2">
+                  <Label htmlFor="testResponse">Response</Label>
+                  <div className="border rounded-md p-4 bg-secondary/20">
+                    <p>{testResponse}</p>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
           
@@ -399,34 +468,6 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
                 </div>
               </CardContent>
             </Card>
-            
-            {isPremiumFeature('professional') && (
-              <Card className="bg-muted/50">
-                <CardHeader>
-                  <CardTitle>Upgrade to Pro</CardTitle>
-                  <CardDescription>
-                    Unlock all customization features by upgrading to our Professional plan
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <ul className="space-y-2 mb-4">
-                    <li className="flex items-center gap-2">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-green-500"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                      Custom themes & color schemes
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-green-500"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                      Font customization
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-green-500"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                      Advanced AI responses
-                    </li>
-                  </ul>
-                  <Button className="w-full">Upgrade Now</Button>
-                </CardContent>
-              </Card>
-            )}
           </div>
         </div>
       </div>
