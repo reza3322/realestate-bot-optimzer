@@ -2,6 +2,7 @@
 import { ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ContainerScroll } from '@/components/ui/container-scroll-animation';
+import FeatureCarousel from '@/components/ui/feature-carousel';
 
 const Hero = () => {
   return (
@@ -41,11 +42,14 @@ const Hero = () => {
           }
         >
           <img 
-            src="https://images.unsplash.com/photo-1586880244406-556ebe35f282?q=80&w=2574&auto=format&fit=crop" 
+            src="/lovable-uploads/f1c69427-2557-4792-983f-f2b5b7610878.png" 
             alt="RealAssist.AI Dashboard" 
             className="w-full h-full object-cover object-left-top rounded-xl"
           />
         </ContainerScroll>
+        
+        {/* Feature Carousel Section */}
+        <FeatureCarousel />
       </div>
     </section>
   );

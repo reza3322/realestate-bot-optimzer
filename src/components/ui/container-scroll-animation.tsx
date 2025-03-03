@@ -1,5 +1,6 @@
 
 import React, { useRef } from "react";
+import { useScroll, useTransform, motion } from "framer-motion";
 
 export const ContainerScroll = ({
   titleComponent,
@@ -9,8 +10,12 @@ export const ContainerScroll = ({
   children: React.ReactNode;
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const { scrollYProgress } = useScroll({
+    target: containerRef,
+    offset: ["start end", "end start"],
+  });
+  
   const [isMobile, setIsMobile] = React.useState(false);
-  const [scrollYProgress, setScrollYProgress] = React.useState(0);
 
   React.useEffect(() => {
     const checkMobile = () => {
@@ -19,33 +24,18 @@ export const ContainerScroll = ({
     checkMobile();
     window.addEventListener("resize", checkMobile);
     
-    const handleScroll = () => {
-      if (!containerRef.current) return;
-      
-      const containerTop = containerRef.current.getBoundingClientRect().top;
-      const containerHeight = containerRef.current.offsetHeight;
-      const windowHeight = window.innerHeight;
-      
-      // Calculate scroll progress (value between 0 and 1)
-      let progress = 1 - (containerTop / (windowHeight - containerHeight * 0.5));
-      progress = Math.min(Math.max(progress, 0), 1);
-      
-      setScrollYProgress(progress);
-    };
-    
-    window.addEventListener("scroll", handleScroll);
-    handleScroll(); // Call once to set initial position
-    
     return () => {
       window.removeEventListener("resize", checkMobile);
-      window.removeEventListener("scroll", handleScroll);
     };
   }, []);
 
-  // Calculate rotation and scale based on scroll progress
-  const rotate = 20 - (scrollYProgress * 20); // 20deg to 0deg
-  const scale = isMobile ? 0.7 + (scrollYProgress * 0.2) : 1.05 - (scrollYProgress * 0.05);
-  const translateY = -100 * scrollYProgress;
+  const scaleDimensions = () => {
+    return isMobile ? [0.7, 0.9] : [1.05, 1];
+  };
+
+  const rotate = useTransform(scrollYProgress, [0, 1], [20, 0]);
+  const scale = useTransform(scrollYProgress, [0, 1], scaleDimensions());
+  const translate = useTransform(scrollYProgress, [0, 1], [0, -100]);
 
   return (
     <div
@@ -58,25 +48,28 @@ export const ContainerScroll = ({
           perspective: "1000px",
         }}
       >
-        <div 
-          className="max-w-5xl mx-auto text-center"
+        <motion.div
           style={{
-            transform: `translateY(${translateY}px)`,
+            translateY: translate,
           }}
+          className="max-w-5xl mx-auto text-center"
         >
           {titleComponent}
-        </div>
-        <div
-          className="max-w-5xl -mt-12 mx-auto h-[30rem] md:h-[40rem] w-full border-4 border-[#6C6C6C] p-2 md:p-6 bg-[#222222] rounded-[30px] shadow-2xl"
+        </motion.div>
+        
+        <motion.div
           style={{
-            transform: `rotateX(${rotate}deg) scale(${scale})`,
-            boxShadow: "0 0 #0000004d, 0 9px 20px #0000004a, 0 37px 37px #00000042, 0 84px 50px #00000026, 0 149px 60px #0000000a, 0 233px 65px #00000003",
+            rotateX: rotate,
+            scale,
+            boxShadow:
+              "0 0 #0000004d, 0 9px 20px #0000004a, 0 37px 37px #00000042, 0 84px 50px #00000026, 0 149px 60px #0000000a, 0 233px 65px #00000003",
           }}
+          className="max-w-5xl -mt-12 mx-auto h-[30rem] md:h-[40rem] w-full border-4 border-[#6C6C6C] p-2 md:p-6 bg-[#222222] rounded-[30px] shadow-2xl"
         >
           <div className="h-full w-full overflow-hidden rounded-2xl bg-gray-100 dark:bg-zinc-900 md:rounded-2xl md:p-4">
             {children}
           </div>
-        </div>
+        </motion.div>
       </div>
     </div>
   );
