@@ -23,30 +23,45 @@ export function SignInForm() {
       const { error, data } = await signIn(email, password);
       
       if (error) {
+        console.error("Sign in error:", error);
         toast.error(error.message || "Failed to sign in");
         return;
       }
       
       // If login successful, check user role
       if (data?.user) {
-        const role = await getUserRole(data.user.id);
+        console.log("Sign in successful, user:", data.user);
         
-        // ONLY redirect to admin page if role is strictly 'admin'
-        if (role === 'admin') {
-          toast.success("Welcome back, Admin!");
-          // Use replace instead of navigate to prevent back button issues
-          setTimeout(() => {
-            navigate('/admin', { replace: true });
-          }, 300);
-        } else {
+        try {
+          const role = await getUserRole(data.user.id);
+          console.log("User role retrieved:", role);
+          
+          // ONLY redirect to admin page if role is strictly 'admin'
+          if (role === 'admin') {
+            toast.success("Welcome back, Admin!");
+            // Use replace instead of navigate to prevent back button issues
+            setTimeout(() => {
+              navigate('/admin', { replace: true });
+            }, 300);
+          } else {
+            toast.success("Signed in successfully!");
+            // All non-admin users go to dashboard
+            setTimeout(() => {
+              navigate('/dashboard', { replace: true });
+            }, 300);
+          }
+        } catch (roleError) {
+          console.error("Error getting user role:", roleError);
           toast.success("Signed in successfully!");
-          // All non-admin users go to dashboard
-          setTimeout(() => {
-            navigate('/dashboard', { replace: true });
-          }, 300);
+          navigate('/dashboard', { replace: true });
         }
+      } else {
+        console.warn("Sign in succeeded but no user data returned");
+        toast.success("Signed in successfully!");
+        navigate('/dashboard', { replace: true });
       }
     } catch (error: any) {
+      console.error("Unexpected error during sign in:", error);
       toast.error(error.message || "An unexpected error occurred");
     } finally {
       setIsLoading(false);
@@ -59,11 +74,13 @@ export function SignInForm() {
       const { error } = await signInWithGoogle();
       
       if (error) {
+        console.error("Google sign in error:", error);
         toast.error(error.message || "Failed to sign in with Google");
       }
       
       // Google sign-in will be handled by the callback and router
     } catch (error: any) {
+      console.error("Unexpected error during Google sign in:", error);
       toast.error(error.message || "An unexpected error occurred");
     } finally {
       setIsGoogleLoading(false);
