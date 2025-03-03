@@ -1,18 +1,11 @@
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1'
 
-// Set up CORS headers for browser requests
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
-
-// Create a Supabase client with the provided credentials
-const supabaseAdmin = createClient(
-  Deno.env.get('SUPABASE_URL') ?? '',
-  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-);
+}
 
 serve(async (req) => {
   // Handle CORS preflight requests
@@ -21,72 +14,118 @@ serve(async (req) => {
   }
 
   try {
-    // Verify the user is authenticated and has admin privileges
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
+    // Create a Supabase client with the Supabase URL and key
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // Get the JWT token from the request headers
+    const authHeader = req.headers.get('Authorization') || '';
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return new Response(
-        JSON.stringify({ error: 'Authorization header is required' }),
-        { status: 401, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
+        JSON.stringify({ error: 'Missing or invalid authorization header' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
       );
     }
 
-    // Extract the JWT token
     const token = authHeader.replace('Bearer ', '');
     
-    // Verify the token and get user data
-    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+    // Verify the token and get the user
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
     
     if (authError || !user) {
-      console.error('Auth error:', authError);
+      console.error('Authentication error:', authError);
       return new Response(
-        JSON.stringify({ error: 'Unauthorized' }),
-        { status: 401, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
+        JSON.stringify({ error: 'Authentication failed', details: authError?.message }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
       );
     }
 
-    // Get the user's profile to check if they're an admin
-    const { data: profileData, error: profileError } = await supabaseAdmin
+    // Get user profile to check if they have admin privileges
+    const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('*')
+      .select('plan')
       .eq('id', user.id)
       .single();
 
-    if (profileError || !profileData || profileData.plan !== 'enterprise') {
-      console.error('Profile error or not admin:', profileError, profileData);
+    if (profileError) {
+      console.error('Error fetching user profile:', profileError);
       return new Response(
-        JSON.stringify({ error: 'Unauthorized. Admin access required.' }),
-        { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
+        JSON.stringify({ error: 'Failed to verify admin privileges', details: profileError.message }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
       );
     }
 
-    console.log('Admin user confirmed, fetching system logs');
+    // Check if the user has admin privileges
+    if (profile.plan !== 'enterprise') {
+      return new Response(
+        JSON.stringify({ error: 'Insufficient privileges. Only enterprise users can access system logs.' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 }
+      );
+    }
 
-    // In a real application, you would query logs from your database
-    // For now, we'll generate mock data similar to what we have in the frontend
-    const eventTypes = ['login', 'api_call', 'error', 'signup', 'chatbot_interaction'];
-    const statuses = ['success', 'warning', 'error'];
-    
-    // Generate 20 mock log entries
-    const logs = Array.from({ length: 20 }, (_, i) => ({
-      id: `log-${i}`,
-      created_at: new Date(Date.now() - Math.floor(Math.random() * 30 * 24 * 60 * 60 * 1000)).toISOString(),
-      user_email: Math.random() > 0.3 ? `user${Math.floor(Math.random() * 10)}@example.com` : null,
-      event_type: eventTypes[Math.floor(Math.random() * eventTypes.length)],
-      message: `Sample log message for ${eventTypes[Math.floor(Math.random() * eventTypes.length)]} event #${i}`,
-      status: statuses[Math.floor(Math.random() * statuses.length)]
-    })).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    // Log the admin action
+    await supabase.from('activities').insert({
+      user_id: user.id,
+      action: 'view_system_logs',
+      details: 'Viewed system logs',
+      created_at: new Date().toISOString()
+    });
 
-    console.log('Successfully generated', logs.length, 'system logs');
+    // Return mock data for now
+    // In a real application, you would query your database for actual system logs
+    const mockSystemLogs = [
+      {
+        id: '1',
+        created_at: new Date(Date.now() - 3600000).toISOString(),
+        user_email: 'user1@example.com',
+        event_type: 'authentication',
+        message: 'Failed login attempt',
+        status: 'warning'
+      },
+      {
+        id: '2',
+        created_at: new Date(Date.now() - 7200000).toISOString(),
+        user_email: 'admin@example.com',
+        event_type: 'admin',
+        message: 'Created new user account',
+        status: 'success'
+      },
+      {
+        id: '3',
+        created_at: new Date(Date.now() - 10800000).toISOString(),
+        user_email: 'system',
+        event_type: 'system',
+        message: 'Database backup completed',
+        status: 'success'
+      },
+      {
+        id: '4',
+        created_at: new Date(Date.now() - 21600000).toISOString(),
+        user_email: 'user2@example.com',
+        event_type: 'api',
+        message: 'Rate limit exceeded for OpenAI API',
+        status: 'error'
+      },
+      {
+        id: '5',
+        created_at: new Date(Date.now() - 86400000).toISOString(),
+        user_email: 'system',
+        event_type: 'maintenance',
+        message: 'Scheduled system maintenance',
+        status: 'info'
+      }
+    ];
 
     return new Response(
-      JSON.stringify(logs),
-      { status: 200, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
+      JSON.stringify(mockSystemLogs),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
     );
   } catch (error) {
-    console.error('Error in get-system-logs function:', error);
+    console.error('Unexpected error:', error.message);
     return new Response(
-      JSON.stringify({ error: error.message }),
-      { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
+      JSON.stringify({ error: 'Internal server error', details: error.message }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     );
   }
-});
+})

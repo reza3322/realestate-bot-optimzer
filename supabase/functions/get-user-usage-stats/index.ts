@@ -1,18 +1,11 @@
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1'
 
-// Set up CORS headers for browser requests
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
-
-// Create a Supabase client with the provided credentials
-const supabaseAdmin = createClient(
-  Deno.env.get('SUPABASE_URL') ?? '',
-  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-);
+}
 
 serve(async (req) => {
   // Handle CORS preflight requests
@@ -21,78 +14,105 @@ serve(async (req) => {
   }
 
   try {
-    // Verify the user is authenticated and has admin privileges
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
+    // Create a Supabase client with the Supabase URL and key
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // Get the JWT token from the request headers
+    const authHeader = req.headers.get('Authorization') || '';
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return new Response(
-        JSON.stringify({ error: 'Authorization header is required' }),
-        { status: 401, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
+        JSON.stringify({ error: 'Missing or invalid authorization header' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
       );
     }
 
-    // Extract the JWT token
     const token = authHeader.replace('Bearer ', '');
     
-    // Verify the token and get user data
-    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+    // Verify the token and get the user
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
     
     if (authError || !user) {
-      console.error('Auth error:', authError);
+      console.error('Authentication error:', authError);
       return new Response(
-        JSON.stringify({ error: 'Unauthorized' }),
-        { status: 401, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
+        JSON.stringify({ error: 'Authentication failed', details: authError?.message }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
       );
     }
 
-    // Get the user's profile to check if they're an admin
-    const { data: profileData, error: profileError } = await supabaseAdmin
+    // Get user profile to check if they have admin privileges
+    const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('*')
+      .select('plan')
       .eq('id', user.id)
       .single();
 
-    if (profileError || !profileData || profileData.plan !== 'enterprise') {
-      console.error('Profile error or not admin:', profileError, profileData);
+    if (profileError) {
+      console.error('Error fetching user profile:', profileError);
       return new Response(
-        JSON.stringify({ error: 'Unauthorized. Admin access required.' }),
-        { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
+        JSON.stringify({ error: 'Failed to verify admin privileges', details: profileError.message }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
       );
     }
 
-    console.log('Admin user confirmed, fetching usage stats');
-
-    // In a real application, you would query usage statistics from your database
-    // For now, we'll generate mock data similar to what we have in the frontend
-    const { data: profiles, error: profilesError } = await supabaseAdmin
-      .from('profiles')
-      .select('*');
-    
-    if (profilesError) {
-      throw profilesError;
+    // Check if the user has admin privileges
+    if (profile.plan !== 'enterprise') {
+      return new Response(
+        JSON.stringify({ error: 'Insufficient privileges. Only enterprise users can access this data.' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 }
+      );
     }
-    
-    // Create mock usage statistics for demonstration
-    const usageStats = profiles.map(profile => ({
-      user_id: profile.id,
-      first_name: profile.first_name,
-      last_name: profile.last_name,
-      email: '', // Email would be fetched from auth.users in a real implementation
-      chatbot_calls: Math.floor(Math.random() * 500), // Mock data
-      openai_tokens: Math.floor(Math.random() * 50000), // Mock data
-      last_activity: new Date(Date.now() - Math.floor(Math.random() * 7 * 24 * 60 * 60 * 1000)).toISOString() // Random date in the last week
-    }));
 
-    console.log('Successfully generated usage stats for', usageStats.length, 'users');
+    // Log the admin action
+    await supabase.from('activities').insert({
+      user_id: user.id,
+      action: 'view_usage_stats',
+      details: 'Viewed user usage statistics',
+      created_at: new Date().toISOString()
+    });
+
+    // Return mock data for now
+    // In a real application, you would query your database for actual usage data
+    const mockUsageStats = [
+      {
+        user_id: '1',
+        email: 'user1@example.com',
+        first_name: 'John',
+        last_name: 'Doe',
+        chatbot_calls: 152,
+        openai_tokens: 25430,
+        last_activity: new Date(Date.now() - 3600000).toISOString() // 1 hour ago
+      },
+      {
+        user_id: '2',
+        email: 'user2@example.com',
+        first_name: 'Jane',
+        last_name: 'Smith',
+        chatbot_calls: 87,
+        openai_tokens: 12980,
+        last_activity: new Date(Date.now() - 86400000).toISOString() // 1 day ago
+      },
+      {
+        user_id: '3',
+        email: 'user3@example.com',
+        first_name: 'Mike',
+        last_name: 'Johnson',
+        chatbot_calls: 203,
+        openai_tokens: 45120,
+        last_activity: new Date(Date.now() - 7200000).toISOString() // 2 hours ago
+      }
+    ];
 
     return new Response(
-      JSON.stringify(usageStats),
-      { status: 200, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
+      JSON.stringify(mockUsageStats),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
     );
   } catch (error) {
-    console.error('Error in get-user-usage-stats function:', error);
+    console.error('Unexpected error:', error.message);
     return new Response(
-      JSON.stringify({ error: error.message }),
-      { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
+      JSON.stringify({ error: 'Internal server error', details: error.message }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     );
   }
-});
+})

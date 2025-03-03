@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '@/components/layout/Navbar';
@@ -10,7 +9,8 @@ import {
   createEnterpriseUser, 
   getAllUsers, 
   getUserUsageStats,
-  getSystemLogs 
+  getSystemLogs,
+  getSession
 } from '@/lib/supabase';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { toast } from 'sonner';
@@ -32,23 +32,47 @@ const Admin = () => {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   
   useEffect(() => {
-    fetchAdminData();
-  }, []);
+    const checkAuth = async () => {
+      setIsCheckingAuth(true);
+      try {
+        const { data: { session } } = await getSession();
+        if (!session) {
+          toast.error('You must be logged in to access the admin area');
+          navigate('/auth?type=signin');
+          return;
+        }
+        setIsAuthenticated(true);
+      } catch (error) {
+        console.error('Error checking authentication:', error);
+        toast.error('Authentication error');
+        navigate('/auth?type=signin');
+      } finally {
+        setIsCheckingAuth(false);
+      }
+    };
+    
+    checkAuth();
+  }, [navigate]);
+  
+  useEffect(() => {
+    if (isAuthenticated && !isCheckingAuth) {
+      fetchAdminData();
+    }
+  }, [isAuthenticated, isCheckingAuth]);
 
   const fetchAdminData = async () => {
     setLoading(true);
     try {
-      // Fetch all required data
       const userData = await getAllUsers();
       setUsers(userData);
       
-      // Fetch usage statistics using the Edge Function
       const stats = await getUserUsageStats();
       setUsageStats(stats || []);
       
-      // Fetch system logs using the Edge Function
       const logs = await getSystemLogs();
       setSystemLogs(logs || []);
     } catch (error) {
@@ -78,14 +102,12 @@ const Admin = () => {
     try {
       const result = await createEnterpriseUser(email, password, firstName, lastName, plan);
       if (result.success) {
-        // Clear form
         setEmail('');
         setPassword('');
         setFirstName('');
         setLastName('');
         setPlan('starter');
         
-        // Refresh user list
         handleRefresh();
       }
     } catch (error) {
@@ -96,16 +118,25 @@ const Admin = () => {
     }
   };
 
-  // Format date for display
   const formatDate = (dateString) => {
     if (!dateString) return "N/A";
     return new Date(dateString).toLocaleString();
   };
 
-  // Format usage data for display
   const formatUsage = (usage) => {
     return typeof usage === 'number' ? usage.toLocaleString() : 'N/A';
   };
+
+  if (isCheckingAuth) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center">
+          <Loader2 className="h-10 w-10 animate-spin text-primary mx-auto mb-4" />
+          <p className="text-lg font-medium">Verifying credentials...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col">

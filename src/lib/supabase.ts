@@ -1,4 +1,3 @@
-
 import { createClient } from '@supabase/supabase-js';
 import { toast } from 'sonner';
 
@@ -212,11 +211,11 @@ export const logActivity = async (activity: any) => {
   return { error };
 };
 
-// Admin functions - now using edge functions
+// Admin functions - now using edge functions with proper authentication
 export const createEnterpriseUser = async (email: string, password: string, firstName: string, lastName: string, plan: string = 'starter') => {
   try {
-    const { data: session } = await supabase.auth.getSession();
-    if (!session.session) {
+    const { data: sessionData } = await supabase.auth.getSession();
+    if (!sessionData.session) {
       toast.error('You must be logged in to perform this action');
       return { success: false, error: 'Not authenticated' };
     }
@@ -224,7 +223,7 @@ export const createEnterpriseUser = async (email: string, password: string, firs
     // Call the Edge Function to create a user with admin privileges
     const { data, error } = await supabase.functions.invoke('create-enterprise-user', {
       headers: {
-        Authorization: `Bearer ${session.session.access_token}`
+        Authorization: `Bearer ${sessionData.session.access_token}`
       },
       body: {
         email,
