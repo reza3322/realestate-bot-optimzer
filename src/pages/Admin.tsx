@@ -76,7 +76,7 @@ const Admin = () => {
     
     setCreating(true);
     try {
-      const result = await createEnterpriseUser(email, password, firstName, lastName);
+      const result = await createEnterpriseUser(email, password, firstName, lastName, plan);
       if (result.success) {
         // Clear form
         setEmail('');

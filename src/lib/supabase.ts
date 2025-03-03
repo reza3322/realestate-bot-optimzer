@@ -1,3 +1,4 @@
+
 import { createClient } from '@supabase/supabase-js';
 import { toast } from 'sonner';
 
@@ -212,22 +213,30 @@ export const logActivity = async (activity: any) => {
 };
 
 // Admin functions - now using edge functions
-export const createEnterpriseUser = async (email: string, password: string, firstName: string, lastName: string) => {
+export const createEnterpriseUser = async (email: string, password: string, firstName: string, lastName: string, plan: string = 'starter') => {
   try {
-    // This would typically be handled by a Supabase Edge Function for security
-    // since direct admin operations require special permissions
-    const { data, error } = await supabase.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true,
-      user_metadata: {
-        first_name: firstName,
-        last_name: lastName,
-        plan: 'enterprise'
+    const { data: session } = await supabase.auth.getSession();
+    if (!session.session) {
+      toast.error('You must be logged in to perform this action');
+      return { success: false, error: 'Not authenticated' };
+    }
+
+    // Call the Edge Function to create a user with admin privileges
+    const { data, error } = await supabase.functions.invoke('create-enterprise-user', {
+      headers: {
+        Authorization: `Bearer ${session.session.access_token}`
+      },
+      body: {
+        email,
+        password,
+        firstName,
+        lastName,
+        plan
       }
     });
     
     if (error) {
+      console.error('Error creating enterprise user:', error);
       toast.error(error.message || 'Failed to create enterprise user');
       return { success: false, error };
     }
