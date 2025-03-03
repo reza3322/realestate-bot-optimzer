@@ -70,7 +70,7 @@ const App = () => {
     return children;
   };
 
-  // Admin-only route component - only users with admin role can access
+  // Admin-only route component - ONLY users with 'admin' role can access
   const AdminRoute = ({ children }) => {
     if (loading) return <div className="flex justify-center items-center h-screen">Loading...</div>;
     
@@ -78,8 +78,10 @@ const App = () => {
       return <Navigate to="/auth" replace />;
     }
     
-    // Only allow access if the user has admin role
+    // Strictly enforce admin role check - redirect all non-admin users
     if (userRole !== 'admin') {
+      console.log("Access denied: Not an admin user, redirecting to dashboard");
+      toast.error("Access denied: Admin privileges required");
       return <Navigate to="/dashboard" replace />;
     }
     
@@ -116,7 +118,7 @@ const App = () => {
               } 
             />
             
-            {/* Admin-only route */}
+            {/* Admin-only route - strictly for 'admin' role users */}
             <Route 
               path="/admin" 
               element={

@@ -31,7 +31,7 @@ export function SignInForm() {
       if (data?.user) {
         const role = await getUserRole(data.user.id);
         
-        // Redirect based on role
+        // ONLY redirect to admin page if role is strictly 'admin'
         if (role === 'admin') {
           toast.success("Welcome back, Admin!");
           // Use replace instead of navigate to prevent back button issues
@@ -40,7 +40,7 @@ export function SignInForm() {
           }, 300);
         } else {
           toast.success("Signed in successfully!");
-          // Use replace instead of navigate to prevent back button issues
+          // All non-admin users go to dashboard
           setTimeout(() => {
             navigate('/dashboard', { replace: true });
           }, 300);

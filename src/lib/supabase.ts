@@ -1,4 +1,3 @@
-
 import { createClient } from '@supabase/supabase-js';
 import { toast } from 'sonner';
 
@@ -101,6 +100,8 @@ export const getUserProfile = async (userId: string) => {
 
 // Get user role from profiles table
 export const getUserRole = async (userId: string) => {
+  console.log("Fetching role for user ID:", userId);
+  
   const { data, error } = await supabase
     .from('profiles')
     .select('role')
@@ -112,6 +113,7 @@ export const getUserRole = async (userId: string) => {
     return null;
   }
   
+  console.log("User role data:", data);
   return data?.role || null;
 };
 
