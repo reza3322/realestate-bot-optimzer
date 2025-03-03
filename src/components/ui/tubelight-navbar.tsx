@@ -7,6 +7,7 @@ interface NavItem {
   name: string;
   url: string;
   icon: LucideIcon;
+  onClick?: () => void;
 }
 
 interface NavBarProps {
@@ -15,7 +16,7 @@ interface NavBarProps {
 }
 
 export function NavBar({ items, className }: NavBarProps) {
-  const [activeTab, setActiveTab] = useState(items[0].name);
+  const [activeTab, setActiveTab] = useState(items[0]?.name || '');
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
@@ -36,12 +37,11 @@ export function NavBar({ items, className }: NavBarProps) {
           const isActive = activeTab === item.name;
 
           return (
-            <a
+            <button
               key={item.name}
-              href={item.url}
-              onClick={(e) => {
-                e.preventDefault();
+              onClick={() => {
                 setActiveTab(item.name);
+                item.onClick && item.onClick();
               }}
               className={cn(
                 "flex items-center gap-2 px-4 py-2 rounded-md transition-colors",
@@ -51,7 +51,7 @@ export function NavBar({ items, className }: NavBarProps) {
             >
               <Icon size={16} />
               <span className={isMobile ? "hidden" : "inline"}>{item.name}</span>
-            </a>
+            </button>
           );
         })}
       </div>

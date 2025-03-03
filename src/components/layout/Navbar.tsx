@@ -76,7 +76,7 @@ const Navbar = () => {
   const scrollToSection = (id: string) => {
     if (location.pathname !== '/') {
       // If not on homepage, navigate to home and then scroll after a delay
-      window.location.href = `/${id}`;
+      navigate(`/${id ? '#' + id : ''}`);
       return;
     }
     
@@ -160,9 +160,9 @@ const Navbar = () => {
               <Button 
                 variant="outline" 
                 className="hidden sm:flex"
-                onClick={() => navigate('/auth')}
+                onClick={() => navigate('/dashboard')}
               >
-                Log In
+                Sign In
               </Button>
               <Button onClick={() => navigate('/auth')}>
                 Get Started
