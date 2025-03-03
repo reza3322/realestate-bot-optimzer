@@ -35,18 +35,18 @@ const Auth = () => {
   }, [navigate]);
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-gray-900 dark:to-gray-800 flex flex-col">
       <div className="container px-4 py-8">
         <Button 
           variant="ghost" 
           className="mb-8"
-          onClick={() => navigate(-1)}
+          onClick={() => navigate('/')}
         >
           <ArrowLeft className="mr-2 h-4 w-4" />
-          Back
+          Back to Home
         </Button>
         
-        <div className="max-w-md mx-auto w-full space-y-8">
+        <div className="max-w-md mx-auto w-full space-y-8 bg-white dark:bg-gray-800 p-8 rounded-xl shadow-lg">
           <div className="text-center space-y-2">
             <h1 className="text-3xl font-bold">Welcome to RealHomeAI</h1>
             <p className="text-muted-foreground">
