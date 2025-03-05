@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { supabase } from "@/lib/supabase";
+import { supabase, generateChatbotScript } from "@/lib/supabase";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -85,24 +85,12 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
   const [testMessage, setTestMessage] = useState("");
   const [testResponse, setTestResponse] = useState("");
   const [isTesting, setIsTesting] = useState(false);
+  const [generatedScript, setGeneratedScript] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchSettings = async () => {
       setLoading(true);
       try {
-        try {
-          const { data, error } = await supabase
-            .from("chatbot_settings")
-            .select("*")
-            .limit(1);
-            
-          if (error && error.code === '42P01') {
-            console.log('Table does not exist, trying to create it');
-          }
-        } catch (err) {
-          console.log('Error checking chatbot settings table:', err);
-        }
-            
         const { data, error } = await supabase
           .from("chatbot_settings")
           .select("*")
@@ -116,12 +104,26 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
           }
         } else if (data) {
           setSettings(data.settings);
+          fetchGeneratedScript();
         }
       } catch (error) {
         console.error("Error fetching chatbot settings:", error);
         toast.error("Error loading chatbot settings");
       } finally {
         setLoading(false);
+      }
+    };
+    
+    const fetchGeneratedScript = async () => {
+      try {
+        const { script, error } = await generateChatbotScript(userId);
+        if (error) {
+          console.error("Error fetching generated script:", error);
+        } else {
+          setGeneratedScript(script);
+        }
+      } catch (err) {
+        console.error("Error in fetchGeneratedScript:", err);
       }
     };
     
@@ -144,6 +146,13 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
         throw error;
       }
       
+      const { script, error: scriptError } = await generateChatbotScript(userId);
+      if (scriptError) {
+        console.error("Error generating script:", scriptError);
+      } else {
+        setGeneratedScript(script);
+      }
+      
       toast.success("Chatbot settings saved successfully");
     } catch (error) {
       console.error("Error saving chatbot settings:", error);
@@ -154,6 +163,10 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
   };
 
   const generateEmbedCode = () => {
+    if (generatedScript) {
+      return generatedScript;
+    }
+    
     const params = new URLSearchParams({
       user: userId,
       theme: settings.theme,

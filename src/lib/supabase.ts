@@ -1,4 +1,3 @@
-
 import { createClient } from '@supabase/supabase-js';
 import { toast } from 'sonner';
 
@@ -12,7 +11,6 @@ export const supabase = createClient(supabaseUrl, supabaseKey);
 // Check if the chatbot_settings table exists
 export const createChatbotSettingsTable = async () => {
   try {
-    // First try to directly check if the table exists
     const { data, error } = await supabase
       .from('chatbot_settings')
       .select('count')
@@ -69,6 +67,24 @@ export const createChatbotSettingsTable = async () => {
   } catch (error) {
     console.error('Error in createChatbotSettingsTable:', error);
     return { success: false, error };
+  }
+};
+
+// Generate chatbot embed script using the database function
+export const generateChatbotScript = async (userId: string) => {
+  try {
+    const { data, error } = await supabase
+      .rpc('generate_chatbot_script', { user_uuid: userId });
+    
+    if (error) {
+      console.error('Error generating chatbot script:', error);
+      return { script: null, error };
+    }
+    
+    return { script: data, error: null };
+  } catch (error) {
+    console.error('Error in generateChatbotScript:', error);
+    return { script: null, error };
   }
 };
 
