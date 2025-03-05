@@ -13,6 +13,7 @@ serve(async (req) => {
     // Get API keys from environment variables
     const supabaseUrl = Deno.env.get('SUPABASE_URL')
     const supabaseServiceRole = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')
 
     if (!supabaseUrl || !supabaseServiceRole) {
       throw new Error('Missing environment variables for Supabase connection')
@@ -42,6 +43,7 @@ serve(async (req) => {
     if (userId) {
       console.log(`Fetching settings for user: ${userId}`);
       
+      // Only use the necessary parameters: user_id and select settings
       const { data: settingsData, error: settingsError } = await supabase
         .from('chatbot_settings')
         .select('settings')
@@ -67,7 +69,8 @@ serve(async (req) => {
         success: true, 
         message: 'Chatbot settings table checked/created successfully',
         data,
-        settings: userSettings
+        settings: userSettings,
+        anon_key: supabaseAnonKey // Include the anon key for client-side usage
       }),
       {
         headers: {

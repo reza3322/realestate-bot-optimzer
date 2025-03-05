@@ -86,27 +86,83 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
   const [testResponse, setTestResponse] = useState("");
   const [isTesting, setIsTesting] = useState(false);
   const [generatedScript, setGeneratedScript] = useState<string | null>(null);
+  const [initialSettings, setInitialSettings] = useState<any>(null);
+  const [embedScript, setEmbedScript] = useState<string | null>(null);
 
   useEffect(() => {
-    const initChatbotSettings = async () => {
+    const initializeChatbot = async () => {
+      setLoading(true);
       try {
-        console.log("Initializing chatbot settings table");
-        const { success, error } = await createChatbotSettingsTable();
+        // First, ensure the chatbot_settings table exists and get initial user settings
+        const { data: initData } = await createChatbotSettingsTable(userId);
         
-        if (!success) {
-          console.error("Error initializing chatbot settings table:", error);
-          toast.error("Failed to initialize settings. Please try again.");
-        } else {
-          console.log("Successfully initialized chatbot settings table");
+        // If we received settings from the edge function, use them
+        if (initData?.settings) {
+          setSettings(initData.settings);
+          setInitialSettings(initData.settings);
+          setEmbedScript(await generateChatbotScript(userId));
+          setLoading(false);
+          return;
         }
+        
+        // Fallback: Try to fetch settings directly from the database
+        const { data, error } = await supabase
+          .from("chatbot_settings")
+          .select("settings")
+          .eq("user_id", userId)
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        
+        if (error) {
+          if (error.code === 'PGRST116') {
+            // No data found, initialize with defaults
+            console.log('No chatbot settings found for this user, using defaults');
+            const defaultSettings = {
+              theme: "default",
+              variation: "default",
+              fontFamily: "default",
+              fontSize: 16,
+              position: "right",
+              botName: "RealHome Assistant",
+              welcomeMessage: "Hi there! I'm your RealHome assistant. How can I help you today?",
+              placeholderText: "Type your message...",
+              primaryColor: "#0b1e3c",
+              botIcon: "message-circle",
+              enabled: true,
+              buttonText: "Chat with us",
+              buttonIcon: "message-circle",
+              buttonSize: "medium",
+              buttonColor: "#3b82f6",
+              buttonTextColor: "#ffffff",
+              buttonStyle: "pill",
+              buttonPosition: "bottom-right"
+            };
+            setSettings(defaultSettings);
+            setInitialSettings(defaultSettings);
+          } else {
+            console.error('Error fetching chatbot settings:', error);
+            toast.error('Error loading chatbot settings');
+          }
+        } else if (data) {
+          setSettings(data.settings);
+          setInitialSettings(data.settings);
+        }
+        
+        // Generate the chatbot embed script
+        setEmbedScript(await generateChatbotScript(userId));
       } catch (err) {
-        console.error("Exception initializing chatbot settings:", err);
-        toast.error("Something went wrong. Please try again.");
+        console.error('Error initializing chatbot settings:', err);
+        toast.error('Could not initialize chatbot settings');
+      } finally {
+        setLoading(false);
       }
     };
     
-    initChatbotSettings();
-  }, []);
+    if (userId) {
+      initializeChatbot();
+    }
+  }, [userId]);
 
   useEffect(() => {
     const updateGeneratedScript = async () => {

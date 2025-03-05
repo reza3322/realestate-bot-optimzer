@@ -10,12 +10,14 @@ const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS
 export const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Check if the chatbot_settings table exists
-export const createChatbotSettingsTable = async () => {
+export const createChatbotSettingsTable = async (userId?: string) => {
   try {
     console.log('Attempting to create chatbot_settings table if it doesn\'t exist');
     
-    // Call the edge function to create the table if needed
-    const { data, error } = await supabase.functions.invoke('create-chatbot-settings');
+    const url = userId ? `create-chatbot-settings?user_id=${userId}` : 'create-chatbot-settings';
+    
+    // Call the edge function to create the table if needed and fetch user settings if userId is provided
+    const { data, error } = await supabase.functions.invoke(url);
     
     if (error) {
       console.error('Error creating chatbot_settings table via edge function:', error);
