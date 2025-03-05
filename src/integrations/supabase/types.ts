@@ -88,6 +88,42 @@ export type Database = {
           },
         ]
       }
+      chatbot_training_data: {
+        Row: {
+          answer: string
+          category: string | null
+          content_type: string
+          created_at: string | null
+          id: string
+          priority: number | null
+          question: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          answer: string
+          category?: string | null
+          content_type: string
+          created_at?: string | null
+          id?: string
+          priority?: number | null
+          question: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          answer?: string
+          category?: string | null
+          content_type?: string
+          created_at?: string | null
+          id?: string
+          priority?: number | null
+          question?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       integrations: {
         Row: {
           active: boolean | null

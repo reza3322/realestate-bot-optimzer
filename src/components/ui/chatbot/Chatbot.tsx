@@ -48,6 +48,13 @@ const Chatbot = ({
   const baseStyles = getChatStyles(theme, variation);
   const styles = applyFontStyle(baseStyles, fontStyle);
 
+  // Update messages if welcome message changes
+  useEffect(() => {
+    if (messages.length === 1 && messages[0].role === 'bot') {
+      setMessages([{ role: 'bot', content: welcomeMessage }]);
+    }
+  }, [welcomeMessage]);
+
   // Scroll chat messages to bottom without affecting page scroll
   useEffect(() => {
     if (messagesEndRef.current) {
@@ -111,12 +118,25 @@ const Chatbot = ({
     }
   };
 
+  // Generate the appropriate font class based on the fontStyle prop
+  const getFontClass = () => {
+    switch (fontStyle) {
+      case 'serif':
+        return 'font-serif';
+      case 'mono':
+        return 'font-mono';
+      case 'default':
+      default:
+        return 'font-sans';
+    }
+  };
+
   return (
     <div className={cn(
       'flex flex-col overflow-hidden rounded-lg shadow-md',
       'h-[500px]', // Fixed height
       styles.container,
-      styles.font,
+      getFontClass(), // Apply font class dynamically
       className
     )}>
       {/* Chat Header */}

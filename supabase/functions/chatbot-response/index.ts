@@ -53,7 +53,7 @@ serve(async (req) => {
       )
     }
 
-    console.log(`Processing message from user ${userId || 'anonymous'}: "${message}"`)
+    console.log(`Processing message from user ${userId || 'anonymous'}: "${message}"`);
     
     // Get chatbot settings if userId is provided
     let chatbotSettings = null;
@@ -73,8 +73,129 @@ serve(async (req) => {
         console.log(`Retrieved chatbot settings:`, chatbotSettings);
       }
     }
+
+    // First, check for matches in the user's training data
+    let customResponse = null;
     
-    console.log('Sending request to OpenAI API');
+    if (userId) {
+      try {
+        console.log('Checking user training data for response matches');
+        
+        // Search for matching questions in the training data
+        // We'll do a simple search here - in a production system, you'd want 
+        // to use similarity search or embeddings for better matching
+        const { data: matches, error } = await supabase
+          .from('chatbot_training_data')
+          .select('*')
+          .eq('user_id', userId)
+          .order('priority', { ascending: false });
+        
+        if (error) {
+          console.error('Error fetching training data:', error);
+        } else if (matches && matches.length > 0) {
+          console.log(`Found ${matches.length} potential training data items`);
+          
+          // Simple matching algorithm - normalize and check for keyword matches
+          const normalizedQuery = message.toLowerCase().trim();
+          
+          // Find the best match
+          let bestMatch = null;
+          let bestMatchScore = 0;
+          
+          for (const item of matches) {
+            const normalizedQuestion = item.question.toLowerCase().trim();
+            
+            // Calculate a simple match score
+            // 1. Exact match gets highest score
+            if (normalizedQuery === normalizedQuestion) {
+              bestMatch = item;
+              break;
+            }
+            
+            // 2. Check if query contains the question or vice versa
+            let score = 0;
+            if (normalizedQuery.includes(normalizedQuestion)) {
+              score = normalizedQuestion.length / normalizedQuery.length * 10;
+            } else if (normalizedQuestion.includes(normalizedQuery)) {
+              score = normalizedQuery.length / normalizedQuestion.length * 8;
+            } else {
+              // 3. Check for word matches
+              const queryWords = normalizedQuery.split(/\s+/);
+              const questionWords = normalizedQuestion.split(/\s+/);
+              
+              const matchedWords = queryWords.filter(word => 
+                questionWords.some(qWord => qWord.includes(word) || word.includes(qWord))
+              );
+              
+              if (matchedWords.length > 0) {
+                score = (matchedWords.length / queryWords.length) * 5;
+                
+                // Boost score based on priority
+                if (item.priority && item.priority > 0) {
+                  score = score * (1 + item.priority/10);
+                }
+              }
+            }
+            
+            if (score > bestMatchScore) {
+              bestMatchScore = score;
+              bestMatch = item;
+            }
+          }
+          
+          // Use the custom response if we found a good enough match
+          if (bestMatch && bestMatchScore > 4) {
+            console.log(`Using custom response from training data with score ${bestMatchScore}:`, bestMatch);
+            customResponse = bestMatch.answer;
+          } else {
+            console.log(`No good match found in training data. Best score: ${bestMatchScore}`);
+          }
+        }
+      } catch (err) {
+        console.error('Error processing training data:', err);
+      }
+    }
+    
+    // If we found a custom response, use it directly
+    if (customResponse) {
+      console.log('Using custom response from training data');
+      
+      // Store the conversation in the database if userId is provided
+      if (userId) {
+        console.log('Storing conversation in database');
+        
+        const conv_id = conversationId || crypto.randomUUID();
+        
+        const { error: insertError } = await supabase
+          .from('chatbot_conversations')
+          .insert({
+            user_id: userId,
+            visitor_id: visitorId || null,
+            conversation_id: conv_id,
+            message,
+            response: customResponse,
+          });
+
+        if (insertError) {
+          console.error('Error storing conversation:', insertError);
+        } else {
+          console.log(`Conversation stored with ID: ${conv_id}`);
+        }
+      }
+
+      console.log('Returning custom response to client');
+      
+      return new Response(
+        JSON.stringify({ 
+          response: customResponse,
+          suggestedFollowUp: getSuggestedFollowUp(message, customResponse),
+          source: 'training'
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    
+    console.log('No matching training data found, sending request to OpenAI API');
     
     try {
       // Use OpenAI API to generate response
@@ -128,10 +249,10 @@ serve(async (req) => {
             conversation_id: conv_id,
             message,
             response: aiMessage,
-          })
+          });
 
         if (insertError) {
-          console.error('Error storing conversation:', insertError)
+          console.error('Error storing conversation:', insertError);
         } else {
           console.log(`Conversation stored with ID: ${conv_id}`);
         }
@@ -142,45 +263,46 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ 
           response: aiMessage,
-          suggestedFollowUp: getSuggestedFollowUp(message, aiMessage)
+          suggestedFollowUp: getSuggestedFollowUp(message, aiMessage),
+          source: 'ai'
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+      );
     } catch (error) {
       console.error('Error calling OpenAI API:', error);
       return new Response(
         JSON.stringify({ error: error.message || 'Error communicating with OpenAI' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
-      )
+      );
     }
   } catch (error) {
-    console.error('Unexpected error processing request:', error)
+    console.error('Unexpected error processing request:', error);
     return new Response(
       JSON.stringify({ error: error.message || 'Internal server error' }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
-    )
+    );
   }
-})
+});
 
 // Function to generate follow-up suggestions based on conversation context
 function getSuggestedFollowUp(userMessage: string, aiResponse: string): string {
-  const lowerMessage = userMessage.toLowerCase()
+  const lowerMessage = userMessage.toLowerCase();
   
   if (lowerMessage.includes('buy') || lowerMessage.includes('purchase')) {
-    return "What is your budget range for this purchase?"
+    return "What is your budget range for this purchase?";
   }
   
   if (lowerMessage.includes('sell')) {
-    return "When are you planning to sell your property?"
+    return "When are you planning to sell your property?";
   }
   
   if (lowerMessage.includes('price') || lowerMessage.includes('cost')) {
-    return "Would you like to schedule a viewing of any particular properties?"
+    return "Would you like to schedule a viewing of any particular properties?";
   }
   
   if (lowerMessage.includes('location') || lowerMessage.includes('area')) {
-    return "Are schools or proximity to public transportation important to you?"
+    return "Are schools or proximity to public transportation important to you?";
   }
   
-  return "Would you prefer to continue this conversation with one of our real estate agents?"
+  return "Would you prefer to continue this conversation with one of our real estate agents?";
 }
