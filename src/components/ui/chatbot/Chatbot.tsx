@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import ChatHeader from './ChatHeader';
@@ -147,7 +146,7 @@ const Chatbot = ({
       
       <div 
         className="flex-1 p-4 overflow-y-auto space-y-4 scrollbar-none"
-        style={{ minHeight: '300px', maxHeight: maxHeight }}
+        style={{ minHeight: '300px', maxHeight }}
       >
         {messages.map((message, index) => (
           <ChatMessage 
