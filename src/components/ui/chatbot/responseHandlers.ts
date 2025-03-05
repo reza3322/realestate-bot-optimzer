@@ -45,9 +45,10 @@ export const testChatbotResponse = async (
   userId: string
 ): Promise<{ response: string; error?: string }> => {
   try {
-    // Get Supabase credentials from the client - avoid hardcoding
-    const supabaseUrl = supabase.supabaseUrl;
-    const supabaseAnonKey = supabase.supabaseKey;
+    // Instead of directly accessing the protected properties, use environment variables or configuration
+    // For demo/preview purposes, we can use the window.location to determine the Supabase URL
+    const supabaseUrl = process.env.SUPABASE_URL || 'https://ckgaqkbsnrvccctqxsqv.supabase.co';
+    const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNrZ2Fxa2JzbnJ2Y2NjdHF4c3F2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDEwMTEyODksImV4cCI6MjA1NjU4NzI4OX0.z62BR5psK8FBR5lfqbnpbFMfQLKgzFCisqDiuWg4MKM';
 
     if (!supabaseUrl) {
       console.error('Supabase URL is undefined');
