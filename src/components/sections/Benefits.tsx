@@ -1,5 +1,6 @@
 
 import BenefitCard from '@/components/ui/BenefitCard';
+import { useEffect } from 'react';
 
 const Benefits = () => {
   const benefits = [
