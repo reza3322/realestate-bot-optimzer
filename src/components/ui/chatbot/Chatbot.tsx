@@ -8,7 +8,7 @@ import TypingIndicator from './TypingIndicator';
 import { getChatStyles, applyFontStyle } from './chatStyles';
 import { Message } from './types';
 import { testChatbotResponse } from './responseHandlers';
-import { Bot, MessageCircle, Headphones, MessageSquare, BrainCircuit } from 'lucide-react';
+import { MessageCircle } from 'lucide-react';
 
 interface ChatbotProps {
   apiKey?: string;
@@ -32,9 +32,9 @@ const Chatbot = ({
   theme = 'default',
   variation = 'blue',
   fontStyle = 'default',
-  botName = "RealHome Assistant",
-  welcomeMessage = "Hi there! I'm your RealHome assistant. How can I help you today?",
-  placeholderText = "Type your message...",
+  botName = "RealHomeAI Assistant",
+  welcomeMessage = "👋 Hi there! I'm your RealHomeAI assistant. I can help you find properties, answer questions about listings, and even schedule viewings. Try asking me about available properties or how I can help with your real estate needs!",
+  placeholderText = "Type your message here...",
   maxHeight = "400px",
   onSendMessage,
   userId = 'demo-user',
@@ -48,11 +48,8 @@ const Chatbot = ({
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
-
-  // Always use blue variation by default
-  const actualVariation = variation || 'blue';
   
-  const baseStyles = getChatStyles(theme, actualVariation, primaryColor);
+  const baseStyles = getChatStyles(theme, variation, primaryColor);
   const styles = applyFontStyle(baseStyles, fontStyle);
 
   useEffect(() => {
@@ -114,28 +111,9 @@ const Chatbot = ({
     }
   };
 
-  const getBotIconComponent = () => {
-    switch (botIcon) {
-      case 'message-circle':
-        return MessageCircle;
-      case 'bot':
-        return Bot;
-      case 'headphones':
-        return Headphones;
-      case 'message-square':
-        return MessageSquare;
-      case 'brain':
-        return BrainCircuit;
-      default:
-        return MessageCircle;
-    }
-  };
-
-  const BotIconComponent = getBotIconComponent();
-
   return (
     <div className={cn(
-      'flex flex-col overflow-hidden rounded-lg',
+      'flex flex-col overflow-hidden rounded-lg shadow-lg border border-gray-100',
       styles.container,
       styles.font,
       className
@@ -145,11 +123,11 @@ const Chatbot = ({
         headerStyle={styles.header}
         fontStyle={styles.font}
         apiKeyStatus={useRealAPI ? "set" : "not-set"}
-        BotIcon={BotIconComponent}
+        BotIcon={MessageCircle}
       />
       
       <div 
-        className="flex-1 p-4 overflow-y-auto space-y-4 scrollbar-none bg-white"
+        className="flex-1 p-4 overflow-y-auto space-y-4 bg-white"
         style={{ minHeight: '300px', maxHeight }}
       >
         {messages.map((message, index) => (
@@ -158,7 +136,7 @@ const Chatbot = ({
             message={message}
             index={index}
             styles={styles}
-            BotIcon={BotIconComponent}
+            BotIcon={MessageCircle}
           />
         ))}
         
@@ -166,7 +144,7 @@ const Chatbot = ({
           <TypingIndicator 
             botIconStyle={styles.botIcon}
             botBubbleStyle={styles.botBubble}
-            BotIcon={BotIconComponent}
+            BotIcon={MessageCircle}
           />
         )}
         

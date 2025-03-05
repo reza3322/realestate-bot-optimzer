@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { cn } from '@/lib/utils';
-import { SendIcon } from 'lucide-react';
+import { ArrowUp } from 'lucide-react';
 
 interface ChatInputProps {
   inputContainerStyle: string;
@@ -9,7 +9,7 @@ interface ChatInputProps {
   placeholderText?: string;
 }
 
-const ChatInput = ({ inputContainerStyle, onSendMessage, placeholderText = "Type your message..." }: ChatInputProps) => {
+const ChatInput = ({ inputContainerStyle, onSendMessage, placeholderText = "Type your message here..." }: ChatInputProps) => {
   const [inputValue, setInputValue] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -23,7 +23,7 @@ const ChatInput = ({ inputContainerStyle, onSendMessage, placeholderText = "Type
   return (
     <form 
       onSubmit={handleSubmit} 
-      className={cn("p-3", inputContainerStyle)}
+      className={cn("p-3 border-t border-gray-100", inputContainerStyle)}
     >
       <div className="relative flex items-center">
         <input
@@ -31,14 +31,14 @@ const ChatInput = ({ inputContainerStyle, onSendMessage, placeholderText = "Type
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
           placeholder={placeholderText}
-          className="w-full px-4 py-2 rounded-full bg-white text-gray-600 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full px-5 py-3 rounded-full bg-white text-gray-700 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
         />
         <button
           type="submit"
-          className="absolute right-2 p-1 text-blue-500 rounded-full hover:bg-blue-50"
+          className="absolute right-2 p-2 rounded-full bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50"
           disabled={!inputValue.trim()}
         >
-          <SendIcon className="w-5 h-5" />
+          <ArrowUp className="w-4 h-4" />
         </button>
       </div>
     </form>

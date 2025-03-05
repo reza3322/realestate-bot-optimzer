@@ -16,123 +16,19 @@ interface ChatStyles {
   inputContainer: string;
 }
 
-// Default color mappings
-const themeColors = {
-  default: {
-    primary: 'bg-blue-600',
-    secondary: 'bg-blue-100',
-    text: 'text-white',
-    secondaryText: 'text-blue-800'
-  },
-  blue: {
-    primary: 'bg-blue-600',
-    secondary: 'bg-blue-100',
-    text: 'text-white',
-    secondaryText: 'text-blue-800'
-  },
-  green: {
-    primary: 'bg-green-600',
-    secondary: 'bg-green-100',
-    text: 'text-white',
-    secondaryText: 'text-green-800'
-  },
-  purple: {
-    primary: 'bg-purple-600',
-    secondary: 'bg-purple-100',
-    text: 'text-white',
-    secondaryText: 'text-purple-800'
-  }
-};
-
-// Function to generate dynamic CSS variables based on the primary color
-const generateColorVars = (primaryColor?: string) => {
-  if (!primaryColor) return {};
-
-  // Convert hex to RGB for creating opacity variations
-  const hexToRgb = (hex: string) => {
-    const shorthandRegex = /^#?([a-f\d])([a-f\d])([a-f\d])$/i;
-    const formattedHex = hex.replace(shorthandRegex, (_, r, g, b) => r + r + g + g + b + b);
-    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(formattedHex);
-    return result
-      ? {
-          r: parseInt(result[1], 16),
-          g: parseInt(result[2], 16),
-          b: parseInt(result[3], 16)
-        }
-      : null;
-  };
-
-  const rgb = hexToRgb(primaryColor);
-  if (!rgb) return {};
-
-  return {
-    '--chat-primary-color': primaryColor,
-    '--chat-primary-rgb': `${rgb.r}, ${rgb.g}, ${rgb.b}`,
-    '--chat-light-color': `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.1)`,
-    '--chat-medium-color': `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.5)`,
-    '--chat-dark-color': `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.8)`
-  };
-};
-
 export const getChatStyles = (
   theme: ChatTheme = 'default',
   variation: ChatVariation = 'blue',
   primaryColor?: string
 ): ChatStyles => {
-  // Force blue variation for this implementation
-  variation = 'blue';
-  
-  // Get variation colors
-  const varColors = themeColors[variation];
-  
-  // Default styles based on theme
-  if (theme === 'default') {
-    return {
-      container: 'bg-white',
-      header: `${varColors.primary} ${varColors.text} p-3 rounded-t-lg`,
-      font: 'font-sans',
-      botBubble: `${varColors.secondary} ${varColors.secondaryText} rounded-lg rounded-tl-none`,
-      userBubble: `${varColors.primary} ${varColors.text} rounded-lg rounded-tr-none`,
-      botIcon: `${varColors.primary} ${varColors.text}`,
-      userIcon: 'bg-gray-200 text-gray-600',
-      inputContainer: 'bg-white'
-    };
-  }
-  
-  if (theme === 'modern') {
-    return {
-      container: 'bg-white border-0 rounded-xl',
-      header: `${varColors.primary} ${varColors.text} p-4 rounded-t-xl`,
-      font: 'font-sans',
-      botBubble: `${varColors.secondary} ${varColors.secondaryText} rounded-2xl rounded-tl-none`,
-      userBubble: `${varColors.primary} ${varColors.text} rounded-2xl rounded-tr-none`,
-      botIcon: `${varColors.primary} ${varColors.text} rounded-full`,
-      userIcon: 'bg-gray-700 text-white rounded-full',
-      inputContainer: 'bg-white'
-    };
-  }
-  
-  if (theme === 'minimal') {
-    return {
-      container: 'bg-white rounded-md',
-      header: 'bg-blue-600 text-white p-2 rounded-t-md',
-      font: 'font-sans',
-      botBubble: 'bg-blue-100 text-blue-800 rounded-md rounded-tl-none',
-      userBubble: 'bg-blue-600 text-white rounded-md rounded-tr-none',
-      botIcon: 'bg-blue-600 text-white rounded-full',
-      userIcon: 'bg-gray-600 text-white rounded-full',
-      inputContainer: 'bg-white'
-    };
-  }
-  
-  // Default fallback (Blue)
+  // Simple, clean styles for all themes
   return {
-    container: 'bg-white',
-    header: 'bg-blue-600 text-white p-3 rounded-t-lg',
+    container: 'bg-white rounded-lg overflow-hidden shadow-md',
+    header: 'bg-blue-500 text-white p-3 flex items-center gap-2',
     font: 'font-sans',
-    botBubble: 'bg-blue-100 text-blue-800 rounded-lg rounded-tl-none',
-    userBubble: 'bg-blue-600 text-white rounded-lg rounded-tr-none',
-    botIcon: 'bg-blue-600 text-white',
+    botBubble: 'bg-gray-100 text-gray-800 rounded-lg rounded-tl-none',
+    userBubble: 'bg-blue-500 text-white rounded-lg rounded-tr-none',
+    botIcon: 'bg-blue-500 text-white',
     userIcon: 'bg-gray-200 text-gray-600',
     inputContainer: 'bg-white'
   };
