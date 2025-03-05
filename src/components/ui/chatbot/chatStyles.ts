@@ -8,13 +8,13 @@ export const getChatStyles = (
 ): ChatStylesType => {
   // Base styles (shared across all themes)
   const baseStyles: ChatStylesType = {
-    container: 'bg-white dark:bg-gray-900 shadow-md rounded-md overflow-hidden',
-    header: 'bg-primary text-white p-4 flex items-center',
-    userBubble: 'bg-primary/10 text-foreground rounded-lg p-3 max-w-[80%] ml-auto',
-    botBubble: 'bg-muted text-foreground rounded-lg p-3 max-w-[80%]',
-    inputContainer: 'border-t border-border p-4 bg-background',
-    botIcon: 'bg-primary text-white h-8 w-8 rounded-full flex items-center justify-center',
-    userIcon: 'bg-primary/20 h-8 w-8 rounded-full flex items-center justify-center',
+    container: 'bg-white dark:bg-gray-900 shadow-md rounded-md overflow-hidden border border-gray-200 dark:border-gray-800',
+    header: 'bg-blue-500 text-white p-4 flex items-center',
+    userBubble: 'bg-blue-100 dark:bg-blue-900/30 text-foreground rounded-lg p-3 max-w-[80%] ml-auto',
+    botBubble: 'bg-gray-100 dark:bg-gray-800 text-foreground rounded-lg p-3 max-w-[80%]',
+    inputContainer: 'border-t border-gray-200 dark:border-gray-800 p-4 bg-white dark:bg-gray-900',
+    botIcon: 'bg-blue-500 text-white h-8 w-8 rounded-full flex items-center justify-center',
+    userIcon: 'bg-blue-100 dark:bg-blue-800 h-8 w-8 rounded-full flex items-center justify-center text-blue-500 dark:text-blue-300',
     font: 'font-sans',
   };
 
@@ -69,20 +69,20 @@ export const getChatStyles = (
   switch (theme) {
     case 'modern':
       themeStyles = {
-        container: `bg-white dark:bg-gray-900 shadow-lg rounded-xl overflow-hidden`,
+        container: `bg-white dark:bg-gray-900 shadow-lg rounded-xl overflow-hidden border border-gray-200 dark:border-gray-800`,
         header: `${colorStyles.header || baseStyles.header} rounded-t-xl`,
         userBubble: `${colorStyles.userBubble || baseStyles.userBubble} rounded-2xl`,
         botBubble: `${baseStyles.botBubble} rounded-2xl`,
-        inputContainer: `border-t border-border p-4 bg-background rounded-b-xl`,
+        inputContainer: `border-t border-gray-200 dark:border-gray-800 p-4 bg-white dark:bg-gray-900 rounded-b-xl`,
       };
       break;
     case 'minimal':
       themeStyles = {
-        container: `bg-white dark:bg-gray-900 shadow-md overflow-hidden`,
-        header: `${colorStyles.header || baseStyles.header} border-b border-border bg-background text-foreground`,
-        userBubble: `${colorStyles.userBubble || baseStyles.userBubble} rounded-md border border-border/50`,
-        botBubble: `${baseStyles.botBubble} rounded-md border border-border/50`,
-        inputContainer: `border-t border-border p-3 bg-background`,
+        container: `bg-white dark:bg-gray-900 shadow-sm overflow-hidden border border-gray-200 dark:border-gray-800`,
+        header: `${colorStyles.header || baseStyles.header} border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 text-gray-900 dark:text-white`,
+        userBubble: `${colorStyles.userBubble || baseStyles.userBubble} rounded-md border border-gray-200 dark:border-gray-800`,
+        botBubble: `${baseStyles.botBubble} rounded-md border border-gray-200 dark:border-gray-800`,
+        inputContainer: `border-t border-gray-200 dark:border-gray-800 p-3 bg-white dark:bg-gray-900`,
       };
       break;
     default:
