@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { supabase, generateChatbotScript } from "@/lib/supabase";
+import { supabase, generateChatbotScript, createChatbotSettingsTable } from "@/lib/supabase";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -88,6 +88,14 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
   const [generatedScript, setGeneratedScript] = useState<string | null>(null);
 
   useEffect(() => {
+    const initChatbotSettings = async () => {
+      await createChatbotSettingsTable();
+    };
+    
+    initChatbotSettings();
+  }, []);
+
+  useEffect(() => {
     const updateGeneratedScript = async () => {
       try {
         const clientScript = generateClientSideScript();
@@ -111,17 +119,19 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
     const fetchSettings = async () => {
       setLoading(true);
       try {
+        await createChatbotSettingsTable();
+        
         const { data, error } = await supabase
           .from("chatbot_settings")
           .select("*")
           .eq("user_id", userId)
-          .single();
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
         
         if (error) {
-          if (error.code !== "PGRST116") {
-            console.error("Error fetching chatbot settings:", error);
-            toast.error("Error loading chatbot settings");
-          }
+          console.error("Error fetching chatbot settings:", error);
+          toast.error("Error loading chatbot settings");
         } else if (data) {
           setSettings(data.settings);
         }
@@ -133,7 +143,9 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
       }
     };
     
-    fetchSettings();
+    if (userId) {
+      fetchSettings();
+    }
   }, [userId]);
 
   const saveSettings = async () => {

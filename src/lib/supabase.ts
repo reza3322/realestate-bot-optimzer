@@ -1,4 +1,3 @@
-
 import { createClient } from '@supabase/supabase-js';
 import { toast } from 'sonner';
 
@@ -12,58 +11,38 @@ export const supabase = createClient(supabaseUrl, supabaseKey);
 // Check if the chatbot_settings table exists
 export const createChatbotSettingsTable = async () => {
   try {
-    const { data, error } = await supabase
+    // Try to count rows in the table to check if it exists
+    const { error } = await supabase
       .from('chatbot_settings')
-      .select('count')
-      .limit(1);
+      .select('*', { count: 'exact', head: true });
     
     if (error) {
       if (error.code === '42P01') { // Table doesn't exist
         console.log('Table chatbot_settings does not exist, attempting to create it');
         
-        // Try to create the table via RPC
+        // Try to create the table via edge function (more reliable than RPC)
         try {
-          const { error: createError } = await supabase.rpc('create_chatbot_settings_table_if_not_exists');
+          // Call the edge function without authentication for initial setup
+          const { error: funcError } = await supabase.functions.invoke('create-chatbot-settings');
           
-          if (createError) {
-            console.error('Error creating chatbot_settings table via RPC:', createError);
-            
-            // If the RPC fails, attempt to create the table via edge function
-            try {
-              const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-              
-              if (sessionError || !sessionData.session) {
-                console.error('No session available for edge function call:', sessionError);
-                return { success: false, error: sessionError || new Error('No session') };
-              }
-              
-              const { error: funcError } = await supabase.functions.invoke('create-chatbot-settings', {
-                headers: {
-                  Authorization: `Bearer ${sessionData.session.access_token}`
-                }
-              });
-              
-              if (funcError) {
-                console.error('Error creating chatbot_settings table via edge function:', funcError);
-                return { success: false, error: funcError };
-              }
-            } catch (callError) {
-              console.error('Exception in edge function call:', callError);
-              return { success: false, error: callError };
-            }
+          if (funcError) {
+            console.error('Error creating chatbot_settings table via edge function:', funcError);
+            return { success: false, error: funcError };
           }
-        } catch (rpcError) {
-          console.error('Exception in RPC call:', rpcError);
-          return { success: false, error: rpcError };
+          
+          console.log('Successfully created chatbot_settings table via edge function');
+          return { success: true };
+        } catch (callError) {
+          console.error('Exception in edge function call:', callError);
+          return { success: false, error: callError };
         }
-        
-        return { success: true };
       } else {
         console.error('Unexpected error checking chatbot_settings table:', error);
         return { success: false, error };
       }
     }
     
+    console.log('Table chatbot_settings exists');
     return { success: true };
   } catch (error) {
     console.error('Error in createChatbotSettingsTable:', error);

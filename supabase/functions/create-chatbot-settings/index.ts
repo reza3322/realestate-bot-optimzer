@@ -22,19 +22,29 @@ serve(async (req) => {
       throw new Error('Missing environment variables for Supabase connection')
     }
 
+    console.log('Creating Supabase client with service role key')
+    
     // Create a Supabase client with the service role key
     const supabase = createClient(supabaseUrl, supabaseServiceRole)
 
-    // Create the chatbot_settings table if it doesn't exist
-    const { error } = await supabase.rpc('create_chatbot_settings_table_if_not_exists')
+    console.log('Checking if chatbot_settings table exists')
+    
+    // Try to create the chatbot_settings table using SQL directly
+    const { data, error } = await supabase.rpc('create_chatbot_settings_table_if_not_exists')
 
     if (error) {
       console.error('Error creating chatbot_settings table:', error)
       throw error
     }
 
+    console.log('Successfully created or confirmed chatbot_settings table')
+    
     return new Response(
-      JSON.stringify({ success: true, message: 'Chatbot settings table created or already exists' }),
+      JSON.stringify({ 
+        success: true, 
+        message: 'Chatbot settings table created or already exists',
+        data
+      }),
       {
         headers: {
           ...corsHeaders,
