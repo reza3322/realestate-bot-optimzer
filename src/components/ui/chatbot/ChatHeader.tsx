@@ -6,7 +6,7 @@ interface ChatHeaderProps {
   botName: string;
   headerStyle: string;
   fontStyle: string;
-  apiKeyStatus?: 'set' | 'not-set';
+  apiKeyStatus?: 'set' | 'not-set' | 'checking';
   BotIcon?: LucideIcon;
 }
 
@@ -26,6 +26,9 @@ const ChatHeader = ({
         {botName}
         {apiKeyStatus === 'not-set' && (
           <span className="ml-2 text-xs opacity-70">(Demo Mode)</span>
+        )}
+        {apiKeyStatus === 'checking' && (
+          <span className="ml-2 text-xs opacity-70">(Checking API...)</span>
         )}
       </div>
     </div>

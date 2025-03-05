@@ -10,6 +10,7 @@ export interface ChatbotDemoProps {
   fontStyle?: 'default' | 'serif' | 'mono' | 'sans' | 'inter';
   primaryColor?: string;
   botIcon?: string;
+  apiKeyStatus?: 'set' | 'not-set' | 'checking';
 }
 
 export interface ChatStylesType {
