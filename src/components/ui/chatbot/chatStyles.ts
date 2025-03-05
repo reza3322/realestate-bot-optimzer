@@ -95,20 +95,20 @@ export const getChatStyles = (
       userBubble: `${varColors.primary} ${varColors.text} rounded-lg rounded-tr-none`,
       botIcon: `${varColors.primary} ${varColors.text}`,
       userIcon: 'bg-gray-200 text-gray-600',
-      inputContainer: 'bg-white border-t border-gray-100'
+      inputContainer: 'bg-white'
     };
   }
   
   if (theme === 'modern') {
     return {
-      container: 'bg-gray-50 border-0 rounded-xl shadow-lg',
+      container: 'bg-white border-0 rounded-xl shadow-lg',
       header: `${varColors.primary} ${varColors.text} p-4 rounded-t-xl`,
       font: 'font-sans',
       botBubble: `${varColors.secondary} ${varColors.secondaryText} rounded-2xl rounded-tl-none shadow-sm`,
       userBubble: `${varColors.primary} ${varColors.text} rounded-2xl rounded-tr-none shadow-sm`,
       botIcon: `${varColors.primary} ${varColors.text} rounded-full`,
       userIcon: 'bg-gray-700 text-white rounded-full',
-      inputContainer: 'bg-gray-50 border-t border-gray-200 p-4'
+      inputContainer: 'bg-white'
     };
   }
   
@@ -121,7 +121,7 @@ export const getChatStyles = (
       userBubble: 'bg-gray-800 text-white rounded-md rounded-tr-none',
       botIcon: 'bg-gray-200 text-gray-600 rounded-full',
       userIcon: 'bg-gray-600 text-white rounded-full',
-      inputContainer: 'bg-white border-t border-gray-50'
+      inputContainer: 'bg-white'
     };
   }
   
@@ -134,7 +134,7 @@ export const getChatStyles = (
     userBubble: 'bg-blue-600 text-white rounded-lg rounded-tr-none',
     botIcon: 'bg-blue-600 text-white',
     userIcon: 'bg-gray-200 text-gray-600',
-    inputContainer: 'bg-white border-t border-gray-100'
+    inputContainer: 'bg-white'
   };
 };
 

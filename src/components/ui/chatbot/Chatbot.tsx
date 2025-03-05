@@ -132,7 +132,7 @@ const Chatbot = ({
 
   return (
     <div className={cn(
-      'flex flex-col overflow-hidden rounded-lg border shadow-md',
+      'flex flex-col overflow-hidden rounded-lg shadow-md',
       styles.container,
       styles.font,
       className
@@ -146,7 +146,7 @@ const Chatbot = ({
       />
       
       <div 
-        className="flex-1 p-4 overflow-y-auto space-y-4 scrollbar-none"
+        className="flex-1 p-4 overflow-y-auto space-y-4 scrollbar-none bg-white"
         style={{ minHeight: '300px', maxHeight }}
       >
         {messages.map((message, index) => (

@@ -23,7 +23,7 @@ const ChatInput = ({ inputContainerStyle, onSendMessage, placeholderText = "Type
   return (
     <form 
       onSubmit={handleSubmit} 
-      className={cn("p-3 border-t", inputContainerStyle)}
+      className={cn("p-3", inputContainerStyle)}
     >
       <div className="relative flex items-center">
         <input
@@ -31,7 +31,7 @@ const ChatInput = ({ inputContainerStyle, onSendMessage, placeholderText = "Type
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
           placeholder={placeholderText}
-          className="w-full px-4 py-2 border rounded-full focus:outline-none focus:ring-2 focus:ring-primary"
+          className="w-full px-4 py-2 border rounded-full bg-white text-gray-800 focus:outline-none focus:ring-2 focus:ring-primary"
         />
         <button
           type="submit"
