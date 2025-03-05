@@ -354,6 +354,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      create_chatbot_settings_table_if_not_exists: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
       generate_chatbot_script:
         | {
             Args: {

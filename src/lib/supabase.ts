@@ -15,15 +15,15 @@ export const createChatbotSettingsTable = async () => {
     console.log('Attempting to create chatbot_settings table if it doesn\'t exist');
     
     // Call the edge function to create the table if needed
-    const { error: funcError } = await supabase.functions.invoke('create-chatbot-settings');
+    const { data, error } = await supabase.functions.invoke('create-chatbot-settings');
     
-    if (funcError) {
-      console.error('Error creating chatbot_settings table via edge function:', funcError);
-      return { success: false, error: funcError };
+    if (error) {
+      console.error('Error creating chatbot_settings table via edge function:', error);
+      return { success: false, error: error };
     }
     
-    console.log('Successfully created or confirmed chatbot_settings table');
-    return { success: true };
+    console.log('Result from create-chatbot-settings edge function:', data);
+    return { success: true, data };
   } catch (error) {
     console.error('Error in createChatbotSettingsTable:', error);
     return { success: false, error };
@@ -35,6 +35,8 @@ export const generateChatbotScript = async (userId: string) => {
   try {
     // Get the current origin for dynamic base URL
     const currentOrigin = typeof window !== 'undefined' ? window.location.origin : null;
+    
+    console.log(`Generating script with userId: ${userId}, origin: ${currentOrigin}`);
     
     // Call the database function to generate the script
     const { data, error } = await supabase
@@ -48,6 +50,7 @@ export const generateChatbotScript = async (userId: string) => {
       return { script: null, error };
     }
     
+    console.log('Generated chatbot script:', data);
     return { script: data, error: null };
   } catch (error) {
     console.error('Error in generateChatbotScript:', error);

@@ -1,11 +1,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+import { corsHeaders } from '../_shared/cors.ts'
 
 serve(async (req) => {
   // Handle CORS
@@ -27,7 +23,7 @@ serve(async (req) => {
     // Create a Supabase client with the service role key
     const supabase = createClient(supabaseUrl, supabaseServiceRole)
 
-    console.log('Checking if chatbot_settings table exists')
+    console.log('Calling database function to create/check the chatbot_settings table')
     
     // Call the database function to create/check the table
     const { data, error } = await supabase.rpc('create_chatbot_settings_table_if_not_exists')
@@ -37,12 +33,12 @@ serve(async (req) => {
       throw error
     }
 
-    console.log('Successfully created or confirmed chatbot_settings table')
+    console.log('Result from database function:', data)
     
     return new Response(
       JSON.stringify({ 
         success: true, 
-        message: 'Chatbot settings table created or already exists',
+        message: 'Chatbot settings table checked/created successfully',
         data
       }),
       {
