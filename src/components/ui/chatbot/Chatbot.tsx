@@ -132,6 +132,7 @@ const Chatbot = ({
 
   return (
     <div className={cn(
+      'flex flex-col overflow-hidden rounded-lg border shadow-md',
       styles.container,
       styles.font,
       className
