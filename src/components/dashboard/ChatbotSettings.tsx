@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -90,10 +91,12 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
     const fetchSettings = async () => {
       setLoading(true);
       try {
-        await supabase.rpc('create_chatbot_settings_table_if_not_exists')
-          .catch(err => {
-            console.log('RPC function not available or failed, will be created on first save', err);
-          });
+        // Try to call the RPC function but handle errors properly
+        try {
+          await supabase.rpc('create_chatbot_settings_table_if_not_exists');
+        } catch (err) {
+          console.log('RPC function not available or failed, will be created on first save', err);
+        }
             
         const { data, error } = await supabase
           .from("chatbot_settings")
@@ -123,6 +126,7 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
   const saveSettings = async () => {
     setSaving(true);
     try {
+      // Try to call the RPC function but handle errors properly
       try {
         await supabase.rpc('create_chatbot_settings_table_if_not_exists');
       } catch (err) {

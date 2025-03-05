@@ -21,33 +21,40 @@ export const createChatbotSettingsTable = async () => {
       if (error.code === '42P01') { // Table doesn't exist
         console.log('Creating chatbot_settings table...');
         
-        // Create the table with all required fields
-        const { error: createError } = await supabase.rpc('create_chatbot_settings_table_if_not_exists');
-        
-        if (createError) {
-          console.error('Error creating chatbot_settings table via RPC:', createError);
+        // Try to create the table via RPC
+        try {
+          const { error: createError } = await supabase.rpc('create_chatbot_settings_table_if_not_exists');
           
-          // If the RPC fails, attempt to create the table directly
-          const { error: directCreateError } = await supabase.auth.getSession().then(({ data: { session } }) => {
-            if (!session) return { error: new Error('No session') };
+          if (createError) {
+            console.error('Error creating chatbot_settings table via RPC:', createError);
             
-            return supabase.functions.invoke('create-chatbot-settings', {
+            // If the RPC fails, attempt to create the table via edge function
+            const session = await supabase.auth.getSession();
+            if (!session.data.session) {
+              console.error('No session available for edge function call');
+              return { success: false, error: new Error('No session') };
+            }
+            
+            const { data: funcData, error: funcError } = await supabase.functions.invoke('create-chatbot-settings', {
               headers: {
-                Authorization: `Bearer ${session.access_token}`
+                Authorization: `Bearer ${session.data.session.access_token}`
               }
             });
-          });
-          
-          if (directCreateError) {
-            console.error('Error creating chatbot_settings table via edge function:', directCreateError);
-            throw directCreateError;
+            
+            if (funcError) {
+              console.error('Error creating chatbot_settings table via edge function:', funcError);
+              return { success: false, error: funcError };
+            }
           }
+        } catch (rpcError) {
+          console.error('Exception in RPC or edge function call:', rpcError);
+          return { success: false, error: rpcError };
         }
         
         return { success: true };
       } else {
         console.error('Unexpected error checking chatbot_settings table:', error);
-        throw error;
+        return { success: false, error };
       }
     }
     
