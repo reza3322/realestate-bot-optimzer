@@ -139,10 +139,11 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
         .upsert({ 
           user_id: userId,
           settings,
-          updated_at: new Date()
+          updated_at: new Date().toISOString()
         });
       
       if (error) {
+        console.error("Error details:", error);
         throw error;
       }
       
