@@ -44,7 +44,11 @@ const ChatHeader = ({
       "p-4 flex justify-between items-center",
       headerStyle
     )}>
-      <h3 className="font-medium text-center flex-1">{botName}</h3>
+      <div className="flex items-center gap-2">
+        <BotIcon iconName={botIconName} className="w-5 h-5" />
+        <h3 className="font-medium">{botName}</h3>
+      </div>
+      
       <TooltipProvider>
         <Tooltip>
           <TooltipTrigger asChild>

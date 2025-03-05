@@ -150,10 +150,10 @@ const Chatbot = ({
         botIconName={botIconName}
       />
       
-      {/* Messages Container - Fixed height with overflow */}
+      {/* Messages Container */}
       <div 
         className="flex-1 p-4 overflow-y-auto space-y-4 scrollbar-none relative"
-        style={{ height: `calc(100% - 120px)` }} // Subtract header and input heights
+        style={{ height: `calc(100% - 120px)` }}
       >
         {messages.map((message, index) => (
           <ChatMessage 
