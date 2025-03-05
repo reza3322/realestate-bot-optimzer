@@ -1,9 +1,7 @@
-
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/sections/Footer';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { getSession, getUserProfile, getUserRole, getLeads, getProperties, getRecentActivities } from '@/lib/supabase';
@@ -16,7 +14,7 @@ import LeadManagement from '@/components/dashboard/LeadManagement';
 import MarketingAutomation from '@/components/dashboard/MarketingAutomation';
 import Integrations from '@/components/dashboard/Integrations';
 import AccountSettings from '@/components/dashboard/AccountSettings';
-import ChatbotSettings from '@/components/dashboard/ChatbotSettings';
+import ChatbotSettings from '@/components/dashboard/chatbot-settings';
 import { PlusCircle, Upload, FileSpreadsheet, Users, Bell, Lock } from 'lucide-react';
 
 const Dashboard = () => {
@@ -40,7 +38,6 @@ const Dashboard = () => {
       try {
         setLoading(true);
         
-        // Check if there's an active session
         const { data: { session } } = await getSession();
         
         if (!session) {
@@ -50,7 +47,6 @@ const Dashboard = () => {
         
         setUser(session.user);
         
-        // Fetch user profile from profiles table
         if (session.user) {
           const { data: profileData, error: profileError } = await getUserProfile(session.user.id);
           
@@ -61,17 +57,14 @@ const Dashboard = () => {
             setUserPlan(profileData.plan || 'starter');
           }
           
-          // Get user role
           const role = await getUserRole(session.user.id);
           if (role === 'admin') {
             navigate('/admin');
             return;
           }
           
-          // Fetch stats
           await fetchStats(session.user.id);
           
-          // Fetch recent activities
           await fetchActivities(session.user.id);
         }
       } catch (error) {
@@ -87,26 +80,21 @@ const Dashboard = () => {
   
   const fetchStats = async (userId) => {
     try {
-      // Get lead count
       const { data: leadsData } = await getLeads();
       
-      // Get property count
       const { data: propertiesData } = await getProperties();
       
-      // Calculate statistics
       const totalLeads = leadsData?.length || 0;
       const totalProperties = propertiesData?.length || 0;
       const featuredProperties = propertiesData?.filter(p => p.featured)?.length || 0;
       
-      // Set statistics (some values are still estimated as they would require additional tables)
       setStats({
         totalLeads,
-        activeConversations: Math.min(12, Math.floor(totalLeads * 0.4)), // Approximation
-        websiteVisitors: Math.floor(Math.random() * 300) + 200, // Random for now
+        activeConversations: Math.min(12, Math.floor(totalLeads * 0.4)),
+        websiteVisitors: Math.floor(Math.random() * 300) + 200,
         totalProperties,
         featuredProperties
       });
-      
     } catch (error) {
       console.error('Error fetching stats:', error);
     }
