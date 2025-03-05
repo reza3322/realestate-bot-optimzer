@@ -8,7 +8,7 @@ export const getChatStyles = (
 ): ChatStylesType => {
   // Base styles (shared across all themes)
   const baseStyles: ChatStylesType = {
-    container: 'bg-white dark:bg-gray-900 shadow-lg rounded-md overflow-hidden',
+    container: 'bg-white dark:bg-gray-900 shadow-md rounded-md overflow-hidden',
     header: 'bg-primary text-white p-4 flex items-center',
     userBubble: 'bg-primary/10 text-foreground rounded-lg p-3 max-w-[80%] ml-auto',
     botBubble: 'bg-muted text-foreground rounded-lg p-3 max-w-[80%]',
@@ -53,11 +53,11 @@ export const getChatStyles = (
         };
         break;
       default:
-        // Use primary color from tailwind
+        // Default blue primary theme
         colorStyles = {
-          header: `bg-primary text-white p-4 flex items-center`,
-          userBubble: `bg-primary/10 text-foreground rounded-lg p-3 max-w-[80%] ml-auto`,
-          botIcon: `bg-primary text-white h-8 w-8 rounded-full flex items-center justify-center`,
+          header: `bg-blue-500 text-white p-4 flex items-center`,
+          userBubble: `bg-blue-100 dark:bg-blue-900/30 text-foreground rounded-lg p-3 max-w-[80%] ml-auto`,
+          botIcon: `bg-blue-500 text-white h-8 w-8 rounded-full flex items-center justify-center`,
         };
         break;
     }
