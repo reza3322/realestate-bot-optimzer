@@ -133,10 +133,11 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
       try {
         await createChatbotSettingsTable();
         
-        // Fixed query: Only select data for this user without adding extra parameters
+        // Corrected query: Only fetch settings for this user with proper Supabase query format
+        console.log(`Fetching settings for user ID: ${userId}`);
         const { data, error } = await supabase
           .from("chatbot_settings")
-          .select("*")
+          .select("settings")
           .eq("user_id", userId)
           .order('updated_at', { ascending: false })
           .limit(1)
