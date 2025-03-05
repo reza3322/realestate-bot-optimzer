@@ -1,103 +1,96 @@
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
+import { User } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { getChatStyles, applyFontStyle } from './chatbot/chatStyles';
-import { getResponseForMessage, demoResponses } from './chatbot/responseHandlers';
-import { Message, ChatbotDemoProps } from './chatbot/types';
-import ChatHeader from './chatbot/ChatHeader';
-import ChatMessage from './chatbot/ChatMessage';
-import TypingIndicator from './chatbot/TypingIndicator';
-import ChatInput from './chatbot/ChatInput';
+import { BotIcon } from './chatbot/BotIcon';
+import { Message, ChatStylesType } from './chatbot/types';
 
-const ChatbotDemo = ({ 
-  theme = 'default',
-  variation = 'default',
-  fontStyle = 'default' 
-}: ChatbotDemoProps) => {
+export interface ChatbotDemoProps {
+  className?: string;
+  maxHeight?: string;
+}
+
+const ChatbotDemo = ({ className, maxHeight = "300px" }: ChatbotDemoProps) => {
   const [messages, setMessages] = useState<Message[]>([
-    { role: 'bot', content: "Hello! I'm RealHomeAI. How can I help you today?" },
+    { role: 'bot', content: "Hi there! I'm your assistant. How can I help you today?" },
+    { role: 'user', content: "Can you tell me about your real estate services?" },
+    { role: 'bot', content: "We offer a complete range of real estate services including property listings, buyer representation, and market analysis. Are you looking to buy or sell a property?" },
   ]);
-  const [isTyping, setIsTyping] = useState(false);
-  const [apiKeyStatus, setApiKeyStatus] = useState<'not-set' | 'set' | 'checking'>('checking');
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  
-  useEffect(() => {
-    // Check if API key exists in localStorage for demo purposes
-    const hasApiKey = localStorage.getItem('openai-api-key');
-    setApiKeyStatus(hasApiKey ? 'set' : 'not-set');
-  }, []);
 
-  useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [messages, isTyping]);
-
-  const handleSendMessage = async (inputValue: string) => {
-    if (!inputValue.trim()) return;
-    
-    // Add user message
-    const userMessage: Message = { role: 'user', content: inputValue };
-    setMessages(prev => [...prev, userMessage]);
-    
-    // Simulate bot typing
-    setIsTyping(true);
-    
-    try {
-      // For demo purposes we'll use the demo responses
-      // In a production environment, we would call an API endpoint 
-      // that securely uses the OpenAI API with your key
-      setTimeout(() => {
-        setIsTyping(false);
-        setMessages(prev => [...prev, { role: 'bot', content: getResponseForMessage(prev) }]);
-      }, 1500);
-    } catch (error) {
-      console.error('Error sending message:', error);
-      setIsTyping(false);
-      setMessages(prev => [...prev, { role: 'bot', content: "Sorry, I encountered an error. Please try again later." }]);
-    }
+  // Generate a demo styles object that matches ChatStylesType
+  const styles: ChatStylesType = {
+    container: 'bg-white dark:bg-gray-800 shadow-md rounded-lg',
+    header: 'bg-primary text-white p-3 rounded-t-lg flex items-center',
+    userBubble: 'bg-primary/10 text-foreground rounded-lg p-3 max-w-[80%] ml-auto',
+    botBubble: 'bg-muted text-foreground rounded-lg p-3 max-w-[80%]',
+    inputContainer: 'border-t border-border p-3 bg-background',
+    botIcon: 'bg-primary text-white h-8 w-8 rounded-full flex items-center justify-center',
+    userIcon: 'bg-primary/20 h-8 w-8 rounded-full flex items-center justify-center',
+    font: 'font-sans'
   };
-
-  // Get and apply styles based on props
-  let baseStyles = getChatStyles(theme, variation);
-  const styles = applyFontStyle(baseStyles, fontStyle);
 
   return (
     <div className={cn(
-      "w-full max-w-md mx-auto rounded-xl shadow-lg overflow-hidden flex flex-col",
+      'flex flex-col overflow-hidden rounded-lg shadow-md',
       styles.container,
-      styles.font
+      className
     )}>
-      <ChatHeader headerStyle={styles.header} apiKeyStatus={apiKeyStatus} />
-      
-      <div className="flex-1 p-4 space-y-4 overflow-y-auto max-h-[300px] min-h-[300px]">
-        {messages.map((message, i) => (
-          <ChatMessage 
-            key={i} 
-            message={message} 
-            index={i} 
-            styles={{
-              userBubble: styles.userBubble,
-              botBubble: styles.botBubble,
-              userIcon: styles.userIcon,
-              botIcon: styles.botIcon
-            }} 
-          />
-        ))}
-        
-        {isTyping && (
-          <TypingIndicator 
-            botIconStyle={styles.botIcon} 
-            botBubbleStyle={styles.botBubble} 
-          />
-        )}
-        <div ref={messagesEndRef} />
+      {/* Chat Header */}
+      <div className={cn(styles.header)}>
+        <div className={cn(styles.botIcon, 'mr-2')}>
+          <BotIcon iconName="bot" className="h-5 w-5" />
+        </div>
+        <span className="font-medium">RealHome Assistant</span>
       </div>
       
-      <ChatInput
-        inputContainerStyle={styles.inputContainer}
-        onSendMessage={handleSendMessage}
-      />
+      {/* Messages Container */}
+      <div 
+        className="flex-1 p-3 overflow-y-auto space-y-3"
+        style={{ height: maxHeight }}
+      >
+        {messages.map((message, index) => (
+          <div
+            key={index}
+            className="flex items-start gap-3"
+          >
+            {message.role === 'bot' && (
+              <div className={cn(styles.botIcon)}>
+                <BotIcon iconName="bot" className="h-5 w-5" />
+              </div>
+            )}
+            
+            <div 
+              className={cn(
+                message.role === 'user' ? styles.userBubble : styles.botBubble
+              )}
+            >
+              {message.content}
+            </div>
+            
+            {message.role === 'user' && (
+              <div className={cn(styles.userIcon)}>
+                <User className="h-5 w-5" />
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+      
+      {/* Input Area (disabled in demo) */}
+      <div className={cn(styles.inputContainer, 'flex items-center')}>
+        <input 
+          type="text" 
+          disabled 
+          className="flex-1 p-2 bg-muted rounded-md opacity-50 text-muted-foreground"
+          placeholder="Type your message... (demo only)"
+        />
+        <button 
+          disabled
+          className="ml-2 p-2 bg-primary/50 text-primary-foreground rounded-md opacity-50"
+        >
+          Send
+        </button>
+      </div>
     </div>
   );
 };

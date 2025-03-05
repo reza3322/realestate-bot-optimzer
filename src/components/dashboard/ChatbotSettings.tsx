@@ -90,29 +90,24 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
     const fetchSettings = async () => {
       setLoading(true);
       try {
-        const { error: tableError } = await supabase
-          .from('chatbot_settings')
-          .select('count')
-          .limit(1)
+        await supabase.rpc('create_chatbot_settings_table_if_not_exists')
+          .catch(err => {
+            console.log('RPC function not available or failed, will be created on first save', err);
+          });
+            
+        const { data, error } = await supabase
+          .from("chatbot_settings")
+          .select("*")
+          .eq("user_id", userId)
           .single();
         
-        if (tableError && tableError.code === '42P01') {
-          console.log('Chatbot settings table does not exist yet, will be created on first save');
-        } else {
-          const { data, error } = await supabase
-            .from("chatbot_settings")
-            .select("*")
-            .eq("user_id", userId)
-            .single();
-          
-          if (error) {
-            if (error.code !== "PGRST116") {
-              console.error("Error fetching chatbot settings:", error);
-              toast.error("Error loading chatbot settings");
-            }
-          } else if (data) {
-            setSettings(data.settings);
+        if (error) {
+          if (error.code !== "PGRST116") {
+            console.error("Error fetching chatbot settings:", error);
+            toast.error("Error loading chatbot settings");
           }
+        } else if (data) {
+          setSettings(data.settings);
         }
       } catch (error) {
         console.error("Error fetching chatbot settings:", error);
@@ -131,7 +126,20 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
       try {
         await supabase.rpc('create_chatbot_settings_table_if_not_exists');
       } catch (err) {
-        console.log('RPC not available or failed, will try direct upsert', err);
+        console.log('RPC not available or failed, trying edge function', err);
+        
+        try {
+          const { data: sessionData } = await supabase.auth.getSession();
+          if (sessionData.session) {
+            await supabase.functions.invoke('create-chatbot-settings', {
+              headers: {
+                Authorization: `Bearer ${sessionData.session.access_token}`
+              }
+            });
+          }
+        } catch (funcErr) {
+          console.error('Edge function failed too:', funcErr);
+        }
       }
       
       const { error } = await supabase

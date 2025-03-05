@@ -8,6 +8,56 @@ const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS
 // Create a Supabase client
 export const supabase = createClient(supabaseUrl, supabaseKey);
 
+// Create the chatbot_settings table if needed
+export const createChatbotSettingsTable = async () => {
+  try {
+    // First try to directly check if the table exists
+    const { data, error } = await supabase
+      .from('chatbot_settings')
+      .select('count')
+      .limit(1);
+    
+    if (error) {
+      if (error.code === '42P01') { // Table doesn't exist
+        console.log('Creating chatbot_settings table...');
+        
+        // Create the table with all required fields
+        const { error: createError } = await supabase.rpc('create_chatbot_settings_table_if_not_exists');
+        
+        if (createError) {
+          console.error('Error creating chatbot_settings table via RPC:', createError);
+          
+          // If the RPC fails, attempt to create the table directly
+          const { error: directCreateError } = await supabase.auth.getSession().then(({ data: { session } }) => {
+            if (!session) return { error: new Error('No session') };
+            
+            return supabase.functions.invoke('create-chatbot-settings', {
+              headers: {
+                Authorization: `Bearer ${session.access_token}`
+              }
+            });
+          });
+          
+          if (directCreateError) {
+            console.error('Error creating chatbot_settings table via edge function:', directCreateError);
+            throw directCreateError;
+          }
+        }
+        
+        return { success: true };
+      } else {
+        console.error('Unexpected error checking chatbot_settings table:', error);
+        throw error;
+      }
+    }
+    
+    return { success: true };
+  } catch (error) {
+    console.error('Error in createChatbotSettingsTable:', error);
+    return { success: false, error };
+  }
+};
+
 // Authentication functions
 export const signIn = async (email: string, password: string) => {
   const { data, error } = await supabase.auth.signInWithPassword({

@@ -26,8 +26,7 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceRole)
 
     // Create the chatbot_settings table if it doesn't exist
-    const { error } = await supabase
-      .rpc('create_chatbot_settings_table_if_not_exists')
+    const { error } = await supabase.rpc('create_chatbot_settings_table_if_not_exists')
 
     if (error) {
       console.error('Error creating chatbot_settings table:', error)
