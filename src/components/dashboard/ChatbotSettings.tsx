@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -128,11 +129,9 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
   const saveSettings = async () => {
     setSaving(true);
     try {
-      try {
-        await supabase.rpc('create_chatbot_settings_table_if_not_exists');
-      } catch (err) {
+      await supabase.rpc('create_chatbot_settings_table_if_not_exists').catch(err => {
         console.log('RPC not available or failed, will try direct upsert', err);
-      }
+      });
       
       const { error } = await supabase
         .from("chatbot_settings")
@@ -686,8 +685,6 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
                         botName={settings.botName}
                         welcomeMessage={settings.welcomeMessage}
                         placeholderText={settings.placeholderText}
-                        primaryColor={settings.primaryColor}
-                        botIcon={settings.botIcon}
                       />
                     </div>
                   </CardContent>

@@ -1,8 +1,7 @@
 
-import React from 'react';
 import { cn } from '@/lib/utils';
+import { User, Bot } from 'lucide-react';
 import { Message } from './types';
-import { LucideIcon, MessageCircle, User } from 'lucide-react';
 
 interface ChatMessageProps {
   message: Message;
@@ -13,33 +12,45 @@ interface ChatMessageProps {
     userIcon: string;
     botIcon: string;
   };
-  BotIcon?: LucideIcon;
 }
 
-const ChatMessage = ({ message, index, styles, BotIcon = MessageCircle }: ChatMessageProps) => {
-  const isUser = message.role === 'user';
-  
+const ChatMessage = ({ message, index, styles }: ChatMessageProps) => {
   return (
-    <div className={cn(
-      'flex gap-2 mb-3', 
-      isUser ? 'flex-row-reverse' : 'flex-row'
-    )}>
-      <div className={cn(
-        'rounded-full w-8 h-8 flex items-center justify-center',
-        isUser ? styles.userIcon : styles.botIcon
-      )}>
-        {isUser ? (
-          <User className="w-5 h-5" />
-        ) : (
-          <BotIcon className="w-5 h-5" />
+    <div 
+      className={cn(
+        "flex items-start gap-3 animate-fade-in-up",
+        message.role === 'user' ? "justify-end" : "justify-start"
+      )}
+      style={{ animationDelay: `${index * 0.1}s` }}
+    >
+      {message.role === 'bot' && (
+        <div className={cn(
+          "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0",
+          styles.botIcon
+        )}>
+          <Bot className="w-4 h-4" />
+        </div>
+      )}
+      
+      <div 
+        className={cn(
+          "max-w-[80%] p-3 text-sm",
+          message.role === 'user' 
+            ? styles.userBubble
+            : styles.botBubble
         )}
-      </div>
-      <div className={cn(
-        'py-2 px-3 rounded-lg max-w-[75%]',
-        isUser ? styles.userBubble : styles.botBubble
-      )}>
+      >
         {message.content}
       </div>
+      
+      {message.role === 'user' && (
+        <div className={cn(
+          "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0",
+          styles.userIcon
+        )}>
+          <User className="w-4 h-4" />
+        </div>
+      )}
     </div>
   );
 };

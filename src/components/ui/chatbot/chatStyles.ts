@@ -1,108 +1,99 @@
 
-import { cva } from "class-variance-authority";
-
-export type ChatTheme = 'default' | 'modern' | 'minimal' | 'rounded' | 'bubble';
-export type ChatVariation = 'default' | 'blue' | 'green' | 'purple' | 'red' | 'orange' | 'custom';
-export type FontStyle = 'default' | 'serif' | 'mono' | 'sans' | 'inter' | 'rounded' | 'playful';
-
-interface ChatStyles {
-  container: string;
-  header: string;
-  font: string;
-  botBubble: string;
-  userBubble: string;
-  botIcon: string;
-  userIcon: string;
-  inputContainer: string;
-  inputField: string;
-  sendButton: string;
-}
+import { ChatStylesType } from './types';
 
 export const getChatStyles = (
-  theme: ChatTheme = 'default',
-  variation: ChatVariation = 'blue',
-  primaryColor?: string
-): ChatStyles => {
-  // Base color values for preset variations
-  const colorMap = {
-    default: '#3b82f6', // blue
-    blue: '#0ea5e9',    // sky blue
-    green: '#10b981',   // emerald
-    purple: '#8b5cf6',  // violet
-    red: '#ef4444',     // red
-    orange: '#f97316'   // orange
-  };
-  
-  // Use primaryColor if provided and variation is custom, otherwise use the preset color
-  const themeColor = (variation === 'custom' && primaryColor) 
-    ? primaryColor 
-    : colorMap[variation] || colorMap.default;
-  
-  // Apply theme-specific styles
-  let styles: ChatStyles = {
-    container: 'bg-white rounded-lg overflow-hidden shadow-md',
-    header: `bg-[${themeColor}] text-white p-3 flex items-center gap-2`,
+  theme: 'default' | 'modern' | 'minimal',
+  variation: 'default' | 'blue' | 'green' | 'purple' = 'default'
+): ChatStylesType => {
+  // Base styles (shared across all themes)
+  const baseStyles: ChatStylesType = {
+    container: 'bg-white dark:bg-gray-900 shadow-lg',
+    header: 'bg-primary text-white p-4 flex items-center',
+    userBubble: 'bg-primary/10 text-foreground rounded-lg p-3 max-w-[80%] ml-auto',
+    botBubble: 'bg-muted text-foreground rounded-lg p-3 max-w-[80%]',
+    inputContainer: 'border-t border-border p-4 bg-background',
+    botIcon: 'bg-primary text-white h-8 w-8 rounded-full flex items-center justify-center',
+    userIcon: 'bg-primary/20 h-8 w-8 rounded-full flex items-center justify-center',
     font: 'font-sans',
-    botBubble: 'bg-gray-100 text-gray-800 p-3 rounded-lg rounded-tl-none max-w-[85%]',
-    userBubble: `bg-[${themeColor}] text-white p-3 rounded-lg rounded-tr-none max-w-[85%]`,
-    botIcon: `bg-[${themeColor}] text-white rounded-full p-1`,
-    userIcon: 'bg-gray-200 text-gray-600 rounded-full p-1',
-    inputContainer: 'bg-white p-3',
-    inputField: 'px-5 py-3 rounded-full bg-white text-gray-700 border border-gray-200 focus:outline-none focus:ring-1',
-    sendButton: `absolute right-2 p-2 rounded-full bg-[${themeColor}] text-white hover:bg-opacity-90 disabled:opacity-50`
   };
+
+  // Apply color variation
+  let colorStyles: Partial<ChatStylesType> = {};
   
-  // Apply theme-specific adjustments
+  switch (variation) {
+    case 'blue':
+      colorStyles = {
+        header: `bg-blue-500 text-white p-4 flex items-center`,
+        userBubble: `bg-blue-100 dark:bg-blue-900/30 text-foreground rounded-lg p-3 max-w-[80%] ml-auto`,
+        botIcon: `bg-blue-500 text-white h-8 w-8 rounded-full flex items-center justify-center`,
+      };
+      break;
+    case 'green':
+      colorStyles = {
+        header: `bg-emerald-600 text-white p-4 flex items-center`,
+        userBubble: `bg-emerald-100 dark:bg-emerald-900/30 text-foreground rounded-lg p-3 max-w-[80%] ml-auto`,
+        botIcon: `bg-emerald-600 text-white h-8 w-8 rounded-full flex items-center justify-center`,
+      };
+      break;
+    case 'purple':
+      colorStyles = {
+        header: `bg-purple-600 text-white p-4 flex items-center`,
+        userBubble: `bg-purple-100 dark:bg-purple-900/30 text-foreground rounded-lg p-3 max-w-[80%] ml-auto`,
+        botIcon: `bg-purple-600 text-white h-8 w-8 rounded-full flex items-center justify-center`,
+      };
+      break;
+    default:
+      // Use primary color from base styles
+      break;
+  }
+
+  // Apply theme-specific styles
+  let themeStyles: Partial<ChatStylesType> = {};
+  
   switch (theme) {
     case 'modern':
-      styles = {
-        ...styles,
-        container: 'bg-white rounded-xl overflow-hidden shadow-lg border border-gray-100',
-        header: `bg-[${themeColor}] text-white p-4 flex items-center gap-3`,
-        botBubble: 'bg-gray-100 text-gray-800 p-3 rounded-xl rounded-tl-none max-w-[85%]',
-        userBubble: `bg-[${themeColor}] text-white p-3 rounded-xl rounded-tr-none max-w-[85%]`,
-        inputContainer: 'bg-white p-4 border-t border-gray-50',
-        inputField: 'px-5 py-3 rounded-full bg-white text-gray-700 border border-gray-200 focus:outline-none focus:ring-2',
+      themeStyles = {
+        container: `bg-white dark:bg-gray-900 shadow-lg rounded-xl`,
+        header: `${colorStyles.header || baseStyles.header} rounded-t-xl`,
+        userBubble: `${colorStyles.userBubble || baseStyles.userBubble} rounded-2xl`,
+        botBubble: `${baseStyles.botBubble} rounded-2xl`,
+        inputContainer: `border-t border-border p-4 bg-background rounded-b-xl`,
       };
       break;
     case 'minimal':
-      styles = {
-        ...styles,
-        container: 'bg-white overflow-hidden shadow-sm border border-gray-100',
-        header: `bg-[${themeColor}] text-white p-3 flex items-center gap-2`,
-        botBubble: 'bg-gray-50 text-gray-800 p-3 border-l-2 border-gray-200 max-w-[85%]',
-        userBubble: `border-r-2 border-[${themeColor}] bg-white text-gray-800 p-3 max-w-[85%]`,
-        inputContainer: 'bg-white p-3 border-t border-gray-100',
-        inputField: 'px-4 py-2 bg-white text-gray-700 border border-gray-200 focus:outline-none',
-        sendButton: `p-2 rounded-sm bg-[${themeColor}] text-white hover:bg-opacity-90 disabled:opacity-50`
+      themeStyles = {
+        container: `bg-white dark:bg-gray-900 shadow-md`,
+        header: `${colorStyles.header || baseStyles.header} border-b border-border bg-background text-foreground`,
+        userBubble: `${colorStyles.userBubble || baseStyles.userBubble} rounded-md border border-border/50`,
+        botBubble: `${baseStyles.botBubble} rounded-md border border-border/50`,
+        inputContainer: `border-t border-border p-3 bg-background`,
       };
       break;
-    case 'rounded':
-      styles = {
-        ...styles,
-        container: 'bg-white rounded-3xl overflow-hidden shadow-md',
-        botBubble: 'bg-gray-100 text-gray-800 p-3 rounded-2xl rounded-tl-none max-w-[85%]',
-        userBubble: `bg-[${themeColor}] text-white p-3 rounded-2xl rounded-tr-none max-w-[85%]`,
-        inputField: 'px-5 py-3 rounded-full bg-white text-gray-700 border border-gray-200 focus:outline-none focus:ring-1',
-      };
-      break;
-    case 'bubble':
-      styles = {
-        ...styles,
-        container: 'bg-white rounded-lg overflow-hidden shadow-lg',
-        botBubble: 'bg-gray-100 text-gray-800 p-3 rounded-full max-w-[85%]',
-        userBubble: `bg-[${themeColor}] text-white p-3 rounded-full max-w-[85%]`,
-        inputContainer: 'bg-gray-50 p-3',
-        inputField: 'px-5 py-3 rounded-full bg-white text-gray-700 border-0 shadow-sm focus:outline-none focus:ring-1',
+    default:
+      // Use default theme
+      themeStyles = {
+        container: baseStyles.container,
+        header: colorStyles.header || baseStyles.header,
+        userBubble: colorStyles.userBubble || baseStyles.userBubble,
+        botBubble: baseStyles.botBubble,
+        inputContainer: baseStyles.inputContainer,
       };
       break;
   }
-  
-  return styles;
+
+  // Merge base styles with theme-specific and color styles
+  return {
+    ...baseStyles,
+    ...themeStyles,
+    botIcon: colorStyles.botIcon || baseStyles.botIcon,
+  };
 };
 
-export const applyFontStyle = (styles: ChatStyles, fontStyle: FontStyle): ChatStyles => {
-  let fontClass: string;
+export const applyFontStyle = (
+  styles: ChatStylesType,
+  fontStyle: 'default' | 'serif' | 'mono' = 'default'
+): ChatStylesType => {
+  let fontClass = '';
   
   switch (fontStyle) {
     case 'serif':
@@ -111,24 +102,13 @@ export const applyFontStyle = (styles: ChatStyles, fontStyle: FontStyle): ChatSt
     case 'mono':
       fontClass = 'font-mono';
       break;
-    case 'sans':
-      fontClass = 'font-sans';
-      break;
-    case 'inter':
-      fontClass = 'font-sans'; // Using sans as fallback if Inter isn't available
-      break;
-    case 'rounded':
-      fontClass = 'font-sans tracking-wide'; // Rounded, friendly look
-      break;
-    case 'playful':
-      fontClass = 'font-sans tracking-wide leading-relaxed'; // More playful spacing
-      break;
     default:
       fontClass = 'font-sans';
+      break;
   }
   
   return {
     ...styles,
-    font: fontClass
+    font: fontClass,
   };
 };

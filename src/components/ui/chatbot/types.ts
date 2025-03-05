@@ -7,10 +7,7 @@ export interface Message {
 export interface ChatbotDemoProps {
   theme?: 'default' | 'modern' | 'minimal';
   variation?: 'default' | 'blue' | 'green' | 'purple';
-  fontStyle?: 'default' | 'serif' | 'mono' | 'sans' | 'inter';
-  primaryColor?: string;
-  botIcon?: string;
-  apiKeyStatus?: 'set' | 'not-set' | 'checking';
+  fontStyle?: 'default' | 'serif' | 'mono';
 }
 
 export interface ChatStylesType {

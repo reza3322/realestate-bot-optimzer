@@ -1,55 +1,73 @@
 
-import React, { useState } from 'react';
+import { useState, useRef, KeyboardEvent } from 'react';
+import { Send } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { ArrowUp } from 'lucide-react';
 
 interface ChatInputProps {
-  inputContainerStyle: string;
-  inputFieldStyle?: string;
-  sendButtonStyle?: string;
+  inputContainerStyle?: string;
   onSendMessage: (message: string) => void;
   placeholderText?: string;
 }
 
 const ChatInput = ({ 
   inputContainerStyle, 
-  inputFieldStyle = 'px-5 py-3 rounded-full bg-white text-gray-700 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500',
-  sendButtonStyle = 'absolute right-2 p-2 rounded-full bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50',
-  onSendMessage, 
-  placeholderText = "Type your message here..." 
+  onSendMessage,
+  placeholderText = "Type a message..." 
 }: ChatInputProps) => {
-  const [inputValue, setInputValue] = useState('');
+  const [message, setMessage] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (inputValue.trim()) {
-      onSendMessage(inputValue);
-      setInputValue('');
+  const handleSubmit = (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation(); // Prevent event from bubbling up
+    }
+    
+    if (message.trim()) {
+      // Call onSendMessage without triggering page scroll
+      setTimeout(() => {
+        onSendMessage(message.trim());
+        setMessage('');
+      }, 0);
+    }
+  };
+
+  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      e.stopPropagation(); // Prevent event from bubbling up
+      handleSubmit();
     }
   };
 
   return (
-    <form 
-      onSubmit={handleSubmit} 
-      className={cn("p-3", inputContainerStyle)}
-    >
-      <div className="relative flex items-center">
-        <input
-          type="text"
-          value={inputValue}
-          onChange={(e) => setInputValue(e.target.value)}
-          placeholder={placeholderText}
-          className={cn("w-full", inputFieldStyle)}
-        />
-        <button
-          type="submit"
-          className={cn(sendButtonStyle)}
-          disabled={!inputValue.trim()}
-        >
-          <ArrowUp className="w-4 h-4" />
-        </button>
-      </div>
-    </form>
+    <div className={cn(
+      "border-t p-3 flex items-center gap-2",
+      inputContainerStyle
+    )}>
+      <input
+        ref={inputRef}
+        type="text"
+        value={message}
+        onChange={(e) => setMessage(e.target.value)}
+        onKeyDown={handleKeyDown}
+        placeholder={placeholderText}
+        className="flex-1 bg-transparent border border-input rounded-md h-10 px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ring"
+      />
+      <button
+        onClick={(e) => handleSubmit(e)}
+        disabled={!message.trim()}
+        className={cn(
+          "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors h-10 w-10",
+          "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+          message.trim() 
+            ? "text-primary-foreground bg-primary hover:bg-primary/90" 
+            : "text-muted-foreground bg-secondary hover:bg-secondary/80"
+        )}
+      >
+        <Send className="h-5 w-5" />
+      </button>
+    </div>
   );
 };
 

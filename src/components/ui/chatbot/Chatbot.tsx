@@ -8,15 +8,13 @@ import TypingIndicator from './TypingIndicator';
 import { getChatStyles, applyFontStyle } from './chatStyles';
 import { Message } from './types';
 import { testChatbotResponse } from './responseHandlers';
-import { MessageCircle, Bot, Headphones, MessageSquare, BrainCircuit } from 'lucide-react';
-import { LucideIcon } from 'lucide-react';
 
 interface ChatbotProps {
   apiKey?: string;
   className?: string;
-  theme?: 'default' | 'modern' | 'minimal' | 'rounded' | 'bubble';
-  variation?: 'default' | 'blue' | 'green' | 'purple' | 'red' | 'orange' | 'custom';
-  fontStyle?: 'default' | 'serif' | 'mono' | 'sans' | 'inter' | 'rounded' | 'playful';
+  theme?: 'default' | 'modern' | 'minimal';
+  variation?: 'default' | 'blue' | 'green' | 'purple';
+  fontStyle?: 'default' | 'serif' | 'mono';
   botName?: string;
   welcomeMessage?: string;
   placeholderText?: string;
@@ -24,24 +22,20 @@ interface ChatbotProps {
   onSendMessage?: (message: string) => void;
   userId?: string;
   useRealAPI?: boolean;
-  primaryColor?: string;
-  botIcon?: string;
 }
 
 const Chatbot = ({
   className,
   theme = 'default',
-  variation = 'blue',
+  variation = 'default',
   fontStyle = 'default',
   botName = "RealHomeAI Assistant",
-  welcomeMessage = "👋 Hi there! I'm your RealHomeAI assistant. I can help you find properties, answer questions about listings, and even schedule viewings. Try asking me about available properties or how I can help with your real estate needs!",
-  placeholderText = "Type your message here...",
+  welcomeMessage = "Hi there! I'm your RealHomeAI assistant. How can I help you today?",
+  placeholderText = "Type your message...",
   maxHeight = "400px",
   onSendMessage,
   userId = 'demo-user',
-  useRealAPI = false,
-  primaryColor,
-  botIcon = 'message-circle'
+  useRealAPI = false
 }: ChatbotProps) => {
   const [messages, setMessages] = useState<Message[]>([
     { role: 'bot', content: welcomeMessage }
@@ -49,31 +43,19 @@ const Chatbot = ({
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
-  
-  // Get icon component based on string name
-  const getBotIconComponent = (): LucideIcon => {
-    switch (botIcon) {
-      case 'bot': return Bot;
-      case 'headphones': return Headphones;
-      case 'message-square': return MessageSquare;
-      case 'brain': return BrainCircuit;
-      case 'message-circle':
-      default: return MessageCircle;
-    }
-  };
-  
-  const BotIconComponent = getBotIconComponent();
-  
-  // Apply styles based on theme, variation, and custom color
-  const baseStyles = getChatStyles(theme, variation as any, primaryColor);
-  const styles = applyFontStyle(baseStyles, fontStyle as any);
 
+  // Apply theme styles
+  const baseStyles = getChatStyles(theme, variation);
+  const styles = applyFontStyle(baseStyles, fontStyle);
+
+  // Update messages if welcome message changes
   useEffect(() => {
     if (messages.length === 1 && messages[0].role === 'bot') {
       setMessages([{ role: 'bot', content: welcomeMessage }]);
     }
   }, [welcomeMessage]);
 
+  // Scroll chat messages to bottom without affecting page scroll
   useEffect(() => {
     if (messagesEndRef.current) {
       const chatContainer = messagesEndRef.current.parentElement;
@@ -84,19 +66,26 @@ const Chatbot = ({
   }, [messages]);
 
   const handleSendMessage = async (message: string) => {
+    // Add user message
     setMessages(prev => [...prev, { role: 'user', content: message }]);
+    
+    // Call optional callback
     onSendMessage?.(message);
+    
+    // Simulate typing
     setIsTyping(true);
     setError(null);
     
     if (useRealAPI) {
       try {
+        // Use the real OpenAI API through Supabase edge function
         const { response, error } = await testChatbotResponse(message, userId);
         
         if (error) {
           console.error('Chatbot error:', error);
           setError(`Error: ${error}`);
         } else {
+          // Add bot response
           setMessages(prev => [...prev, { role: 'bot', content: response }]);
         }
       } catch (err) {
@@ -106,7 +95,9 @@ const Chatbot = ({
         setIsTyping(false);
       }
     } else {
+      // Use demo responses with delay
       setTimeout(async () => {
+        // Simple logic for demo purposes - get a random response
         const demoResponses = [
           "I'd be happy to help you find a property. What's your budget range?",
           "Great! And what neighborhoods are you interested in?",
@@ -127,32 +118,39 @@ const Chatbot = ({
     }
   };
 
-  // Apply custom css variables for color
-  const cssVariables = primaryColor ? {
-    '--primary-color': primaryColor
-  } as React.CSSProperties : {};
+  // Generate the appropriate font class based on the fontStyle prop
+  const getFontClass = () => {
+    switch (fontStyle) {
+      case 'serif':
+        return 'font-serif';
+      case 'mono':
+        return 'font-mono';
+      case 'default':
+      default:
+        return 'font-sans';
+    }
+  };
 
   return (
-    <div 
-      className={cn(
-        'flex flex-col overflow-hidden rounded-lg shadow-lg border border-gray-100',
-        styles.container,
-        styles.font,
-        className
-      )}
-      style={cssVariables}
-    >
+    <div className={cn(
+      'flex flex-col overflow-hidden rounded-lg shadow-md',
+      'h-[500px]', // Fixed height
+      styles.container,
+      getFontClass(), // Apply font class dynamically
+      className
+    )}>
+      {/* Chat Header */}
       <ChatHeader 
         botName={botName}
         headerStyle={styles.header}
         fontStyle={styles.font}
         apiKeyStatus={useRealAPI ? "set" : "not-set"}
-        BotIcon={BotIconComponent}
       />
       
+      {/* Messages Container - Fixed height with overflow */}
       <div 
-        className="flex-1 p-4 overflow-y-auto space-y-4 bg-white"
-        style={{ minHeight: '300px', maxHeight }}
+        className="flex-1 p-4 overflow-y-auto space-y-4 scrollbar-none relative"
+        style={{ height: `calc(100% - 120px)` }} // Subtract header and input heights
       >
         {messages.map((message, index) => (
           <ChatMessage 
@@ -160,7 +158,6 @@ const Chatbot = ({
             message={message}
             index={index}
             styles={styles}
-            BotIcon={BotIconComponent}
           />
         ))}
         
@@ -168,7 +165,6 @@ const Chatbot = ({
           <TypingIndicator 
             botIconStyle={styles.botIcon}
             botBubbleStyle={styles.botBubble}
-            BotIcon={BotIconComponent}
           />
         )}
         
@@ -181,10 +177,9 @@ const Chatbot = ({
         <div ref={messagesEndRef} />
       </div>
       
+      {/* Input Area */}
       <ChatInput 
         inputContainerStyle={styles.inputContainer}
-        inputFieldStyle={styles.inputField}
-        sendButtonStyle={styles.sendButton}
         onSendMessage={handleSendMessage}
         placeholderText={placeholderText}
       />
