@@ -88,6 +88,26 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
   const [generatedScript, setGeneratedScript] = useState<string | null>(null);
 
   useEffect(() => {
+    const updateGeneratedScript = async () => {
+      try {
+        const clientScript = generateClientSideScript();
+        setGeneratedScript(clientScript);
+        
+        if (userId) {
+          const { script, error } = await generateChatbotScript(userId);
+          if (!error && script) {
+            setGeneratedScript(script);
+          }
+        }
+      } catch (err) {
+        console.error("Error updating script:", err);
+      }
+    };
+    
+    updateGeneratedScript();
+  }, [settings, userId]);
+
+  useEffect(() => {
     const fetchSettings = async () => {
       setLoading(true);
       try {
@@ -104,26 +124,12 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
           }
         } else if (data) {
           setSettings(data.settings);
-          fetchGeneratedScript();
         }
       } catch (error) {
         console.error("Error fetching chatbot settings:", error);
         toast.error("Error loading chatbot settings");
       } finally {
         setLoading(false);
-      }
-    };
-    
-    const fetchGeneratedScript = async () => {
-      try {
-        const { script, error } = await generateChatbotScript(userId);
-        if (error) {
-          console.error("Error fetching generated script:", error);
-        } else {
-          setGeneratedScript(script);
-        }
-      } catch (err) {
-        console.error("Error in fetchGeneratedScript:", err);
       }
     };
     
@@ -162,11 +168,7 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
     }
   };
 
-  const generateEmbedCode = () => {
-    if (generatedScript) {
-      return generatedScript;
-    }
-    
+  const generateClientSideScript = () => {
     const params = new URLSearchParams({
       user: userId,
       theme: settings.theme,
@@ -194,6 +196,10 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
       : window.location.origin;
       
     return `<script src="${baseUrl}/chatbot.js?${params.toString()}"></script>`;
+  };
+
+  const generateEmbedCode = () => {
+    return generatedScript || generateClientSideScript();
   };
 
   const testChatbot = async () => {
