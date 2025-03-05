@@ -8,13 +8,14 @@ import TypingIndicator from './TypingIndicator';
 import { getChatStyles, applyFontStyle } from './chatStyles';
 import { Message } from './types';
 import { testChatbotResponse } from './responseHandlers';
+import { Bot, MessageCircle, Headphones, MessageSquare, BrainCircuit } from 'lucide-react';
 
 interface ChatbotProps {
   apiKey?: string;
   className?: string;
   theme?: 'default' | 'modern' | 'minimal';
   variation?: 'default' | 'blue' | 'green' | 'purple';
-  fontStyle?: 'default' | 'serif' | 'mono';
+  fontStyle?: 'default' | 'serif' | 'mono' | 'sans' | 'inter';
   botName?: string;
   welcomeMessage?: string;
   placeholderText?: string;
@@ -22,6 +23,8 @@ interface ChatbotProps {
   onSendMessage?: (message: string) => void;
   userId?: string;
   useRealAPI?: boolean;
+  primaryColor?: string;
+  botIcon?: string;
 }
 
 const Chatbot = ({
@@ -35,7 +38,9 @@ const Chatbot = ({
   maxHeight = "400px",
   onSendMessage,
   userId = 'demo-user',
-  useRealAPI = false
+  useRealAPI = false,
+  primaryColor,
+  botIcon = 'message-circle'
 }: ChatbotProps) => {
   const [messages, setMessages] = useState<Message[]>([
     { role: 'bot', content: welcomeMessage }
@@ -44,8 +49,8 @@ const Chatbot = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Apply theme styles
-  const baseStyles = getChatStyles(theme, variation);
+  // Apply theme styles with primary color
+  const baseStyles = getChatStyles(theme, variation, primaryColor);
   const styles = applyFontStyle(baseStyles, fontStyle);
 
   // Update messages if welcome message changes
@@ -118,6 +123,26 @@ const Chatbot = ({
     }
   };
 
+  // Get the right icon component based on bot icon setting
+  const getBotIconComponent = () => {
+    switch (botIcon) {
+      case 'message-circle':
+        return MessageCircle;
+      case 'bot':
+        return Bot;
+      case 'headphones':
+        return Headphones;
+      case 'message-square':
+        return MessageSquare;
+      case 'brain':
+        return BrainCircuit;
+      default:
+        return MessageCircle;
+    }
+  };
+
+  const BotIconComponent = getBotIconComponent();
+
   return (
     <div className={cn(
       'flex flex-col overflow-hidden rounded-lg shadow-md',
@@ -132,6 +157,7 @@ const Chatbot = ({
         headerStyle={styles.header}
         fontStyle={styles.font}
         apiKeyStatus={useRealAPI ? "set" : "not-set"}
+        BotIcon={BotIconComponent}
       />
       
       {/* Messages Container - Fixed height with overflow */}
@@ -145,6 +171,7 @@ const Chatbot = ({
             message={message}
             index={index}
             styles={styles}
+            BotIcon={BotIconComponent}
           />
         ))}
         
@@ -152,6 +179,7 @@ const Chatbot = ({
           <TypingIndicator 
             botIconStyle={styles.botIcon}
             botBubbleStyle={styles.botBubble}
+            BotIcon={BotIconComponent}
           />
         )}
         

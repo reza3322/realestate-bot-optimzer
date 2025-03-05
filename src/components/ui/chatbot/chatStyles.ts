@@ -3,7 +3,8 @@ import { ChatStylesType } from './types';
 
 export const getChatStyles = (
   theme: 'default' | 'modern' | 'minimal',
-  variation: 'default' | 'blue' | 'green' | 'purple' = 'default'
+  variation: 'default' | 'blue' | 'green' | 'purple' = 'default',
+  primaryColor?: string
 ): ChatStylesType => {
   // Base styles (shared across all themes)
   const baseStyles: ChatStylesType = {
@@ -20,31 +21,41 @@ export const getChatStyles = (
   // Apply color variation
   let colorStyles: Partial<ChatStylesType> = {};
   
-  switch (variation) {
-    case 'blue':
-      colorStyles = {
-        header: `bg-blue-500 text-white p-4 flex items-center`,
-        userBubble: `bg-blue-100 dark:bg-blue-900/30 text-foreground rounded-lg p-3 max-w-[80%] ml-auto`,
-        botIcon: `bg-blue-500 text-white h-8 w-8 rounded-full flex items-center justify-center`,
-      };
-      break;
-    case 'green':
-      colorStyles = {
-        header: `bg-emerald-600 text-white p-4 flex items-center`,
-        userBubble: `bg-emerald-100 dark:bg-emerald-900/30 text-foreground rounded-lg p-3 max-w-[80%] ml-auto`,
-        botIcon: `bg-emerald-600 text-white h-8 w-8 rounded-full flex items-center justify-center`,
-      };
-      break;
-    case 'purple':
-      colorStyles = {
-        header: `bg-purple-600 text-white p-4 flex items-center`,
-        userBubble: `bg-purple-100 dark:bg-purple-900/30 text-foreground rounded-lg p-3 max-w-[80%] ml-auto`,
-        botIcon: `bg-purple-600 text-white h-8 w-8 rounded-full flex items-center justify-center`,
-      };
-      break;
-    default:
-      // Use primary color from base styles
-      break;
+  // If a custom primary color is provided, use it
+  if (primaryColor) {
+    colorStyles = {
+      header: `bg-[${primaryColor}] text-white p-4 flex items-center`,
+      userBubble: `bg-[${primaryColor}]/10 text-foreground rounded-lg p-3 max-w-[80%] ml-auto`,
+      botIcon: `bg-[${primaryColor}] text-white h-8 w-8 rounded-full flex items-center justify-center`,
+    };
+  } else {
+    // Use predefined variations
+    switch (variation) {
+      case 'blue':
+        colorStyles = {
+          header: `bg-blue-500 text-white p-4 flex items-center`,
+          userBubble: `bg-blue-100 dark:bg-blue-900/30 text-foreground rounded-lg p-3 max-w-[80%] ml-auto`,
+          botIcon: `bg-blue-500 text-white h-8 w-8 rounded-full flex items-center justify-center`,
+        };
+        break;
+      case 'green':
+        colorStyles = {
+          header: `bg-emerald-600 text-white p-4 flex items-center`,
+          userBubble: `bg-emerald-100 dark:bg-emerald-900/30 text-foreground rounded-lg p-3 max-w-[80%] ml-auto`,
+          botIcon: `bg-emerald-600 text-white h-8 w-8 rounded-full flex items-center justify-center`,
+        };
+        break;
+      case 'purple':
+        colorStyles = {
+          header: `bg-purple-600 text-white p-4 flex items-center`,
+          userBubble: `bg-purple-100 dark:bg-purple-900/30 text-foreground rounded-lg p-3 max-w-[80%] ml-auto`,
+          botIcon: `bg-purple-600 text-white h-8 w-8 rounded-full flex items-center justify-center`,
+        };
+        break;
+      default:
+        // Use primary color from base styles
+        break;
+    }
   }
 
   // Apply theme-specific styles
@@ -91,7 +102,7 @@ export const getChatStyles = (
 
 export const applyFontStyle = (
   styles: ChatStylesType,
-  fontStyle: 'default' | 'serif' | 'mono' = 'default'
+  fontStyle: 'default' | 'serif' | 'mono' | 'sans' | 'inter' = 'default'
 ): ChatStylesType => {
   let fontClass = '';
   
@@ -101,6 +112,12 @@ export const applyFontStyle = (
       break;
     case 'mono':
       fontClass = 'font-mono';
+      break;
+    case 'sans':
+      fontClass = 'font-sans';
+      break;
+    case 'inter':
+      fontClass = 'font-sans'; // Inter is a sans-serif font
       break;
     default:
       fontClass = 'font-sans';

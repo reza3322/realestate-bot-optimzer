@@ -1,67 +1,33 @@
 
 import { cn } from '@/lib/utils';
-import { Settings, Lock, Info } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { useToast } from '@/components/ui/use-toast';
+import { Bot, LucideIcon } from 'lucide-react';
 
 interface ChatHeaderProps {
+  botName: string;
   headerStyle: string;
-  fontStyle?: string;
-  botName?: string;
-  apiKeyStatus?: 'not-set' | 'set' | 'checking';
+  fontStyle: string;
+  apiKeyStatus?: 'set' | 'not-set';
+  BotIcon?: LucideIcon;
 }
 
 const ChatHeader = ({ 
+  botName, 
   headerStyle, 
-  botName = "RealHomeAI Demo",
-  apiKeyStatus = 'not-set',
-  fontStyle
+  fontStyle,
+  apiKeyStatus,
+  BotIcon = Bot
 }: ChatHeaderProps) => {
-  const { toast } = useToast();
-
-  const handleApiKeyCheck = () => {
-    if (apiKeyStatus === 'not-set') {
-      toast({
-        title: "API Key Required",
-        description: "For a live demo, this would connect to a secure backend. In a real implementation, you wouldn't store API keys in the browser.",
-        duration: 5000,
-      });
-    } else {
-      toast({
-        title: "API Key Status",
-        description: "API key is configured. In a production app, this would securely connect to OpenAI through a backend service.",
-        duration: 3000,
-      });
-    }
-  };
-
   return (
-    <div className={cn(
-      "p-4 flex justify-between items-center",
-      headerStyle
-    )}>
-      <h3 className="font-medium text-center flex-1">{botName}</h3>
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button 
-              variant="ghost" 
-              size="icon"
-              className="h-8 w-8"
-              onClick={handleApiKeyCheck}
-            >
-              {apiKeyStatus === 'not-set' ? 
-                <Lock className="h-4 w-4" /> : 
-                <Settings className="h-4 w-4" />
-              }
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>
-            <p>API Configuration</p>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+    <div className={cn("p-4 flex items-center gap-2", headerStyle)}>
+      <div className="rounded-full w-8 h-8 flex items-center justify-center bg-white/20">
+        <BotIcon className="w-5 h-5" />
+      </div>
+      <div className={cn("font-medium", fontStyle)}>
+        {botName}
+        {apiKeyStatus === 'not-set' && (
+          <span className="ml-2 text-xs opacity-70">(Demo Mode)</span>
+        )}
+      </div>
     </div>
   );
 };

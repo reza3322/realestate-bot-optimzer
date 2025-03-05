@@ -1,6 +1,6 @@
 
 import { cn } from '@/lib/utils';
-import { User, Bot } from 'lucide-react';
+import { User, Bot, LucideIcon } from 'lucide-react';
 import { Message } from './types';
 
 interface ChatMessageProps {
@@ -12,9 +12,10 @@ interface ChatMessageProps {
     userIcon: string;
     botIcon: string;
   };
+  BotIcon?: LucideIcon;
 }
 
-const ChatMessage = ({ message, index, styles }: ChatMessageProps) => {
+const ChatMessage = ({ message, index, styles, BotIcon = Bot }: ChatMessageProps) => {
   return (
     <div 
       className={cn(
@@ -28,7 +29,7 @@ const ChatMessage = ({ message, index, styles }: ChatMessageProps) => {
           "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0",
           styles.botIcon
         )}>
-          <Bot className="w-4 h-4" />
+          <BotIcon className="w-4 h-4" />
         </div>
       )}
       
