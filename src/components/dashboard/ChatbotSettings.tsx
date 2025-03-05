@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { supabase, generateChatbotScript, createChatbotSettingsTable } from "@/lib/supabase";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -132,6 +133,7 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
       try {
         await createChatbotSettingsTable();
         
+        // Fixed query: Only select data for this user without adding extra parameters
         const { data, error } = await supabase
           .from("chatbot_settings")
           .select("*")

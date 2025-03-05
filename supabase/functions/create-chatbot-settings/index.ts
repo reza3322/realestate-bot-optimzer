@@ -29,7 +29,7 @@ serve(async (req) => {
 
     console.log('Checking if chatbot_settings table exists')
     
-    // Try to create the chatbot_settings table using SQL directly
+    // Call the database function to create/check the table
     const { data, error } = await supabase.rpc('create_chatbot_settings_table_if_not_exists')
 
     if (error) {

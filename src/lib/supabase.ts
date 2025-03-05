@@ -1,3 +1,4 @@
+
 import { createClient } from '@supabase/supabase-js';
 import { toast } from 'sonner';
 
@@ -32,8 +33,10 @@ export const createChatbotSettingsTable = async () => {
 // Generate chatbot embed script using the database function
 export const generateChatbotScript = async (userId: string) => {
   try {
+    // Get the current origin for dynamic base URL
     const currentOrigin = typeof window !== 'undefined' ? window.location.origin : null;
     
+    // Call the database function to generate the script
     const { data, error } = await supabase
       .rpc('generate_chatbot_script', { 
         user_uuid: userId,
