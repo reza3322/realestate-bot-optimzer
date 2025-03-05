@@ -8,25 +8,30 @@ import ChatHeader from './chatbot/ChatHeader';
 import ChatMessage from './chatbot/ChatMessage';
 import TypingIndicator from './chatbot/TypingIndicator';
 import ChatInput from './chatbot/ChatInput';
+import { Bot, MessageCircle, Headphones, MessageSquare, BrainCircuit } from 'lucide-react';
+
+const ICON_MAP = {
+  'bot': Bot,
+  'message-circle': MessageCircle,
+  'headphones': Headphones,
+  'message-square': MessageSquare,
+  'brain': BrainCircuit
+};
 
 const ChatbotDemo = ({ 
   theme = 'default',
   variation = 'default',
-  fontStyle = 'default' 
+  fontStyle = 'default',
+  primaryColor = '#3b82f6',
+  botIcon = 'message-circle',
+  apiKeyStatus = 'not-set'
 }: ChatbotDemoProps) => {
   const [messages, setMessages] = useState<Message[]>([
     { role: 'bot', content: "Hello! I'm RealHomeAI. How can I help you today?" },
   ]);
   const [isTyping, setIsTyping] = useState(false);
-  const [apiKeyStatus, setApiKeyStatus] = useState<'not-set' | 'set' | 'checking'>('checking');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
-  useEffect(() => {
-    // Check if API key exists in localStorage for demo purposes
-    const hasApiKey = localStorage.getItem('openai-api-key');
-    setApiKeyStatus(hasApiKey ? 'set' : 'not-set');
-  }, []);
-
   useEffect(() => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
@@ -61,6 +66,9 @@ const ChatbotDemo = ({
   // Get and apply styles based on props
   let baseStyles = getChatStyles(theme, variation);
   const styles = applyFontStyle(baseStyles, fontStyle);
+  
+  // Get the appropriate icon component
+  const BotIconComponent = ICON_MAP[botIcon as keyof typeof ICON_MAP] || MessageCircle;
 
   return (
     <div className={cn(
@@ -68,7 +76,13 @@ const ChatbotDemo = ({
       styles.container,
       styles.font
     )}>
-      <ChatHeader headerStyle={styles.header} apiKeyStatus={apiKeyStatus} />
+      <ChatHeader 
+        botName="RealHome Assistant" 
+        headerStyle={styles.header} 
+        fontStyle={styles.font}
+        apiKeyStatus={apiKeyStatus}
+        BotIcon={BotIconComponent}
+      />
       
       <div className="flex-1 p-4 space-y-4 overflow-y-auto max-h-[300px] min-h-[300px]">
         {messages.map((message, i) => (
@@ -82,13 +96,15 @@ const ChatbotDemo = ({
               userIcon: styles.userIcon,
               botIcon: styles.botIcon
             }} 
+            BotIcon={BotIconComponent}
           />
         ))}
         
         {isTyping && (
           <TypingIndicator 
             botIconStyle={styles.botIcon} 
-            botBubbleStyle={styles.botBubble} 
+            botBubbleStyle={styles.botBubble}
+            BotIcon={BotIconComponent} 
           />
         )}
         <div ref={messagesEndRef} />
@@ -97,6 +113,7 @@ const ChatbotDemo = ({
       <ChatInput
         inputContainerStyle={styles.inputContainer}
         onSendMessage={handleSendMessage}
+        placeholderText="Type your message..."
       />
     </div>
   );

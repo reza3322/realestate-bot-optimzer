@@ -1,6 +1,7 @@
 
+import React from 'react';
 import { cn } from '@/lib/utils';
-import { Bot, LucideIcon } from 'lucide-react';
+import { LucideIcon, MessageCircle } from 'lucide-react';
 
 interface TypingIndicatorProps {
   botIconStyle: string;
@@ -8,23 +9,23 @@ interface TypingIndicatorProps {
   BotIcon?: LucideIcon;
 }
 
-const TypingIndicator = ({ botIconStyle, botBubbleStyle, BotIcon = Bot }: TypingIndicatorProps) => {
+const TypingIndicator = ({ botIconStyle, botBubbleStyle, BotIcon = MessageCircle }: TypingIndicatorProps) => {
   return (
-    <div className="flex items-start gap-3">
+    <div className="flex gap-2">
       <div className={cn(
-        "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0",
+        'rounded-full w-8 h-8 flex items-center justify-center',
         botIconStyle
       )}>
-        <BotIcon className="w-4 h-4" />
+        <BotIcon className="w-5 h-5" />
       </div>
       <div className={cn(
-        "p-3 text-sm",
+        'py-2 px-3 rounded-lg',
         botBubbleStyle
       )}>
         <div className="flex space-x-1">
-          <div className="w-2 h-2 rounded-full bg-primary/50 animate-pulse" style={{ animationDelay: '0s' }}></div>
-          <div className="w-2 h-2 rounded-full bg-primary/50 animate-pulse" style={{ animationDelay: '0.2s' }}></div>
-          <div className="w-2 h-2 rounded-full bg-primary/50 animate-pulse" style={{ animationDelay: '0.4s' }}></div>
+          <div className="w-2 h-2 bg-current rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+          <div className="w-2 h-2 bg-current rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+          <div className="w-2 h-2 bg-current rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
         </div>
       </div>
     </div>
