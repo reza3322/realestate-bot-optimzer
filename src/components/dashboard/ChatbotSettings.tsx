@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -69,40 +68,49 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
     placeholderText: "Type your message...",
     enabled: true,
     position: "right",
-    // New chat button settings
     buttonText: "Chat with us",
     buttonIcon: "message-circle",
     buttonSize: "medium",
     buttonColor: "#3b82f6",
     buttonTextColor: "#ffffff",
-    buttonStyle: "pill", // rounded, square, pill
-    buttonPosition: "bottom-right", // bottom-right, bottom-left, bottom-center
+    buttonStyle: "pill",
+    buttonPosition: "bottom-right",
   });
-  
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [previewTab, setPreviewTab] = useState<"desktop" | "mobile">("desktop");
   const [testMessage, setTestMessage] = useState("");
   const [testResponse, setTestResponse] = useState("");
   const [isTesting, setIsTesting] = useState(false);
-  
+
   useEffect(() => {
     const fetchSettings = async () => {
       setLoading(true);
       try {
-        const { data, error } = await supabase
-          .from("chatbot_settings")
-          .select("*")
-          .eq("user_id", userId)
+        const { error: tableError } = await supabase
+          .from('chatbot_settings')
+          .select('count')
+          .limit(1)
           .single();
         
-        if (error) {
-          if (error.code !== "PGRST116") {
-            console.error("Error fetching chatbot settings:", error);
-            toast.error("Error loading chatbot settings");
+        if (tableError && tableError.code === '42P01') {
+          console.log('Chatbot settings table does not exist yet, will be created on first save');
+        } else {
+          const { data, error } = await supabase
+            .from("chatbot_settings")
+            .select("*")
+            .eq("user_id", userId)
+            .single();
+          
+          if (error) {
+            if (error.code !== "PGRST116") {
+              console.error("Error fetching chatbot settings:", error);
+              toast.error("Error loading chatbot settings");
+            }
+          } else if (data) {
+            setSettings(data.settings);
           }
-        } else if (data) {
-          setSettings(data.settings);
         }
       } catch (error) {
         console.error("Error fetching chatbot settings:", error);
@@ -114,10 +122,14 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
     
     fetchSettings();
   }, [userId]);
-  
+
   const saveSettings = async () => {
     setSaving(true);
     try {
+      await supabase.rpc('create_chatbot_settings_table_if_not_exists').catch(err => {
+        console.log('RPC not available or failed, will try direct upsert', err);
+      });
+      
       const { error } = await supabase
         .from("chatbot_settings")
         .upsert({ 
@@ -138,7 +150,7 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
       setSaving(false);
     }
   };
-  
+
   const generateEmbedCode = () => {
     const params = new URLSearchParams({
       user: userId,
@@ -153,7 +165,6 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
       primaryColor: encodeURIComponent(settings.primaryColor.replace('#', '')),
       botIcon: settings.botIcon,
       enabled: settings.enabled.toString(),
-      // Add button customization parameters
       buttonText: encodeURIComponent(settings.buttonText),
       buttonIcon: settings.buttonIcon,
       buttonSize: settings.buttonSize,
@@ -163,9 +174,8 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
       buttonPosition: settings.buttonPosition
     });
     
-    // Use window.location.origin to get the current domain - this will work in both development and production
     const baseUrl = window.location.hostname.includes('localhost') 
-      ? 'https://realhome.ai' // Fallback for local development
+      ? 'https://realhome.ai'
       : window.location.origin;
       
     return `<script src="${baseUrl}/chatbot.js?${params.toString()}"></script>`;
@@ -202,7 +212,7 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
       </div>
     );
   }
-  
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between">
@@ -508,9 +518,10 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
                         color: settings.buttonTextColor
                       }}
                     >
-                      {CHATBOT_ICONS.find(icon => icon.value === settings.buttonIcon)?.icon({
-                        className: 'w-4 h-4',
-                      })}
+                      {(() => {
+                        const IconComponent = CHATBOT_ICONS.find(icon => icon.value === settings.buttonIcon)?.icon;
+                        return IconComponent && <IconComponent className="w-4 h-4" />;
+                      })()}
                       <span>{settings.buttonText}</span>
                     </div>
                   </div>
