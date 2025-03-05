@@ -354,12 +354,20 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      generate_chatbot_script: {
-        Args: {
-          user_uuid: string
-        }
-        Returns: string
-      }
+      generate_chatbot_script:
+        | {
+            Args: {
+              user_uuid: string
+            }
+            Returns: string
+          }
+        | {
+            Args: {
+              user_uuid: string
+              client_origin?: string
+            }
+            Returns: string
+          }
       get_auth_user_id: {
         Args: Record<PropertyKey, never>
         Returns: string

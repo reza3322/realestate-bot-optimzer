@@ -31,3 +31,5 @@ verify_jwt = false
 [functions.chatbot-response]
 verify_jwt = false
 
+[functions.create-chatbot-settings]
+verify_jwt = false
