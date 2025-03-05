@@ -686,6 +686,7 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
                         botName={settings.botName}
                         welcomeMessage={settings.welcomeMessage}
                         placeholderText={settings.placeholderText}
+                        botIconName={settings.botIcon}
                       />
                     </div>
                   </CardContent>

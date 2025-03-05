@@ -6,6 +6,7 @@ import {
   Headphones, 
   MessageSquare, 
   BrainCircuit,
+  Brain,
   LucideIcon
 } from 'lucide-react';
 
@@ -20,7 +21,8 @@ const iconMap: Record<string, LucideIcon> = {
   'message-circle': MessageCircle,
   'headphones': Headphones,
   'message-square': MessageSquare,
-  'brain': BrainCircuit,
+  'brain-circuit': BrainCircuit,
+  'brain': Brain
 };
 
 export const BotIcon: FC<BotIconProps> = ({ iconName, className }) => {
