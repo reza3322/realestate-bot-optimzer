@@ -91,12 +91,18 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
   useEffect(() => {
     const initChatbotSettings = async () => {
       try {
+        console.log("Initializing chatbot settings table");
         const { success, error } = await createChatbotSettingsTable();
+        
         if (!success) {
           console.error("Error initializing chatbot settings table:", error);
+          toast.error("Failed to initialize settings. Please try again.");
+        } else {
+          console.log("Successfully initialized chatbot settings table");
         }
       } catch (err) {
         console.error("Exception initializing chatbot settings:", err);
+        toast.error("Something went wrong. Please try again.");
       }
     };
     
@@ -106,15 +112,20 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
   useEffect(() => {
     const updateGeneratedScript = async () => {
       try {
+        // First update with client-side script as a fallback
         const clientScript = generateClientSideScript();
         setGeneratedScript(clientScript);
         
         if (userId) {
+          console.log("Generating script for user:", userId);
           const { script, error } = await generateChatbotScript(userId);
+          
           if (!error && script) {
+            console.log("Setting generated script:", script);
             setGeneratedScript(script);
           } else if (error) {
             console.error("Error generating script:", error);
+            toast.error("Failed to generate embed script");
           }
         }
       } catch (err) {
@@ -127,13 +138,17 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
 
   useEffect(() => {
     const fetchSettings = async () => {
-      if (!userId) return;
+      if (!userId) {
+        console.log("No userId provided, skipping settings fetch");
+        return;
+      }
       
       setLoading(true);
       try {
+        // Ensure the chatbot_settings table exists
         await createChatbotSettingsTable();
         
-        // Corrected query: Only fetch settings for this user with proper Supabase query format
+        // Use proper format for Supabase query
         console.log(`Fetching settings for user ID: ${userId}`);
         const { data, error } = await supabase
           .from("chatbot_settings")
@@ -141,11 +156,15 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
           .eq("user_id", userId)
           .order('updated_at', { ascending: false })
           .limit(1)
-          .maybeSingle();
+          .single();
         
         if (error) {
-          console.error("Error fetching chatbot settings:", error);
-          toast.error("Error loading chatbot settings");
+          if (error.code === 'PGRST116') {
+            console.log("No settings found for this user, using defaults");
+          } else {
+            console.error("Error fetching chatbot settings:", error);
+            toast.error("Could not load your chatbot settings");
+          }
         } else if (data && data.settings) {
           console.log("Loaded settings:", data.settings);
           setSettings(data.settings);
@@ -183,17 +202,19 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
       
       if (error) {
         console.error("Error saving settings:", error);
+        toast.error("Failed to save settings");
         throw error;
       }
       
+      // Generate updated script
       const { script, error: scriptError } = await generateChatbotScript(userId);
       if (scriptError) {
         console.error("Error generating script:", scriptError);
+        toast.error("Settings saved but failed to generate embed script");
       } else {
         setGeneratedScript(script);
+        toast.success("Chatbot settings saved successfully");
       }
-      
-      toast.success("Chatbot settings saved successfully");
     } catch (error) {
       console.error("Exception saving chatbot settings:", error);
       toast.error("Error saving chatbot settings");
