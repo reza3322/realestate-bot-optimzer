@@ -118,25 +118,12 @@ const Chatbot = ({
     }
   };
 
-  // Generate the appropriate font class based on the fontStyle prop
-  const getFontClass = () => {
-    switch (fontStyle) {
-      case 'serif':
-        return 'font-serif';
-      case 'mono':
-        return 'font-mono';
-      case 'default':
-      default:
-        return 'font-sans';
-    }
-  };
-
   return (
     <div className={cn(
       'flex flex-col overflow-hidden rounded-lg shadow-md',
       'h-[500px]', // Fixed height
       styles.container,
-      getFontClass(), // Apply font class dynamically
+      styles.font, // Apply font class from styles
       className
     )}>
       {/* Chat Header */}
