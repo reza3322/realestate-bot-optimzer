@@ -93,19 +93,21 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
     const initializeChatbot = async () => {
       setLoading(true);
       try {
-        // First, ensure the chatbot_settings table exists and get initial user settings
         const { data: initData } = await createChatbotSettingsTable(userId);
         
-        // If we received settings from the edge function, use them
         if (initData?.settings) {
           setSettings(initData.settings);
           setInitialSettings(initData.settings);
-          setEmbedScript(await generateChatbotScript(userId));
+          
+          const scriptResult = await generateChatbotScript(userId);
+          if (scriptResult && typeof scriptResult.script === 'string') {
+            setEmbedScript(scriptResult.script);
+          }
+          
           setLoading(false);
           return;
         }
         
-        // Fallback: Try to fetch settings directly from the database
         const { data, error } = await supabase
           .from("chatbot_settings")
           .select("settings")
@@ -116,7 +118,6 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
         
         if (error) {
           if (error.code === 'PGRST116') {
-            // No data found, initialize with defaults
             console.log('No chatbot settings found for this user, using defaults');
             const defaultSettings = {
               theme: "default",
@@ -149,8 +150,10 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
           setInitialSettings(data.settings);
         }
         
-        // Generate the chatbot embed script
-        setEmbedScript(await generateChatbotScript(userId));
+        const scriptResult = await generateChatbotScript(userId);
+        if (scriptResult && typeof scriptResult.script === 'string') {
+          setEmbedScript(scriptResult.script);
+        }
       } catch (err) {
         console.error('Error initializing chatbot settings:', err);
         toast.error('Could not initialize chatbot settings');
@@ -167,7 +170,6 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
   useEffect(() => {
     const updateGeneratedScript = async () => {
       try {
-        // First update with client-side script as a fallback
         const clientScript = generateClientSideScript();
         setGeneratedScript(clientScript);
         
@@ -175,7 +177,7 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
           console.log("Generating script for user:", userId);
           const { script, error } = await generateChatbotScript(userId);
           
-          if (!error && script) {
+          if (!error && script && typeof script === 'string') {
             console.log("Setting generated script:", script);
             setGeneratedScript(script);
           } else if (error) {
@@ -200,10 +202,8 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
       
       setLoading(true);
       try {
-        // Ensure the chatbot_settings table exists
         await createChatbotSettingsTable();
         
-        // Use proper format for Supabase query
         console.log(`Fetching settings for user ID: ${userId}`);
         const { data, error } = await supabase
           .from("chatbot_settings")
@@ -261,13 +261,12 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
         throw error;
       }
       
-      // Generate updated script
-      const { script, error: scriptError } = await generateChatbotScript(userId);
-      if (scriptError) {
-        console.error("Error generating script:", scriptError);
+      const scriptResult = await generateChatbotScript(userId);
+      if (scriptResult.error) {
+        console.error("Error generating script:", scriptResult.error);
         toast.error("Settings saved but failed to generate embed script");
-      } else {
-        setGeneratedScript(script);
+      } else if (typeof scriptResult.script === 'string') {
+        setGeneratedScript(scriptResult.script);
         toast.success("Chatbot settings saved successfully");
       }
     } catch (error) {
