@@ -8,14 +8,15 @@ import TypingIndicator from './TypingIndicator';
 import { getChatStyles, applyFontStyle } from './chatStyles';
 import { Message } from './types';
 import { testChatbotResponse } from './responseHandlers';
-import { MessageCircle } from 'lucide-react';
+import { MessageCircle, Bot, Headphones, MessageSquare, BrainCircuit } from 'lucide-react';
+import { LucideIcon } from 'lucide-react';
 
 interface ChatbotProps {
   apiKey?: string;
   className?: string;
-  theme?: 'default' | 'modern' | 'minimal';
-  variation?: 'default' | 'blue' | 'green' | 'purple';
-  fontStyle?: 'default' | 'serif' | 'mono' | 'sans' | 'inter';
+  theme?: 'default' | 'modern' | 'minimal' | 'rounded' | 'bubble';
+  variation?: 'default' | 'blue' | 'green' | 'purple' | 'red' | 'orange' | 'custom';
+  fontStyle?: 'default' | 'serif' | 'mono' | 'sans' | 'inter' | 'rounded' | 'playful';
   botName?: string;
   welcomeMessage?: string;
   placeholderText?: string;
@@ -49,8 +50,23 @@ const Chatbot = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
   
-  const baseStyles = getChatStyles(theme, variation, primaryColor);
-  const styles = applyFontStyle(baseStyles, fontStyle);
+  // Get icon component based on string name
+  const getBotIconComponent = (): LucideIcon => {
+    switch (botIcon) {
+      case 'bot': return Bot;
+      case 'headphones': return Headphones;
+      case 'message-square': return MessageSquare;
+      case 'brain': return BrainCircuit;
+      case 'message-circle':
+      default: return MessageCircle;
+    }
+  };
+  
+  const BotIconComponent = getBotIconComponent();
+  
+  // Apply styles based on theme, variation, and custom color
+  const baseStyles = getChatStyles(theme, variation as any, primaryColor);
+  const styles = applyFontStyle(baseStyles, fontStyle as any);
 
   useEffect(() => {
     if (messages.length === 1 && messages[0].role === 'bot') {
@@ -111,19 +127,27 @@ const Chatbot = ({
     }
   };
 
+  // Apply custom css variables for color
+  const cssVariables = primaryColor ? {
+    '--primary-color': primaryColor
+  } as React.CSSProperties : {};
+
   return (
-    <div className={cn(
-      'flex flex-col overflow-hidden rounded-lg shadow-lg border border-gray-100',
-      styles.container,
-      styles.font,
-      className
-    )}>
+    <div 
+      className={cn(
+        'flex flex-col overflow-hidden rounded-lg shadow-lg border border-gray-100',
+        styles.container,
+        styles.font,
+        className
+      )}
+      style={cssVariables}
+    >
       <ChatHeader 
         botName={botName}
         headerStyle={styles.header}
         fontStyle={styles.font}
         apiKeyStatus={useRealAPI ? "set" : "not-set"}
-        BotIcon={MessageCircle}
+        BotIcon={BotIconComponent}
       />
       
       <div 
@@ -136,7 +160,7 @@ const Chatbot = ({
             message={message}
             index={index}
             styles={styles}
-            BotIcon={MessageCircle}
+            BotIcon={BotIconComponent}
           />
         ))}
         
@@ -144,7 +168,7 @@ const Chatbot = ({
           <TypingIndicator 
             botIconStyle={styles.botIcon}
             botBubbleStyle={styles.botBubble}
-            BotIcon={MessageCircle}
+            BotIcon={BotIconComponent}
           />
         )}
         
@@ -159,6 +183,8 @@ const Chatbot = ({
       
       <ChatInput 
         inputContainerStyle={styles.inputContainer}
+        inputFieldStyle={styles.inputField}
+        sendButtonStyle={styles.sendButton}
         onSendMessage={handleSendMessage}
         placeholderText={placeholderText}
       />
