@@ -8,6 +8,7 @@ export interface ChatbotDemoProps {
   theme?: 'default' | 'modern' | 'minimal';
   variation?: 'default' | 'blue' | 'green' | 'purple';
   fontStyle?: 'default' | 'serif' | 'mono';
+  botIconName?: string;
 }
 
 export interface ChatStylesType {

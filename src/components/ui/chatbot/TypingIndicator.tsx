@@ -1,20 +1,21 @@
 
 import { cn } from '@/lib/utils';
-import { Bot } from 'lucide-react';
+import { BotIcon } from './BotIcon';
 
 interface TypingIndicatorProps {
   botIconStyle: string;
   botBubbleStyle: string;
+  botIconName?: string;
 }
 
-const TypingIndicator = ({ botIconStyle, botBubbleStyle }: TypingIndicatorProps) => {
+const TypingIndicator = ({ botIconStyle, botBubbleStyle, botIconName = 'bot' }: TypingIndicatorProps) => {
   return (
     <div className="flex items-start gap-3">
       <div className={cn(
         "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0",
         botIconStyle
       )}>
-        <Bot className="w-4 h-4" />
+        <BotIcon iconName={botIconName} className="w-4 h-4" />
       </div>
       <div className={cn(
         "p-3 text-sm",

@@ -4,19 +4,22 @@ import { Settings, Lock, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useToast } from '@/components/ui/use-toast';
+import { BotIcon } from './BotIcon';
 
 interface ChatHeaderProps {
   headerStyle: string;
   fontStyle?: string;
   botName?: string;
   apiKeyStatus?: 'not-set' | 'set' | 'checking';
+  botIconName?: string;
 }
 
 const ChatHeader = ({ 
   headerStyle, 
+  fontStyle,
   botName = "RealHomeAI Demo",
   apiKeyStatus = 'not-set',
-  fontStyle
+  botIconName = 'bot'
 }: ChatHeaderProps) => {
   const { toast } = useToast();
 

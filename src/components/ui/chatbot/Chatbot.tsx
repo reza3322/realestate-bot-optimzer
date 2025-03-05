@@ -22,6 +22,7 @@ interface ChatbotProps {
   onSendMessage?: (message: string) => void;
   userId?: string;
   useRealAPI?: boolean;
+  botIconName?: string;
 }
 
 const Chatbot = ({
@@ -35,7 +36,8 @@ const Chatbot = ({
   maxHeight = "400px",
   onSendMessage,
   userId = 'demo-user',
-  useRealAPI = false
+  useRealAPI = false,
+  botIconName = 'bot'
 }: ChatbotProps) => {
   const [messages, setMessages] = useState<Message[]>([
     { role: 'bot', content: welcomeMessage }
@@ -145,6 +147,7 @@ const Chatbot = ({
         headerStyle={styles.header}
         fontStyle={styles.font}
         apiKeyStatus={useRealAPI ? "set" : "not-set"}
+        botIconName={botIconName}
       />
       
       {/* Messages Container - Fixed height with overflow */}
@@ -158,6 +161,7 @@ const Chatbot = ({
             message={message}
             index={index}
             styles={styles}
+            botIconName={botIconName}
           />
         ))}
         
@@ -165,6 +169,7 @@ const Chatbot = ({
           <TypingIndicator 
             botIconStyle={styles.botIcon}
             botBubbleStyle={styles.botBubble}
+            botIconName={botIconName}
           />
         )}
         
