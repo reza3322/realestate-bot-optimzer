@@ -3,7 +3,8 @@ import { ChatStylesType } from './types';
 
 export const getChatStyles = (
   theme: 'default' | 'modern' | 'minimal',
-  variation: 'default' | 'blue' | 'green' | 'purple' = 'default'
+  variation: 'default' | 'blue' | 'green' | 'purple' = 'default',
+  customColor?: string
 ): ChatStylesType => {
   // Base styles (shared across all themes)
   const baseStyles: ChatStylesType = {
@@ -16,6 +17,17 @@ export const getChatStyles = (
     userIcon: 'bg-primary/20 h-8 w-8 rounded-full flex items-center justify-center',
     font: 'font-sans',
   };
+
+  // If custom color is provided, use it instead of color variations
+  if (customColor) {
+    return {
+      ...baseStyles,
+      header: `bg-white text-white p-4 flex items-center`,
+      userBubble: `bg-white/10 text-foreground rounded-lg p-3 max-w-[80%] ml-auto`,
+      botIcon: `bg-white text-white h-8 w-8 rounded-full flex items-center justify-center`,
+      customColor: customColor,
+    };
+  }
 
   // Apply color variation
   let colorStyles: Partial<ChatStylesType> = {};

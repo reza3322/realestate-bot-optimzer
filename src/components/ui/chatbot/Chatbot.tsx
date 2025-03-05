@@ -23,6 +23,7 @@ interface ChatbotProps {
   userId?: string;
   useRealAPI?: boolean;
   botIconName?: string;
+  primaryColor?: string;
 }
 
 const Chatbot = ({
@@ -37,7 +38,8 @@ const Chatbot = ({
   onSendMessage,
   userId = 'demo-user',
   useRealAPI = false,
-  botIconName = 'bot'
+  botIconName = 'bot',
+  primaryColor
 }: ChatbotProps) => {
   const [messages, setMessages] = useState<Message[]>([
     { role: 'bot', content: welcomeMessage }
@@ -47,7 +49,7 @@ const Chatbot = ({
   const [error, setError] = useState<string | null>(null);
 
   // Apply theme styles
-  const baseStyles = getChatStyles(theme, variation);
+  const baseStyles = getChatStyles(theme, variation, primaryColor);
   const styles = applyFontStyle(baseStyles, fontStyle);
 
   // Update messages if welcome message changes
@@ -133,6 +135,19 @@ const Chatbot = ({
     }
   };
 
+  // Apply custom color styling to elements if provided
+  const headerStyle = {
+    ...(styles.customColor && {backgroundColor: styles.customColor}),
+  };
+
+  const botIconStyle = {
+    ...(styles.customColor && {backgroundColor: styles.customColor}),
+  };
+
+  const userBubbleStyle = {
+    ...(styles.customColor && {backgroundColor: `${styles.customColor}25`}), // 25 is hex for 15% opacity
+  };
+
   return (
     <div className={cn(
       'flex flex-col overflow-hidden rounded-lg shadow-md',
@@ -148,6 +163,7 @@ const Chatbot = ({
         fontStyle={styles.font}
         apiKeyStatus={useRealAPI ? "set" : "not-set"}
         botIconName={botIconName}
+        customStyle={headerStyle}
       />
       
       {/* Messages Container */}
@@ -162,6 +178,8 @@ const Chatbot = ({
             index={index}
             styles={styles}
             botIconName={botIconName}
+            customBotIconStyle={botIconStyle}
+            customUserBubbleStyle={userBubbleStyle}
           />
         ))}
         
@@ -170,6 +188,7 @@ const Chatbot = ({
             botIconStyle={styles.botIcon}
             botBubbleStyle={styles.botBubble}
             botIconName={botIconName}
+            customBotIconStyle={botIconStyle}
           />
         )}
         

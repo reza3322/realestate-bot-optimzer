@@ -12,6 +12,7 @@ interface ChatHeaderProps {
   botName?: string;
   apiKeyStatus?: 'not-set' | 'set' | 'checking';
   botIconName?: string;
+  customStyle?: React.CSSProperties;
 }
 
 const ChatHeader = ({ 
@@ -19,7 +20,8 @@ const ChatHeader = ({
   fontStyle,
   botName = "RealHomeAI Demo",
   apiKeyStatus = 'not-set',
-  botIconName = 'bot'
+  botIconName = 'bot',
+  customStyle = {}
 }: ChatHeaderProps) => {
   const { toast } = useToast();
 
@@ -40,10 +42,13 @@ const ChatHeader = ({
   };
 
   return (
-    <div className={cn(
-      "p-4 flex justify-between items-center",
-      headerStyle
-    )}>
+    <div 
+      className={cn(
+        "p-4 flex justify-between items-center",
+        headerStyle
+      )}
+      style={customStyle}
+    >
       <div className="flex items-center gap-2">
         <BotIcon iconName={botIconName} className="w-5 h-5" />
         <h3 className="font-medium">{botName}</h3>
