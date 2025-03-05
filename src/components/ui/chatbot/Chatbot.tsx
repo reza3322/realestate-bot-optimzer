@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import ChatHeader from './ChatHeader';
@@ -49,18 +48,15 @@ const Chatbot = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Apply theme styles with primary color
   const baseStyles = getChatStyles(theme, variation, primaryColor);
   const styles = applyFontStyle(baseStyles, fontStyle);
 
-  // Update messages if welcome message changes
   useEffect(() => {
     if (messages.length === 1 && messages[0].role === 'bot') {
       setMessages([{ role: 'bot', content: welcomeMessage }]);
     }
   }, [welcomeMessage]);
 
-  // Scroll chat messages to bottom without affecting page scroll
   useEffect(() => {
     if (messagesEndRef.current) {
       const chatContainer = messagesEndRef.current.parentElement;
@@ -71,26 +67,19 @@ const Chatbot = ({
   }, [messages]);
 
   const handleSendMessage = async (message: string) => {
-    // Add user message
     setMessages(prev => [...prev, { role: 'user', content: message }]);
-    
-    // Call optional callback
     onSendMessage?.(message);
-    
-    // Simulate typing
     setIsTyping(true);
     setError(null);
     
     if (useRealAPI) {
       try {
-        // Use the real OpenAI API through Supabase edge function
         const { response, error } = await testChatbotResponse(message, userId);
         
         if (error) {
           console.error('Chatbot error:', error);
           setError(`Error: ${error}`);
         } else {
-          // Add bot response
           setMessages(prev => [...prev, { role: 'bot', content: response }]);
         }
       } catch (err) {
@@ -100,9 +89,7 @@ const Chatbot = ({
         setIsTyping(false);
       }
     } else {
-      // Use demo responses with delay
       setTimeout(async () => {
-        // Simple logic for demo purposes - get a random response
         const demoResponses = [
           "I'd be happy to help you find a property. What's your budget range?",
           "Great! And what neighborhoods are you interested in?",
@@ -123,7 +110,6 @@ const Chatbot = ({
     }
   };
 
-  // Get the right icon component based on bot icon setting
   const getBotIconComponent = () => {
     switch (botIcon) {
       case 'message-circle':
@@ -145,13 +131,11 @@ const Chatbot = ({
 
   return (
     <div className={cn(
-      'flex flex-col overflow-hidden rounded-lg shadow-md',
-      'h-[500px]', // Fixed height
+      'flex flex-col overflow-hidden rounded-lg border',
       styles.container,
-      styles.font, // Apply font class from styles
+      styles.font,
       className
     )}>
-      {/* Chat Header */}
       <ChatHeader 
         botName={botName}
         headerStyle={styles.header}
@@ -160,10 +144,9 @@ const Chatbot = ({
         BotIcon={BotIconComponent}
       />
       
-      {/* Messages Container - Fixed height with overflow */}
       <div 
-        className="flex-1 p-4 overflow-y-auto space-y-4 scrollbar-none relative"
-        style={{ height: `calc(100% - 120px)` }} // Subtract header and input heights
+        className="flex-1 p-4 overflow-y-auto space-y-4 scrollbar-none"
+        style={{ minHeight: '300px' }}
       >
         {messages.map((message, index) => (
           <ChatMessage 
@@ -192,7 +175,6 @@ const Chatbot = ({
         <div ref={messagesEndRef} />
       </div>
       
-      {/* Input Area */}
       <ChatInput 
         inputContainerStyle={styles.inputContainer}
         onSendMessage={handleSendMessage}

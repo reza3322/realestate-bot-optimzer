@@ -8,7 +8,7 @@ export const getChatStyles = (
 ): ChatStylesType => {
   // Base styles (shared across all themes)
   const baseStyles: ChatStylesType = {
-    container: 'bg-white dark:bg-gray-900 shadow-lg',
+    container: 'bg-white dark:bg-gray-900 shadow-lg rounded-md overflow-hidden',
     header: 'bg-primary text-white p-4 flex items-center',
     userBubble: 'bg-primary/10 text-foreground rounded-lg p-3 max-w-[80%] ml-auto',
     botBubble: 'bg-muted text-foreground rounded-lg p-3 max-w-[80%]',
@@ -53,7 +53,12 @@ export const getChatStyles = (
         };
         break;
       default:
-        // Use primary color from base styles
+        // Use primary color from tailwind
+        colorStyles = {
+          header: `bg-primary text-white p-4 flex items-center`,
+          userBubble: `bg-primary/10 text-foreground rounded-lg p-3 max-w-[80%] ml-auto`,
+          botIcon: `bg-primary text-white h-8 w-8 rounded-full flex items-center justify-center`,
+        };
         break;
     }
   }
@@ -64,7 +69,7 @@ export const getChatStyles = (
   switch (theme) {
     case 'modern':
       themeStyles = {
-        container: `bg-white dark:bg-gray-900 shadow-lg rounded-xl`,
+        container: `bg-white dark:bg-gray-900 shadow-lg rounded-xl overflow-hidden`,
         header: `${colorStyles.header || baseStyles.header} rounded-t-xl`,
         userBubble: `${colorStyles.userBubble || baseStyles.userBubble} rounded-2xl`,
         botBubble: `${baseStyles.botBubble} rounded-2xl`,
@@ -73,7 +78,7 @@ export const getChatStyles = (
       break;
     case 'minimal':
       themeStyles = {
-        container: `bg-white dark:bg-gray-900 shadow-md`,
+        container: `bg-white dark:bg-gray-900 shadow-md overflow-hidden`,
         header: `${colorStyles.header || baseStyles.header} border-b border-border bg-background text-foreground`,
         userBubble: `${colorStyles.userBubble || baseStyles.userBubble} rounded-md border border-border/50`,
         botBubble: `${baseStyles.botBubble} rounded-md border border-border/50`,

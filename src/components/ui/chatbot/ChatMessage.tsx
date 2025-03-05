@@ -21,7 +21,7 @@ const ChatMessage = ({ message, index, styles, BotIcon = MessageCircle }: ChatMe
   
   return (
     <div className={cn(
-      'flex gap-2', 
+      'flex gap-2 mb-3', 
       isUser ? 'flex-row-reverse' : 'flex-row'
     )}>
       <div className={cn(

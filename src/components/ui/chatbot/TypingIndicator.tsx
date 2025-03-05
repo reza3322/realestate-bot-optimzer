@@ -11,7 +11,7 @@ interface TypingIndicatorProps {
 
 const TypingIndicator = ({ botIconStyle, botBubbleStyle, BotIcon = MessageCircle }: TypingIndicatorProps) => {
   return (
-    <div className="flex gap-2">
+    <div className="flex gap-2 mb-3">
       <div className={cn(
         'rounded-full w-8 h-8 flex items-center justify-center',
         botIconStyle
