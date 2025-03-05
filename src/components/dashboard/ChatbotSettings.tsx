@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { supabase, generateChatbotScript, createChatbotSettingsTable } from "@/lib/supabase";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -156,7 +155,7 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
           .eq("user_id", userId)
           .order('updated_at', { ascending: false })
           .limit(1)
-          .single();
+          .maybeSingle();
         
         if (error) {
           if (error.code === 'PGRST116') {

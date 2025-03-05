@@ -23,6 +23,10 @@ serve(async (req) => {
     // Create a Supabase client with the service role key
     const supabase = createClient(supabaseUrl, supabaseServiceRole)
 
+    // Get user_id from the query string if available
+    const url = new URL(req.url);
+    const userId = url.searchParams.get('user_id');
+    
     console.log('Calling database function to create/check the chatbot_settings table')
     
     // Call the database function to create/check the table
@@ -33,13 +37,37 @@ serve(async (req) => {
       throw error
     }
 
+    // If userId is provided, fetch the settings for that user
+    let userSettings = null;
+    if (userId) {
+      console.log(`Fetching settings for user: ${userId}`);
+      
+      const { data: settingsData, error: settingsError } = await supabase
+        .from('chatbot_settings')
+        .select('settings')
+        .eq('user_id', userId)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      
+      if (settingsError && settingsError.code !== 'PGRST116') {
+        console.error('Error fetching user settings:', settingsError);
+      } else if (settingsData) {
+        userSettings = settingsData.settings;
+        console.log('Found user settings:', userSettings);
+      } else {
+        console.log('No settings found for this user');
+      }
+    }
+
     console.log('Result from database function:', data)
     
     return new Response(
       JSON.stringify({ 
         success: true, 
         message: 'Chatbot settings table checked/created successfully',
-        data
+        data,
+        settings: userSettings
       }),
       {
         headers: {
