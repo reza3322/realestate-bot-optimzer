@@ -56,9 +56,9 @@ const Hero = () => {
           }
         >
           <img 
-            src="/lovable-uploads/f1c69427-2557-4792-983f-f2b5b7610878.png" 
-            alt="RealHomeAI Dashboard" 
-            className="w-full h-full object-cover object-left-top rounded-xl"
+            src="/lovable-uploads/654f67aa-52f1-4e55-9489-935a9e4f500e.png" 
+            alt="RealHomeAI Dashboard with Analytics" 
+            className="w-full h-full object-cover object-left-top rounded-xl shadow-xl border border-border/40"
           />
         </ContainerScroll>
         
