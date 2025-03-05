@@ -30,10 +30,10 @@ interface ChatbotProps {
 const Chatbot = ({
   className,
   theme = 'default',
-  variation = 'default',
+  variation = 'blue',
   fontStyle = 'default',
-  botName = "RealHomeAI Assistant",
-  welcomeMessage = "Hi there! I'm your RealHomeAI assistant. How can I help you today?",
+  botName = "RealHome Assistant",
+  welcomeMessage = "Hi there! I'm your RealHome assistant. How can I help you today?",
   placeholderText = "Type your message...",
   maxHeight = "400px",
   onSendMessage,
@@ -49,7 +49,10 @@ const Chatbot = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const baseStyles = getChatStyles(theme, variation, primaryColor);
+  // Always use blue variation by default
+  const actualVariation = variation || 'blue';
+  
+  const baseStyles = getChatStyles(theme, actualVariation, primaryColor);
   const styles = applyFontStyle(baseStyles, fontStyle);
 
   useEffect(() => {
@@ -132,7 +135,7 @@ const Chatbot = ({
 
   return (
     <div className={cn(
-      'flex flex-col overflow-hidden rounded-lg shadow-md',
+      'flex flex-col overflow-hidden rounded-lg',
       styles.container,
       styles.font,
       className

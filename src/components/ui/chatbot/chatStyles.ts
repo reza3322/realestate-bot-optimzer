@@ -76,11 +76,11 @@ const generateColorVars = (primaryColor?: string) => {
 
 export const getChatStyles = (
   theme: ChatTheme = 'default',
-  variation: ChatVariation = 'default',
+  variation: ChatVariation = 'blue',
   primaryColor?: string
 ): ChatStyles => {
-  // Base container styles
-  let container = 'bg-white';
+  // Force blue variation for this implementation
+  variation = 'blue';
   
   // Get variation colors
   const varColors = themeColors[variation];
@@ -88,7 +88,7 @@ export const getChatStyles = (
   // Default styles based on theme
   if (theme === 'default') {
     return {
-      container: 'bg-white border border-gray-200 rounded-lg shadow',
+      container: 'bg-white',
       header: `${varColors.primary} ${varColors.text} p-3 rounded-t-lg`,
       font: 'font-sans',
       botBubble: `${varColors.secondary} ${varColors.secondaryText} rounded-lg rounded-tl-none`,
@@ -101,11 +101,11 @@ export const getChatStyles = (
   
   if (theme === 'modern') {
     return {
-      container: 'bg-white border-0 rounded-xl shadow-lg',
+      container: 'bg-white border-0 rounded-xl',
       header: `${varColors.primary} ${varColors.text} p-4 rounded-t-xl`,
       font: 'font-sans',
-      botBubble: `${varColors.secondary} ${varColors.secondaryText} rounded-2xl rounded-tl-none shadow-sm`,
-      userBubble: `${varColors.primary} ${varColors.text} rounded-2xl rounded-tr-none shadow-sm`,
+      botBubble: `${varColors.secondary} ${varColors.secondaryText} rounded-2xl rounded-tl-none`,
+      userBubble: `${varColors.primary} ${varColors.text} rounded-2xl rounded-tr-none`,
       botIcon: `${varColors.primary} ${varColors.text} rounded-full`,
       userIcon: 'bg-gray-700 text-white rounded-full',
       inputContainer: 'bg-white'
@@ -114,20 +114,20 @@ export const getChatStyles = (
   
   if (theme === 'minimal') {
     return {
-      container: 'bg-white border border-gray-100 rounded-md shadow-sm',
-      header: 'bg-gray-50 text-gray-800 p-2 border-b border-gray-100 rounded-t-md',
+      container: 'bg-white rounded-md',
+      header: 'bg-blue-600 text-white p-2 rounded-t-md',
       font: 'font-sans',
-      botBubble: 'bg-gray-100 text-gray-800 rounded-md rounded-tl-none',
-      userBubble: 'bg-gray-800 text-white rounded-md rounded-tr-none',
-      botIcon: 'bg-gray-200 text-gray-600 rounded-full',
+      botBubble: 'bg-blue-100 text-blue-800 rounded-md rounded-tl-none',
+      userBubble: 'bg-blue-600 text-white rounded-md rounded-tr-none',
+      botIcon: 'bg-blue-600 text-white rounded-full',
       userIcon: 'bg-gray-600 text-white rounded-full',
       inputContainer: 'bg-white'
     };
   }
   
-  // Default fallback
+  // Default fallback (Blue)
   return {
-    container: 'bg-white border border-gray-200 rounded-lg shadow',
+    container: 'bg-white',
     header: 'bg-blue-600 text-white p-3 rounded-t-lg',
     font: 'font-sans',
     botBubble: 'bg-blue-100 text-blue-800 rounded-lg rounded-tl-none',
