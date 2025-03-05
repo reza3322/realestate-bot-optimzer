@@ -11,38 +11,17 @@ export const supabase = createClient(supabaseUrl, supabaseKey);
 // Check if the chatbot_settings table exists
 export const createChatbotSettingsTable = async () => {
   try {
-    // Try to count rows in the table to check if it exists
-    const { error } = await supabase
-      .from('chatbot_settings')
-      .select('*', { count: 'exact', head: true });
+    console.log('Attempting to create chatbot_settings table if it doesn\'t exist');
     
-    if (error) {
-      if (error.code === '42P01') { // Table doesn't exist
-        console.log('Table chatbot_settings does not exist, attempting to create it');
-        
-        // Try to create the table via edge function (more reliable than RPC)
-        try {
-          // Call the edge function without authentication for initial setup
-          const { error: funcError } = await supabase.functions.invoke('create-chatbot-settings');
-          
-          if (funcError) {
-            console.error('Error creating chatbot_settings table via edge function:', funcError);
-            return { success: false, error: funcError };
-          }
-          
-          console.log('Successfully created chatbot_settings table via edge function');
-          return { success: true };
-        } catch (callError) {
-          console.error('Exception in edge function call:', callError);
-          return { success: false, error: callError };
-        }
-      } else {
-        console.error('Unexpected error checking chatbot_settings table:', error);
-        return { success: false, error };
-      }
+    // Call the edge function to create the table if needed
+    const { error: funcError } = await supabase.functions.invoke('create-chatbot-settings');
+    
+    if (funcError) {
+      console.error('Error creating chatbot_settings table via edge function:', funcError);
+      return { success: false, error: funcError };
     }
     
-    console.log('Table chatbot_settings exists');
+    console.log('Successfully created or confirmed chatbot_settings table');
     return { success: true };
   } catch (error) {
     console.error('Error in createChatbotSettingsTable:', error);
@@ -296,7 +275,7 @@ export const logActivity = async (activity: any) => {
   return { error };
 };
 
-// Admin functions - now using edge functions with proper authentication
+// Admin functions
 export const createEnterpriseUser = async (email: string, password: string, firstName: string, lastName: string, plan: string = 'starter') => {
   try {
     const { data: sessionData } = await supabase.auth.getSession();
@@ -334,7 +313,7 @@ export const createEnterpriseUser = async (email: string, password: string, firs
   }
 };
 
-// Function to get all users - now using the secure approach via Edge Function
+// Function to get all users
 export const getAllUsers = async () => {
   try {
     const { data, error } = await supabase
@@ -361,7 +340,7 @@ export const getAllUsers = async () => {
   }
 };
 
-// New function to get API usage statistics for each user - now using Edge Function
+// New function to get API usage statistics for each user
 export const getUserUsageStats = async () => {
   try {
     const { data: session } = await supabase.auth.getSession();
@@ -388,7 +367,7 @@ export const getUserUsageStats = async () => {
   }
 };
 
-// New function to get system logs for troubleshooting - now using Edge Function
+// New function to get system logs for troubleshooting
 export const getSystemLogs = async () => {
   try {
     const { data: session } = await supabase.auth.getSession();

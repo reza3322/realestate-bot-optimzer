@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import Chatbot from "@/components/ui/chatbot/Chatbot";
-import { MessageCircle, Bot, Headphones, MessageSquare, BrainCircuit, ArrowUp } from "lucide-react";
+import { MessageCircle, Bot, Headphones, MessageSquare, BrainCircuit } from "lucide-react";
 import { testChatbotResponse } from "@/components/ui/chatbot/responseHandlers";
 import ChatbotTraining from "@/components/ui/chatbot/ChatbotTraining";
 
@@ -89,7 +89,14 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
 
   useEffect(() => {
     const initChatbotSettings = async () => {
-      await createChatbotSettingsTable();
+      try {
+        const { success, error } = await createChatbotSettingsTable();
+        if (!success) {
+          console.error("Error initializing chatbot settings table:", error);
+        }
+      } catch (err) {
+        console.error("Exception initializing chatbot settings:", err);
+      }
     };
     
     initChatbotSettings();
@@ -105,6 +112,8 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
           const { script, error } = await generateChatbotScript(userId);
           if (!error && script) {
             setGeneratedScript(script);
+          } else if (error) {
+            console.error("Error generating script:", error);
           }
         }
       } catch (err) {
@@ -117,6 +126,8 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
 
   useEffect(() => {
     const fetchSettings = async () => {
+      if (!userId) return;
+      
       setLoading(true);
       try {
         await createChatbotSettingsTable();
@@ -132,25 +143,33 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
         if (error) {
           console.error("Error fetching chatbot settings:", error);
           toast.error("Error loading chatbot settings");
-        } else if (data) {
+        } else if (data && data.settings) {
+          console.log("Loaded settings:", data.settings);
           setSettings(data.settings);
+        } else {
+          console.log("No settings found, using defaults");
         }
       } catch (error) {
-        console.error("Error fetching chatbot settings:", error);
+        console.error("Exception fetching chatbot settings:", error);
         toast.error("Error loading chatbot settings");
       } finally {
         setLoading(false);
       }
     };
     
-    if (userId) {
-      fetchSettings();
-    }
+    fetchSettings();
   }, [userId]);
 
   const saveSettings = async () => {
+    if (!userId) {
+      toast.error("User ID is required to save settings");
+      return;
+    }
+    
     setSaving(true);
     try {
+      console.log(`Saving settings for user ID: ${userId}`);
+      
       const { data, error } = await supabase
         .from("chatbot_settings")
         .upsert({ 
@@ -160,7 +179,7 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
         });
       
       if (error) {
-        console.error("Error details:", error);
+        console.error("Error saving settings:", error);
         throw error;
       }
       
@@ -173,7 +192,7 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
       
       toast.success("Chatbot settings saved successfully");
     } catch (error) {
-      console.error("Error saving chatbot settings:", error);
+      console.error("Exception saving chatbot settings:", error);
       toast.error("Error saving chatbot settings");
     } finally {
       setSaving(false);
