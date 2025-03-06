@@ -20,7 +20,10 @@ const ChatbotDemo = ({ className, maxHeight = "300px" }: ChatbotDemoProps) => {
   // Generate a demo styles object that matches ChatStylesType
   const styles: ChatStylesType = {
     container: 'bg-white dark:bg-gray-800 shadow-md rounded-lg',
-    header: 'bg-primary text-white p-3 rounded-t-lg flex items-center',
+    header: {
+      container: 'bg-primary text-white p-3 rounded-t-lg flex items-center',
+      font: 'text-white font-medium'
+    },
     userBubble: 'bg-primary/10 text-foreground rounded-lg p-3 max-w-[80%] ml-auto',
     botBubble: 'bg-muted text-foreground rounded-lg p-3 max-w-[80%]',
     inputContainer: 'border-t border-border p-3 bg-background',
