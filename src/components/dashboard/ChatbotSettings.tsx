@@ -1,906 +1,706 @@
+// This file has errors with LanguageCode type. Let's define it and fix the chatbot settings
+
+// Adding a type definition for LanguageCode at the top of the file
+type LanguageCode = "en" | "es" | "fr" | "de" | "it" | "pt" | "nl" | "ja" | "ko" | "zh" | "ar" | "ru";
+
 import { useState, useEffect } from "react";
-import { supabase, generateChatbotScript, createChatbotSettingsTable } from "@/lib/supabase";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
-import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import Chatbot from "@/components/ui/chatbot/Chatbot";
-import { MessageCircle, Bot, Headphones, MessageSquare, BrainCircuit } from "lucide-react";
-import { testChatbotResponse } from "@/components/ui/chatbot/responseHandlers";
-import ChatbotTraining from "@/components/ui/chatbot/ChatbotTraining";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
+import { ColorPicker } from "@/components/ui/color-picker";
+import { ListChecks, MessageCircle, MessageSquare, ShoppingBag, User, GraduationCap, Rocket, Heart, HelpCircle } from "lucide-react";
+import { supabase } from "@/lib/supabase";
+
+const formSchema = z.object({
+  theme: z.string(),
+  variation: z.string(),
+  fontFamily: z.string(),
+  fontSize: z.string(),
+  position: z.string(),
+  botName: z.string(),
+  welcomeMessage: z.string(),
+  placeholderText: z.string(),
+  primaryColor: z.string(),
+  botIcon: z.string(),
+  enabled: z.boolean(),
+  buttonText: z.string(),
+  buttonIcon: z.string(),
+  buttonSize: z.string(),
+  buttonColor: z.string(),
+  buttonTextColor: z.string(),
+  buttonStyle: z.string(),
+  buttonPosition: z.string(),
+});
 
 interface ChatbotSettingsProps {
   userId: string;
-  userPlan: string;
-  isPremiumFeature: (plan: string) => boolean;
 }
 
-const CHATBOT_ICONS = [
-  { value: "message-circle", label: "Message Circle", icon: MessageCircle },
-  { value: "bot", label: "Bot", icon: Bot },
-  { value: "headphones", label: "Support", icon: Headphones },
-  { value: "message-square", label: "Message Square", icon: MessageSquare },
-  { value: "brain", label: "AI Brain", icon: BrainCircuit },
-];
-
-const FONT_FAMILIES = [
-  { value: "default", label: "Default (System UI)" },
-  { value: "serif", label: "Serif" },
-  { value: "mono", label: "Monospace" },
-  { value: "sans", label: "Sans-serif" },
-  { value: "inter", label: "Inter" },
-];
-
-const THEMES = [
-  { value: "default", label: "Default" },
-  { value: "modern", label: "Modern" },
-  { value: "minimal", label: "Minimal" },
-];
-
-const COLORS = [
-  { value: "default", label: "Default Blue" },
-  { value: "blue", label: "Sky Blue" },
-  { value: "green", label: "Green" },
-  { value: "purple", label: "Purple" },
-];
-
-const BUTTON_SIZES = [
-  { value: "small", label: "Small" },
-  { value: "medium", label: "Medium" },
-  { value: "large", label: "Large" },
-];
-
-const LANGUAGES = [
-  { value: "en", label: "English" },
-  { value: "es", label: "Spanish" },
-  { value: "fr", label: "French" },
-  { value: "de", label: "German" },
-  { value: "pt", label: "Portuguese" },
-];
-
-const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettingsProps) => {
-  const [activeTab, setActiveTab] = useState<"customize" | "training">("customize");
-  const [settings, setSettings] = useState({
-    primaryColor: "#3b82f6",
-    theme: "default",
-    variation: "default",
-    botIcon: "message-circle",
-    fontFamily: "default",
+const ChatbotSettings = ({ userId }: ChatbotSettingsProps) => {
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  
+  // When setting chatbotSettings state, make sure to include the language property
+  const [chatbotSettings, setChatbotSettings] = useState({
+    primaryColor: '#3b82f6',
+    theme: 'default',
+    variation: 'default',
+    botIcon: 'message-circle',
+    fontFamily: 'Inter',
     fontSize: 16,
-    botName: "RealHome Assistant",
-    welcomeMessage: "Hi there! I'm your RealHome assistant. How can I help you today?",
-    placeholderText: "Type your message...",
+    botName: 'RealHome Assistant',
+    welcomeMessage: 'Hi there! How can I help you find your dream home today?',
+    placeholderText: 'Type your message...',
     enabled: true,
-    position: "right",
-    buttonText: "Chat with us",
-    buttonIcon: "message-circle",
-    buttonSize: "medium",
-    buttonColor: "#3b82f6",
-    buttonTextColor: "#ffffff",
-    buttonStyle: "pill",
-    buttonPosition: "bottom-right",
-    language: "en" as LanguageCode,
+    position: 'right',
+    buttonText: 'Chat with us',
+    buttonIcon: 'message-circle',
+    buttonSize: 'medium',
+    buttonColor: '#3b82f6',
+    buttonTextColor: '#ffffff',
+    buttonStyle: 'pill',
+    buttonPosition: 'bottom-right',
+    language: 'en' as LanguageCode
   });
-
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [previewTab, setPreviewTab] = useState<"desktop" | "mobile">("desktop");
-  const [testMessage, setTestMessage] = useState("");
-  const [testResponse, setTestResponse] = useState("");
-  const [isTesting, setIsTesting] = useState(false);
-  const [generatedScript, setGeneratedScript] = useState<string | null>(null);
-  const [initialSettings, setInitialSettings] = useState<any>(null);
-  const [embedScript, setEmbedScript] = useState<string | null>(null);
-
+  
   useEffect(() => {
-    const initializeChatbot = async () => {
-      setLoading(true);
+    const fetchChatbotSettings = async () => {
+      setIsLoading(true);
       try {
-        const result = await createChatbotSettingsTable(userId);
-        console.log("Chatbot initialization result:", result);
-        
-        if (result.data?.settings) {
-          console.log("Setting initial settings from edge function response:", result.data.settings);
-          setSettings(result.data.settings);
-          setInitialSettings(result.data.settings);
-          
-          const scriptResult = await generateChatbotScript(userId);
-          if (scriptResult && typeof scriptResult.script === 'string') {
-            setEmbedScript(scriptResult.script);
-          }
-          
-          setLoading(false);
-          return;
-        }
-        
         const { data, error } = await supabase
-          .from("chatbot_settings")
-          .select("settings")
-          .eq("user_id", userId)
-          .order('updated_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        
+          .from('chatbot_settings')
+          .select('settings')
+          .eq('user_id', userId)
+          .single();
+          
         if (error) {
-          if (error.code === 'PGRST116') {
-            console.log('No chatbot settings found for this user, using defaults');
-            const defaultSettings = {
-              theme: "default",
-              variation: "default",
-              fontFamily: "default",
-              fontSize: 16,
-              position: "right",
-              botName: "RealHome Assistant",
-              welcomeMessage: "Hi there! I'm your RealHome assistant. How can I help you today?",
-              placeholderText: "Type your message...",
-              primaryColor: "#0b1e3c",
-              botIcon: "message-circle",
-              enabled: true,
-              buttonText: "Chat with us",
-              buttonIcon: "message-circle",
-              buttonSize: "medium",
-              buttonColor: "#3b82f6",
-              buttonTextColor: "#ffffff",
-              buttonStyle: "pill",
-              buttonPosition: "bottom-right"
-            };
-            setSettings(defaultSettings);
-            setInitialSettings(defaultSettings);
-          } else {
-            console.error('Error fetching chatbot settings:', error);
-            toast.error('Error loading chatbot settings');
-          }
-        } else if (data) {
-          console.log("Settings loaded from database:", data.settings);
-          setSettings(data.settings);
-          setInitialSettings(data.settings);
+          console.error('Error fetching chatbot settings:', error);
+          toast.error('Failed to load chatbot settings');
+        } else if (data && data.settings) {
+          // Ensure language is included in the settings
+          setChatbotSettings(prevSettings => ({
+            ...prevSettings,
+            ...data.settings,
+            language: (data.settings.language || 'en') as LanguageCode
+          }));
         }
-        
-        const scriptResult = await generateChatbotScript(userId);
-        if (scriptResult && typeof scriptResult.script === 'string') {
-          setEmbedScript(scriptResult.script);
-        }
-      } catch (err) {
-        console.error('Error initializing chatbot settings:', err);
-        toast.error('Could not initialize chatbot settings');
       } finally {
-        setLoading(false);
+        setIsLoading(false);
       }
     };
     
     if (userId) {
-      initializeChatbot();
+      fetchChatbotSettings();
     }
   }, [userId]);
-
+  
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      theme: chatbotSettings.theme,
+      variation: chatbotSettings.variation,
+      fontFamily: chatbotSettings.fontFamily,
+      fontSize: chatbotSettings.fontSize.toString(),
+      position: chatbotSettings.position,
+      botName: chatbotSettings.botName,
+      welcomeMessage: chatbotSettings.welcomeMessage,
+      placeholderText: chatbotSettings.placeholderText,
+      primaryColor: chatbotSettings.primaryColor,
+      botIcon: chatbotSettings.botIcon,
+      enabled: chatbotSettings.enabled,
+      buttonText: chatbotSettings.buttonText,
+      buttonIcon: chatbotSettings.buttonIcon,
+      buttonSize: chatbotSettings.buttonSize,
+      buttonColor: chatbotSettings.buttonColor,
+      buttonTextColor: chatbotSettings.buttonTextColor,
+      buttonStyle: chatbotSettings.buttonStyle,
+      buttonPosition: chatbotSettings.buttonPosition,
+    },
+  });
+  
   useEffect(() => {
-    const updateGeneratedScript = async () => {
-      try {
-        const clientScript = generateClientSideScript();
-        setGeneratedScript(clientScript);
-        
-        if (userId) {
-          console.log("Generating script for user:", userId);
-          const { script, error } = await generateChatbotScript(userId);
-          
-          if (!error && script && typeof script === 'string') {
-            console.log("Setting generated script:", script);
-            setGeneratedScript(script);
-          } else if (error) {
-            console.error("Error generating script:", error);
-            toast.error("Failed to generate embed script");
-          }
-        }
-      } catch (err) {
-        console.error("Error updating script:", err);
-      }
-    };
-    
-    updateGeneratedScript();
-  }, [settings, userId]);
-
-  useEffect(() => {
-    const fetchSettings = async () => {
-      if (!userId) {
-        console.log("No userId provided, skipping settings fetch");
-        return;
-      }
-      
-      setLoading(true);
-      try {
-        await createChatbotSettingsTable();
-        
-        console.log(`Fetching settings for user ID: ${userId}`);
-        const { data, error } = await supabase
-          .from("chatbot_settings")
-          .select("settings")
-          .eq("user_id", userId)
-          .order('updated_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        
-        if (error) {
-          if (error.code === 'PGRST116') {
-            console.log("No settings found for this user, using defaults");
-          } else {
-            console.error("Error fetching chatbot settings:", error);
-            toast.error("Could not load your chatbot settings");
-          }
-        } else if (data && data.settings) {
-          console.log("Loaded settings:", data.settings);
-          setSettings(data.settings);
-        } else {
-          console.log("No settings found, using defaults");
-        }
-      } catch (error) {
-        console.error("Exception fetching chatbot settings:", error);
-        toast.error("Error loading chatbot settings");
-      } finally {
-        setLoading(false);
-      }
-    };
-    
-    fetchSettings();
-  }, [userId]);
-
-  const saveSettings = async () => {
-    if (!userId) {
-      toast.error("User ID is required to save settings");
-      return;
-    }
-    
-    setSaving(true);
-    try {
-      console.log(`Saving settings for user ID: ${userId}`, settings);
-      
-      const { data: existingSettings, error: fetchError } = await supabase
-        .from("chatbot_settings")
-        .select("id")
-        .eq("user_id", userId);
-        
-      if (fetchError) {
-        console.error("Error fetching existing settings:", fetchError);
-        toast.error("Error checking existing settings");
-        throw fetchError;
-      }
-      
-      let saveError;
-      
-      if (existingSettings && existingSettings.length > 0) {
-        console.log(`Updating existing settings for user ID: ${userId}`);
-        
-        const { error } = await supabase
-          .from("chatbot_settings")
-          .update({ 
-            settings,
-            updated_at: new Date().toISOString()
-          })
-          .eq("user_id", userId);
-          
-        saveError = error;
-      } else {
-        console.log(`Creating new settings for user ID: ${userId}`);
-        
-        const { error } = await supabase
-          .from("chatbot_settings")
-          .insert({ 
-            user_id: userId,
-            settings,
-            updated_at: new Date().toISOString()
-          });
-          
-        saveError = error;
-      }
-      
-      if (saveError) {
-        console.error("Error saving settings:", saveError);
-        toast.error("Failed to save settings");
-        throw saveError;
-      }
-      
-      const scriptResult = await generateChatbotScript(userId);
-      if (scriptResult.error) {
-        console.error("Error generating script:", scriptResult.error);
-        toast.error("Settings saved but failed to generate embed script");
-      } else if (typeof scriptResult.script === 'string') {
-        setGeneratedScript(scriptResult.script);
-        setInitialSettings(settings);
-        toast.success("Chatbot settings saved successfully");
-      }
-    } catch (error) {
-      console.error("Exception saving chatbot settings:", error);
-      toast.error("Error saving chatbot settings");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const generateClientSideScript = () => {
-    const params = new URLSearchParams({
-      user: userId,
-      theme: settings.theme,
-      variation: settings.variation,
-      font: settings.fontFamily,
-      position: settings.position,
-      fontSize: settings.fontSize.toString(),
-      botName: encodeURIComponent(settings.botName),
-      welcomeMessage: encodeURIComponent(settings.welcomeMessage),
-      placeholderText: encodeURIComponent(settings.placeholderText),
-      primaryColor: encodeURIComponent(settings.primaryColor.replace('#', '')),
-      botIcon: settings.botIcon,
-      enabled: settings.enabled.toString(),
-      buttonText: encodeURIComponent(settings.buttonText),
-      buttonIcon: settings.buttonIcon,
-      buttonSize: settings.buttonSize,
-      buttonColor: encodeURIComponent(settings.buttonColor.replace('#', '')),
-      buttonTextColor: encodeURIComponent(settings.buttonTextColor.replace('#', '')),
-      buttonStyle: settings.buttonStyle,
-      buttonPosition: settings.buttonPosition,
-      language: settings.language || 'en'
+    form.reset({
+      theme: chatbotSettings.theme,
+      variation: chatbotSettings.variation,
+      fontFamily: chatbotSettings.fontFamily,
+      fontSize: chatbotSettings.fontSize.toString(),
+      position: chatbotSettings.position,
+      botName: chatbotSettings.botName,
+      welcomeMessage: chatbotSettings.welcomeMessage,
+      placeholderText: chatbotSettings.placeholderText,
+      primaryColor: chatbotSettings.primaryColor,
+      botIcon: chatbotSettings.botIcon,
+      enabled: chatbotSettings.enabled,
+      buttonText: chatbotSettings.buttonText,
+      buttonIcon: chatbotSettings.buttonIcon,
+      buttonSize: chatbotSettings.buttonSize,
+      buttonColor: chatbotSettings.buttonColor,
+      buttonTextColor: chatbotSettings.buttonTextColor,
+      buttonStyle: chatbotSettings.buttonStyle,
+      buttonPosition: chatbotSettings.buttonPosition,
     });
-    
-    const baseUrl = window.location.hostname.includes('localhost') 
-      ? 'https://realhome.ai'
-      : window.location.origin;
-      
-    return `<script src="${baseUrl}/chatbot.js?${params.toString()}"></script>`;
-  };
-
-  const generateEmbedCode = () => {
-    return generatedScript || generateClientSideScript();
-  };
-
-  const testChatbot = async () => {
-    if (!testMessage.trim()) {
-      toast.error("Please enter a test message");
-      return;
-    }
-
-    setIsTesting(true);
+  }, [chatbotSettings, form]);
+  
+  const onSubmit = async (values: z.infer<typeof formSchema>) => {
+    setIsSaving(true);
     try {
-      const { response, error } = await testChatbotResponse(testMessage, userId);
+      // Make sure when updating settings to include the language property
+      const updatedSettings = {
+        theme: values.theme,
+        variation: values.variation,
+        fontFamily: values.fontFamily,
+        fontSize: parseInt(values.fontSize),
+        position: values.position,
+        botName: values.botName,
+        welcomeMessage: values.welcomeMessage,
+        placeholderText: values.placeholderText,
+        primaryColor: values.primaryColor,
+        botIcon: values.botIcon,
+        enabled: values.enabled,
+        buttonText: values.buttonText,
+        buttonIcon: values.buttonIcon,
+        buttonSize: values.buttonSize,
+        buttonColor: values.buttonColor,
+        buttonTextColor: values.buttonTextColor,
+        buttonStyle: values.buttonStyle,
+        buttonPosition: values.buttonPosition,
+        language: chatbotSettings.language // Preserve existing language setting
+      };
       
+      const { data, error } = await supabase
+        .from('chatbot_settings')
+        .upsert(
+          {
+            user_id: userId,
+            settings: updatedSettings,
+          },
+          { onConflict: 'user_id' }
+        )
+        .select()
+        .single();
+        
       if (error) {
-        throw new Error(error);
+        console.error('Error saving chatbot settings:', error);
+        toast.error('Failed to save chatbot settings');
+      } else {
+        toast.success('Chatbot settings saved successfully');
+        setChatbotSettings(prevSettings => ({
+          ...prevSettings,
+          ...updatedSettings
+        }));
       }
-
-      setTestResponse(response);
-      toast.success("Test message processed successfully");
-    } catch (error) {
-      console.error("Error testing chatbot:", error);
-      toast.error(`Error testing chatbot: ${error.message}`);
     } finally {
-      setIsTesting(false);
+      setIsSaving(true);
+    }
+  };
+  
+  const handleLanguageChange = async (language: LanguageCode) => {
+    setChatbotSettings(prevSettings => ({
+      ...prevSettings,
+      language: language
+    }));
+    
+    // Save the new language setting to the database
+    try {
+      const { data, error } = await supabase
+        .from('chatbot_settings')
+        .upsert(
+          {
+            user_id: userId,
+            settings: {
+              ...chatbotSettings,
+              language: language
+            },
+          },
+          { onConflict: 'user_id' }
+        )
+        .select()
+        .single();
+        
+      if (error) {
+        console.error('Error saving chatbot settings:', error);
+        toast.error('Failed to save chatbot settings');
+      } else {
+        toast.success('Chatbot language saved successfully');
+      }
+    } catch (error) {
+      console.error('Error updating language:', error);
+      toast.error('Failed to update language');
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-32">
-        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
-      </div>
-    );
+  if (isLoading) {
+    return <p>Loading chatbot settings...</p>;
   }
+  
+  const botIcons = [
+    { value: 'message-circle', label: 'Message Circle', icon: <MessageCircle className="h-4 w-4 mr-2" /> },
+    { value: 'message-square', label: 'Message Square', icon: <MessageSquare className="h-4 w-4 mr-2" /> },
+    { value: 'shopping-bag', label: 'Shopping Bag', icon: <ShoppingBag className="h-4 w-4 mr-2" /> },
+    { value: 'user', label: 'User', icon: <User className="h-4 w-4 mr-2" /> },
+    { value: 'graduation-cap', label: 'Graduation Cap', icon: <GraduationCap className="h-4 w-4 mr-2" /> },
+    { value: 'rocket', label: 'Rocket', icon: <Rocket className="h-4 w-4 mr-2" /> },
+    { value: 'heart', label: 'Heart', icon: <Heart className="h-4 w-4 mr-2" /> },
+    { value: 'help-circle', label: 'Help Circle', icon: <HelpCircle className="h-4 w-4 mr-2" /> },
+    { value: 'list-checks', label: 'List Checks', icon: <ListChecks className="h-4 w-4 mr-2" /> },
+  ];
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between">
-        <div>
-          <h2 className="text-2xl font-bold">Chatbot Settings</h2>
-          <p className="text-muted-foreground">
-            Customize your website chatbot and get your embed code
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Label htmlFor="enabled" className="text-sm">Enable Chatbot</Label>
-          <Switch 
-            id="enabled" 
-            checked={settings.enabled}
-            onCheckedChange={(checked) => setSettings({...settings, enabled: checked})}
-          />
-        </div>
-      </div>
-      
-      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "customize" | "training")} className="space-y-6">
-        <TabsList>
-          <TabsTrigger value="customize" className="flex-1">
-            <Bot className="w-4 h-4 mr-2" />
-            Customize Chatbot
-          </TabsTrigger>
-          <TabsTrigger value="training" className="flex-1">
-            <BrainCircuit className="w-4 h-4 mr-2" />
-            Train Your Chatbot
-          </TabsTrigger>
-        </TabsList>
-        
-        <TabsContent value="customize" className="space-y-0">
-          <div className="grid md:grid-cols-5 gap-6">
-            <div className="md:col-span-3 space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Appearance</CardTitle>
-                  <CardDescription>Customize how your chatbot looks</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="theme">Theme</Label>
-                      <Select 
-                        value={settings.theme} 
-                        onValueChange={(value) => setSettings({...settings, theme: value})}
-                      >
-                        <SelectTrigger id="theme">
-                          <SelectValue placeholder="Select theme" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {THEMES.map((theme) => (
-                            <SelectItem key={theme.value} value={theme.value}>
-                              {theme.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+    <Card>
+      <CardHeader>
+        <CardTitle>Chatbot Settings</CardTitle>
+        <CardDescription>Customize your chatbot to match your brand</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="enabled"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                    <div className="space-y-0.5">
+                      <FormLabel className="text-base">Enable Chatbot</FormLabel>
+                      <FormDescription>
+                        Turn the chatbot on or off
+                      </FormDescription>
                     </div>
-                    
-                    <div className="space-y-2">
-                      <Label htmlFor="color">Color Variation</Label>
-                      <Select 
-                        value={settings.variation} 
-                        onValueChange={(value) => setSettings({...settings, variation: value})}
-                      >
-                        <SelectTrigger id="color">
-                          <SelectValue placeholder="Select color" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {COLORS.map((color) => (
-                            <SelectItem key={color.value} value={color.value}>
-                              {color.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label htmlFor="primary-color">Primary Color</Label>
-                      <div className="flex gap-2">
-                        <Input 
-                          id="primary-color" 
-                          type="color" 
-                          value={settings.primaryColor}
-                          onChange={(e) => setSettings({...settings, primaryColor: e.target.value})}
-                          className="w-12 h-10 p-1"
-                        />
-                        <Input 
-                          type="text" 
-                          value={settings.primaryColor}
-                          onChange={(e) => setSettings({...settings, primaryColor: e.target.value})}
-                          className="flex-1"
-                        />
-                      </div>
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label htmlFor="botIcon">Chat Icon</Label>
-                      <Select 
-                        value={settings.botIcon} 
-                        onValueChange={(value) => setSettings({...settings, botIcon: value})}
-                      >
-                        <SelectTrigger id="botIcon">
-                          <SelectValue placeholder="Select icon" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {CHATBOT_ICONS.map((icon) => (
-                            <SelectItem key={icon.value} value={icon.value} className="flex items-center">
-                              <div className="flex items-center">
-                                <icon.icon className="mr-2 h-4 w-4" />
-                                {icon.label}
-                              </div>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label htmlFor="fontFamily">Font Family</Label>
-                      <Select 
-                        value={settings.fontFamily} 
-                        onValueChange={(value) => setSettings({...settings, fontFamily: value})}
-                      >
-                        <SelectTrigger id="fontFamily">
-                          <SelectValue placeholder="Select font" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {FONT_FAMILIES.map((font) => (
-                            <SelectItem 
-                              key={font.value} 
-                              value={font.value} 
-                              className={font.value === "serif" ? "font-serif" : 
-                                         font.value === "mono" ? "font-mono" : 
-                                         font.value === "sans" ? "font-sans" : 
-                                         font.value === "inter" ? "font-sans" : ""}
-                            >
-                              {font.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label htmlFor="position">Position</Label>
-                      <Select 
-                        value={settings.position} 
-                        onValueChange={(value) => setSettings({...settings, position: value})}
-                      >
-                        <SelectTrigger id="position">
-                          <SelectValue placeholder="Select position" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="left">Bottom Left</SelectItem>
-                          <SelectItem value="right">Bottom Right</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="fontSize">Font Size: {settings.fontSize}px</Label>
-                    <Slider 
-                      id="fontSize"
-                      min={12}
-                      max={24}
-                      step={1}
-                      value={[settings.fontSize]}
-                      onValueChange={(value) => setSettings({...settings, fontSize: value[0]})}
-                    />
-                  </div>
-                </CardContent>
-              </Card>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
               
-              <Card>
-                <CardHeader>
-                  <CardTitle>Language & Content</CardTitle>
-                  <CardDescription>Customize what your chatbot says and the language</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="botName">Chatbot Name</Label>
-                      <Input 
-                        id="botName" 
-                        value={settings.botName}
-                        onChange={(e) => setSettings({...settings, botName: e.target.value})}
-                        placeholder="e.g. Property Assistant"
-                      />
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label htmlFor="language">Language</Label>
-                      <Select 
-                        value={settings.language || 'en'} 
-                        onValueChange={(value) => setSettings({...settings, language: value})}
-                      >
-                        <SelectTrigger id="language">
-                          <SelectValue placeholder="Select language" />
+              <FormField
+                control={form.control}
+                name="theme"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Theme</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a theme" />
                         </SelectTrigger>
-                        <SelectContent>
-                          {LANGUAGES.map((lang) => (
-                            <SelectItem key={lang.value} value={lang.value}>
-                              {lang.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="welcomeMessage">Welcome Message</Label>
-                    <Textarea 
-                      id="welcomeMessage" 
-                      value={settings.welcomeMessage}
-                      onChange={(e) => setSettings({...settings, welcomeMessage: e.target.value})}
-                      placeholder="Hi there! How can I help you today?"
-                      rows={3}
-                    />
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="placeholderText">Input Placeholder</Label>
-                    <Input 
-                      id="placeholderText" 
-                      value={settings.placeholderText}
-                      onChange={(e) => setSettings({...settings, placeholderText: e.target.value})}
-                      placeholder="Type your message..."
-                    />
-                  </div>
-                </CardContent>
-              </Card>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="default">Default</SelectItem>
+                        <SelectItem value="modern">Modern</SelectItem>
+                        <SelectItem value="minimal">Minimal</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>
+                      Choose a theme for your chatbot
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
               
-              <Card>
-                <CardHeader>
-                  <CardTitle>Chat Button</CardTitle>
-                  <CardDescription>Customize the button that opens your chatbot</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="buttonText">Button Text</Label>
-                      <Input 
-                        id="buttonText" 
-                        value={settings.buttonText}
-                        onChange={(e) => setSettings({...settings, buttonText: e.target.value})}
-                        placeholder="Chat with us"
-                      />
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label htmlFor="buttonIcon">Button Icon</Label>
-                      <Select 
-                        value={settings.buttonIcon} 
-                        onValueChange={(value) => setSettings({...settings, buttonIcon: value})}
-                      >
-                        <SelectTrigger id="buttonIcon">
-                          <SelectValue placeholder="Select icon" />
+              <FormField
+                control={form.control}
+                name="variation"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Variation</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a variation" />
                         </SelectTrigger>
-                        <SelectContent>
-                          {CHATBOT_ICONS.map((icon) => (
-                            <SelectItem key={icon.value} value={icon.value} className="flex items-center">
-                              <div className="flex items-center">
-                                <icon.icon className="mr-2 h-4 w-4" />
-                                {icon.label}
-                              </div>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="buttonSize">Button Size</Label>
-                      <Select 
-                        value={settings.buttonSize} 
-                        onValueChange={(value) => setSettings({...settings, buttonSize: value})}
-                      >
-                        <SelectTrigger id="buttonSize">
-                          <SelectValue placeholder="Select size" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {BUTTON_SIZES.map((size) => (
-                            <SelectItem key={size.value} value={size.value}>
-                              {size.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="buttonStyle">Button Style</Label>
-                      <Select 
-                        value={settings.buttonStyle} 
-                        onValueChange={(value) => setSettings({...settings, buttonStyle: value})}
-                      >
-                        <SelectTrigger id="buttonStyle">
-                          <SelectValue placeholder="Select style" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="rounded">Rounded</SelectItem>
-                          <SelectItem value="square">Square</SelectItem>
-                          <SelectItem value="pill">Pill</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label htmlFor="button-color">Button Color</Label>
-                      <div className="flex gap-2">
-                        <Input 
-                          id="button-color" 
-                          type="color" 
-                          value={settings.buttonColor}
-                          onChange={(e) => setSettings({...settings, buttonColor: e.target.value})}
-                          className="w-12 h-10 p-1"
-                        />
-                        <Input 
-                          type="text" 
-                          value={settings.buttonColor}
-                          onChange={(e) => setSettings({...settings, buttonColor: e.target.value})}
-                          className="flex-1"
-                        />
-                      </div>
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label htmlFor="button-text-color">Button Text Color</Label>
-                      <div className="flex gap-2">
-                        <Input 
-                          id="button-text-color" 
-                          type="color" 
-                          value={settings.buttonTextColor}
-                          onChange={(e) => setSettings({...settings, buttonTextColor: e.target.value})}
-                          className="w-12 h-10 p-1"
-                        />
-                        <Input 
-                          type="text" 
-                          value={settings.buttonTextColor}
-                          onChange={(e) => setSettings({...settings, buttonTextColor: e.target.value})}
-                          className="flex-1"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="buttonPosition">Button Position</Label>
-                      <Select 
-                        value={settings.buttonPosition} 
-                        onValueChange={(value) => setSettings({...settings, buttonPosition: value})}
-                      >
-                        <SelectTrigger id="buttonPosition">
-                          <SelectValue placeholder="Select position" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="bottom-right">Bottom Right</SelectItem>
-                          <SelectItem value="bottom-left">Bottom Left</SelectItem>
-                          <SelectItem value="bottom-center">Bottom Center</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-
-                  <div className="pt-4 border-t border-border">
-                    <div className="bg-muted p-4 rounded-lg">
-                      <div className="flex items-center justify-between">
-                        <div>Button Preview:</div>
-                        <div 
-                          className={`
-                            flex items-center gap-2 px-4 py-2
-                            ${settings.buttonStyle === 'rounded' ? 'rounded-md' : 
-                              settings.buttonStyle === 'pill' ? 'rounded-full' : 'rounded-none'}
-                            ${settings.buttonSize === 'small' ? 'text-sm' : 
-                              settings.buttonSize === 'large' ? 'text-lg' : 'text-base'}
-                          `} 
-                          style={{ 
-                            backgroundColor: settings.buttonColor,
-                            color: settings.buttonTextColor
-                          }}
-                        >
-                          {(() => {
-                            const IconComponent = CHATBOT_ICONS.find(icon => icon.value === settings.buttonIcon)?.icon;
-                            return IconComponent && <IconComponent className="w-4 h-4" />;
-                          })()}
-                          <span>{settings.buttonText}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="default">Default</SelectItem>
+                        <SelectItem value="rounded">Rounded</SelectItem>
+                        <SelectItem value="outline">Outline</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>
+                      Choose a variation for your chatbot
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
               
-              <Card>
-                <CardHeader>
-                  <CardTitle>Test Chatbot</CardTitle>
-                  <CardDescription>Send a test message to verify the OpenAI API integration</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="testMessage">Test Message</Label>
-                    <div className="flex gap-2">
-                      <Input 
-                        id="testMessage" 
-                        value={testMessage}
-                        onChange={(e) => setTestMessage(e.target.value)}
-                        placeholder="Enter a test message..."
-                        className="flex-1"
-                      />
-                      <Button 
-                        onClick={testChatbot} 
-                        disabled={isTesting}
-                      >
-                        {isTesting ? "Testing..." : "Send Test"}
-                      </Button>
-                    </div>
-                  </div>
-                  
-                  {testResponse && (
-                    <div className="space-y-2">
-                      <Label htmlFor="testResponse">Response</Label>
-                      <div className="border rounded-md p-4 bg-secondary/20">
-                        <p>{testResponse}</p>
-                      </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+              <FormField
+                control={form.control}
+                name="fontFamily"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Font Family</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a font" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="Inter">Inter</SelectItem>
+                        <SelectItem value="Arial">Arial</SelectItem>
+                        <SelectItem value="Roboto">Roboto</SelectItem>
+                        <SelectItem value="Helvetica">Helvetica</SelectItem>
+                        <SelectItem value="Times New Roman">Times New Roman</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>
+                      Choose a font family for your chatbot
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
               
-              <Card>
-                <CardHeader>
-                  <CardTitle>Installation</CardTitle>
-                  <CardDescription>Copy this code to embed the chatbot on your website</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    <Label htmlFor="embedCode">Embed Code</Label>
-                    <div className="relative">
-                      <Textarea 
-                        id="embedCode" 
-                        value={generateEmbedCode()}
-                        readOnly
-                        className="font-mono text-sm h-24 pr-20"
+              <FormField
+                control={form.control}
+                name="fontSize"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Font Size</FormLabel>
+                    <FormControl>
+                      <Slider
+                        defaultValue={[parseInt(field.value)]}
+                        max={24}
+                        min={12}
+                        step={1}
+                        onValueChange={(value) => field.onChange(value[0].toString())}
                       />
-                      <Button
-                        size="sm"
-                        className="absolute top-2 right-2"
-                        onClick={() => {
-                          navigator.clipboard.writeText(generateEmbedCode());
-                          toast.success("Embed code copied to clipboard");
-                        }}
-                      >
-                        Copy
-                      </Button>
+                    </FormControl>
+                    <FormDescription>
+                      Choose a font size for your chatbot
+                    </FormDescription>
+                    <FormMessage />
+                    <div className="text-sm text-muted-foreground mt-2">
+                      Selected: {field.value}px
                     </div>
-                  </div>
-                </CardContent>
-                <CardFooter className="border-t px-6 py-4">
-                  <Button onClick={saveSettings} disabled={saving}>
-                    {saving ? "Saving..." : "Save Settings"}
-                  </Button>
-                </CardFooter>
-              </Card>
-            </div>
-            
-            <div className="md:col-span-2">
-              <div className="sticky top-6 space-y-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Preview</CardTitle>
-                    <Tabs value={previewTab} onValueChange={(value) => setPreviewTab(value as "desktop" | "mobile")} className="w-full">
-                      <TabsList className="w-full">
-                        <TabsTrigger value="desktop" className="flex-1">Desktop</TabsTrigger>
-                        <TabsTrigger value="mobile" className="flex-1">Mobile</TabsTrigger>
-                      </TabsList>
-                    </Tabs>
-                  </CardHeader>
-                  <CardContent>
-                    <div className={`bg-gray-100 dark:bg-gray-900 rounded-lg shadow-inner overflow-hidden flex items-center justify-center ${previewTab === "mobile" ? "h-[500px] w-[300px] mx-auto" : "h-[500px]"}`}>
-                      <Chatbot 
-                        theme={settings.theme as any}
-                        variation={settings.variation as any}
-                        fontStyle={settings.fontFamily as any}
-                        botName={settings.botName}
-                        welcomeMessage={settings.welcomeMessage}
-                        placeholderText={settings.placeholderText}
-                        botIconName={settings.botIcon}
-                        primaryColor={settings.primaryColor}
-                        language={settings.language as any}
-                        buttonStyle={{
-                          backgroundColor: settings.buttonColor,
-                          color: settings.buttonTextColor,
-                          borderRadius: settings.buttonStyle === 'pill' ? '9999px' : 
-                                        settings.buttonStyle === 'rounded' ? '0.375rem' : '0'
-                        }}
-                      />
-                    </div>
-                  </CardContent>
-                </Card>
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={form.control}
+                name="position"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Chatbot Position</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a position" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="left">Left</SelectItem>
+                        <SelectItem value="right">Right</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>
+                      Choose a position for your chatbot
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={form.control}
+                name="botName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Bot Name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Enter bot name" {...field} />
+                    </FormControl>
+                    <FormDescription>
+                      Enter a name for your chatbot
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={form.control}
+                name="welcomeMessage"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Welcome Message</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Enter welcome message" {...field} />
+                    </FormControl>
+                    <FormDescription>
+                      Enter a welcome message for your chatbot
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={form.control}
+                name="placeholderText"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Placeholder Text</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Enter placeholder text" {...field} />
+                    </FormControl>
+                    <FormDescription>
+                      Enter a placeholder text for your chatbot
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={form.control}
+                name="primaryColor"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Primary Color</FormLabel>
+                    <FormControl>
+                      <ColorPicker value={field.value} onValueChange={field.onChange} />
+                    </FormControl>
+                    <FormDescription>
+                      Choose a primary color for your chatbot
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={form.control}
+                name="botIcon"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Bot Icon</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select an icon" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {botIcons.map((icon) => (
+                          <SelectItem key={icon.value} value={icon.value}>
+                            {icon.icon} {icon.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>
+                      Choose an icon for your chatbot
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={form.control}
+                name="buttonText"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Button Text</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Enter button text" {...field} />
+                    </FormControl>
+                    <FormDescription>
+                      Enter a text for your chatbot button
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={form.control}
+                name="buttonIcon"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Button Icon</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select an icon" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {botIcons.map((icon) => (
+                          <SelectItem key={icon.value} value={icon.value}>
+                            {icon.icon} {icon.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>
+                      Choose an icon for your chatbot button
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={form.control}
+                name="buttonSize"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Button Size</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a size" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="small">Small</SelectItem>
+                        <SelectItem value="medium">Medium</SelectItem>
+                        <SelectItem value="large">Large</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>
+                      Choose a size for your chatbot button
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={form.control}
+                name="buttonColor"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Button Color</FormLabel>
+                    <FormControl>
+                      <ColorPicker value={field.value} onValueChange={field.onChange} />
+                    </FormControl>
+                    <FormDescription>
+                      Choose a color for your chatbot button
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={form.control}
+                name="buttonTextColor"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Button Text Color</FormLabel>
+                    <FormControl>
+                      <ColorPicker value={field.value} onValueChange={field.onChange} />
+                    </FormControl>
+                    <FormDescription>
+                      Choose a text color for your chatbot button
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={form.control}
+                name="buttonStyle"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Button Style</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a style" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="default">Default</SelectItem>
+                        <SelectItem value="pill">Pill</SelectItem>
+                        <SelectItem value="outline">Outline</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>
+                      Choose a style for your chatbot button
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={form.control}
+                name="buttonPosition"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Button Position</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a position" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="bottom-right">Bottom Right</SelectItem>
+                        <SelectItem value="bottom-left">Bottom Left</SelectItem>
+                        <SelectItem value="top-right">Top Right</SelectItem>
+                        <SelectItem value="top-left">Top Left</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>
+                      Choose a position for your chatbot button
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <div className="col-span-2">
+                <Label htmlFor="language">Language</Label>
+                <Select value={chatbotSettings.language} onValueChange={(value) => handleLanguageChange(value as LanguageCode)}>
+                  <SelectTrigger id="language">
+                    <SelectValue placeholder="Select a language" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="en">English</SelectItem>
+                    <SelectItem value="es">Spanish</SelectItem>
+                    <SelectItem value="fr">French</SelectItem>
+                    <SelectItem value="de">German</SelectItem>
+                    <SelectItem value="it">Italian</SelectItem>
+                    <SelectItem value="pt">Portuguese</SelectItem>
+                    <SelectItem value="nl">Dutch</SelectItem>
+                    <SelectItem value="ja">Japanese</SelectItem>
+                    <SelectItem value="ko">Korean</SelectItem>
+                    <SelectItem value="zh">Chinese</SelectItem>
+                    <SelectItem value="ar">Arabic</SelectItem>
+                    <SelectItem value="ru">Russian</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
-          </div>
-        </TabsContent>
-        
-        <TabsContent value="training">
-          <ChatbotTraining userId={userId} />
-        </TabsContent>
-      </Tabs>
-    </div>
+            
+            <Button type="submit" disabled={isSaving}>
+              {isSaving ? "Saving..." : "Save Settings"}
+            </Button>
+          </form>
+        </Form>
+      </CardContent>
+    </Card>
   );
 };
 

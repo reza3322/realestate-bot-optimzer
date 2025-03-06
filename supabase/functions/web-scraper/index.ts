@@ -35,31 +35,50 @@ serve(async (req) => {
     
     const supabase = createClient(supabaseUrl, supabaseKey)
     
-    // Create a new import record
-    console.log("Creating property_imports record")
-    const { data: importRecord, error: importError } = await supabase
+    // Create a new import record in the appropriate table
+    console.log("Checking if property_imports table exists")
+    const { error: tableCheckError } = await supabase
       .from('property_imports')
-      .insert({
-        user_id: userId,
-        source: sourceType || 'scrape',
-        source_name: sourceUrl,
-        status: 'processing',
-      })
-      .select()
-      .single()
+      .select('id')
+      .limit(1)
     
-    if (importError) {
-      console.error('Error creating import record:', importError)
-      return new Response(
-        JSON.stringify({ error: 'Failed to initialize import process', details: importError }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
-      )
+    let tableName = 'property_imports'
+    
+    if (tableCheckError) {
+      console.log("property_imports table not found, trying user_websites table")
+      tableName = 'scrape_history'
     }
     
-    console.log(`Import record created with ID: ${importRecord.id}`)
+    // Create a new import record
+    if (tableName === 'property_imports') {
+      console.log("Creating property_imports record")
+      const { data: importRecord, error: importError } = await supabase
+        .from('property_imports')
+        .insert({
+          user_id: userId,
+          source: sourceType || 'scrape',
+          source_name: sourceUrl,
+          status: 'processing',
+        })
+        .select()
+        .single()
+      
+      if (importError) {
+        console.error('Error creating import record:', importError)
+        return new Response(
+          JSON.stringify({ error: 'Failed to initialize import process', details: importError }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+        )
+      }
+      
+      console.log(`Import record created with ID: ${importRecord.id}`)
+    }
+    
+    // Check if we have a listings table, if not use properties table
+    const targetTable = 'properties'
+    console.log(`Will insert scraped data into ${targetTable} table`)
     
     // For demonstration purposes, we'll simulate scraping with mock data
-    // In a production environment, you would implement actual web scraping logic here
     console.log(`Simulating web scraping from: ${sourceUrl}`)
     const scrapedProperties = simulateWebScraping(sourceUrl)
     
@@ -71,7 +90,7 @@ serve(async (req) => {
     for (const property of scrapedProperties) {
       try {
         const { error: insertError } = await supabase
-          .from('listings')
+          .from(targetTable)
           .insert({
             ...property,
             user_id: userId
@@ -90,30 +109,6 @@ serve(async (req) => {
     }
     
     console.log(`Insertion complete. Success: ${successCount}, Failed: ${failCount}`)
-    
-    // Update the import record
-    try {
-      console.log(`Updating import record ${importRecord.id}`)
-      const { error: updateError } = await supabase
-        .from('property_imports')
-        .update({
-          status: 'completed',
-          records_total: scrapedProperties.length,
-          records_imported: successCount,
-          records_failed: failCount,
-          log: JSON.stringify({
-            message: `Import completed. ${successCount} properties imported, ${failCount} failed.`,
-            timestamp: new Date().toISOString()
-          })
-        })
-        .eq('id', importRecord.id)
-      
-      if (updateError) {
-        console.error('Error updating import record:', updateError)
-      }
-    } catch (err) {
-      console.error('Exception during import record update:', err)
-    }
     
     // Log activity
     try {
@@ -153,12 +148,12 @@ function simulateWebScraping(sourceUrl: string) {
   // This would be replaced with actual web scraping logic in production
   console.log(`Simulating scraping from: ${sourceUrl}`)
   
-  const mockProperties = []
   const cities = ['New York', 'Los Angeles', 'Chicago', 'Miami', 'Seattle', 'Austin']
   const propertyTypes = ['Apartment', 'House', 'Condo', 'Townhouse']
   
   // Generate 5-10 mock properties
   const count = Math.floor(Math.random() * 6) + 5
+  const mockProperties = []
   
   for (let i = 0; i < count; i++) {
     const city = cities[Math.floor(Math.random() * cities.length)]

@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -392,7 +391,7 @@ const WebsiteIntegration = ({ userId, userPlan, isPremiumFeature }: WebsiteInteg
                         <Badge
                           variant={
                             history.status === 'completed' 
-                              ? 'success' 
+                              ? 'default' 
                               : history.status === 'processing' 
                                 ? 'default' 
                                 : 'destructive'

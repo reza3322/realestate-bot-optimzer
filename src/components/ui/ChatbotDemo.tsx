@@ -1,95 +1,156 @@
 
-import { useState, useEffect } from 'react';
-import { User } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { BotIcon } from './chatbot/BotIcon';
-import { Message, ChatStylesType } from './chatbot/types';
+import React, { useState } from 'react';
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { ChevronDown, Send, MessageCircle } from "lucide-react";
+import { ChatStylesType } from './chatbot/chatStyles';
 
-export interface ChatbotDemoProps {
-  className?: string;
-  maxHeight?: string;
+interface ChatbotDemoProps {
+  apiKeyStatus?: "valid" | "invalid" | "not-set";
 }
 
-const ChatbotDemo = ({ className, maxHeight = "300px" }: ChatbotDemoProps) => {
-  const [messages, setMessages] = useState<Message[]>([
-    { role: 'bot', content: "Hi there! I'm your assistant. How can I help you today?" },
-    { role: 'user', content: "Can you tell me about your real estate services?" },
-    { role: 'bot', content: "We offer a complete range of real estate services including property listings, buyer representation, and market analysis. Are you looking to buy or sell a property?" },
+const ChatbotDemo = ({ apiKeyStatus = "not-set" }: ChatbotDemoProps) => {
+  const [messages, setMessages] = useState<{ sender: 'user' | 'bot'; text: string }[]>([
+    { sender: 'bot', text: 'Hi there! How can I help you find your dream home today?' }
   ]);
-
-  // Generate a demo styles object that matches ChatStylesType
+  const [input, setInput] = useState('');
+  
+  // Define styles that match the ChatStylesType structure
   const styles: ChatStylesType = {
-    container: 'bg-white dark:bg-gray-800 shadow-md rounded-lg',
-    header: 'bg-primary text-white p-3 rounded-t-lg flex items-center',
-    userBubble: 'bg-primary/10 text-foreground rounded-lg p-3 max-w-[80%] ml-auto',
-    botBubble: 'bg-muted text-foreground rounded-lg p-3 max-w-[80%]',
-    inputContainer: 'border-t border-border p-3 bg-background',
-    botIcon: 'bg-primary text-white h-8 w-8 rounded-full flex items-center justify-center',
-    userIcon: 'bg-primary/20 h-8 w-8 rounded-full flex items-center justify-center',
-    font: 'font-sans'
+    chatWindow: {
+      width: '100%',
+      height: '400px',
+      borderRadius: '0.5rem',
+      overflow: 'hidden',
+      display: 'flex',
+      flexDirection: 'column',
+      backgroundColor: 'white',
+      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+    },
+    messageList: {
+      flex: 1,
+      overflowY: 'auto',
+      padding: '1rem',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '0.5rem',
+    },
+    messageUser: {
+      alignSelf: 'flex-end',
+      backgroundColor: '#3b82f6',
+      color: 'white',
+      padding: '0.5rem 1rem',
+      borderRadius: '1rem 1rem 0 1rem',
+      maxWidth: '80%',
+    },
+    messageBot: {
+      alignSelf: 'flex-start',
+      backgroundColor: '#f3f4f6',
+      color: '#1f2937',
+      padding: '0.5rem 1rem',
+      borderRadius: '1rem 1rem 1rem 0',
+      maxWidth: '80%',
+    },
+    inputArea: {
+      display: 'flex',
+      padding: '0.5rem',
+      borderTop: '1px solid #e5e7eb',
+      backgroundColor: 'white',
+    },
+    input: {
+      flex: 1,
+      border: 'none',
+      padding: '0.5rem',
+      outline: 'none',
+    },
+    sendButton: {
+      backgroundColor: '#3b82f6',
+      color: 'white',
+      border: 'none',
+      borderRadius: '0.25rem',
+      padding: '0.5rem 1rem',
+      cursor: 'pointer',
+    },
+    headerStyle: {
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: '0.75rem 1rem',
+      backgroundColor: '#3b82f6',
+      color: 'white',
+      borderBottom: '1px solid #e5e7eb',
+    }
+  };
+
+  const sendMessage = () => {
+    if (!input.trim()) return;
+    
+    // Add user message
+    setMessages(prev => [...prev, { sender: 'user', text: input }]);
+    
+    // Simulate bot response
+    setTimeout(() => {
+      if (apiKeyStatus === "invalid") {
+        setMessages(prev => [...prev, { sender: 'bot', text: 'Sorry, I cannot respond right now due to an API configuration issue.' }]);
+      } else {
+        let response = "I'd be happy to help you find a property! Could you tell me more about what you're looking for? What area are you interested in?";
+        
+        if (input.toLowerCase().includes('price')) {
+          response = "Our properties range from $200,000 to $1.5M depending on location, size, and amenities. Do you have a specific budget in mind?";
+        } else if (input.toLowerCase().includes('bedroom') || input.toLowerCase().includes('bath')) {
+          response = "We have properties ranging from studios to 5-bedroom houses. How many bedrooms are you looking for?";
+        }
+        
+        setMessages(prev => [...prev, { sender: 'bot', text: response }]);
+      }
+    }, 1000);
+    
+    // Clear input
+    setInput('');
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      sendMessage();
+    }
   };
 
   return (
-    <div className={cn(
-      'flex flex-col overflow-hidden rounded-lg shadow-md',
-      styles.container,
-      className
-    )}>
-      {/* Chat Header */}
-      <div className={cn(styles.header)}>
-        <div className={cn(styles.botIcon, 'mr-2')}>
-          <BotIcon iconName="bot" className="h-5 w-5" />
+    <div style={styles.chatWindow}>
+      <div style={styles.headerStyle}>
+        <div className="flex items-center gap-2">
+          <MessageCircle size={20} />
+          <span className="font-medium">RealHome Assistant</span>
         </div>
-        <span className="font-medium">RealHome Assistant</span>
+        <Button variant="ghost" size="icon" className="text-white hover:bg-blue-600">
+          <ChevronDown size={20} />
+        </Button>
       </div>
       
-      {/* Messages Container */}
-      <div 
-        className="flex-1 p-3 overflow-y-auto space-y-3"
-        style={{ height: maxHeight }}
-      >
+      <div style={styles.messageList}>
         {messages.map((message, index) => (
-          <div
-            key={index}
-            className="flex items-start gap-3"
+          <div 
+            key={index} 
+            style={message.sender === 'user' ? styles.messageUser : styles.messageBot}
           >
-            {message.role === 'bot' && (
-              <div className={cn(styles.botIcon)}>
-                <BotIcon iconName="bot" className="h-5 w-5" />
-              </div>
-            )}
-            
-            <div 
-              className={cn(
-                message.role === 'user' ? styles.userBubble : styles.botBubble
-              )}
-            >
-              {message.content}
-            </div>
-            
-            {message.role === 'user' && (
-              <div className={cn(styles.userIcon)}>
-                <User className="h-5 w-5" />
-              </div>
-            )}
+            {message.text}
           </div>
         ))}
       </div>
       
-      {/* Input Area (disabled in demo) */}
-      <div className={cn(styles.inputContainer, 'flex items-center')}>
-        <input 
-          type="text" 
-          disabled 
-          className="flex-1 p-2 bg-muted rounded-md opacity-50 text-muted-foreground"
-          placeholder="Type your message... (demo only)"
+      <div style={styles.inputArea}>
+        <Input
+          type="text"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyPress={handleKeyPress}
+          placeholder="Type your message..."
+          className="flex-1 border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
         />
-        <button 
-          disabled
-          className="ml-2 p-2 bg-primary/50 text-primary-foreground rounded-md opacity-50"
-        >
+        <Button size="sm" onClick={sendMessage}>
+          <Send size={16} className="mr-1" />
           Send
-        </button>
+        </Button>
       </div>
     </div>
   );
