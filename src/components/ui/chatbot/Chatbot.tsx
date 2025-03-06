@@ -136,17 +136,17 @@ const Chatbot = ({
   };
 
   // Apply custom color styling to elements if provided
-  const headerStyle = {
-    ...(styles.customColor && {backgroundColor: styles.customColor}),
-  };
+  const headerStyle = styles.customColor ? {
+    backgroundColor: styles.customColor
+  } : undefined;
 
-  const botIconStyle = {
-    ...(styles.customColor && {backgroundColor: styles.customColor}),
-  };
+  const botIconStyle = styles.customColor ? {
+    backgroundColor: styles.customColor
+  } : undefined;
 
-  const userBubbleStyle = {
-    ...(styles.customColor && {backgroundColor: `${styles.customColor}25`}), // 25 is hex for 15% opacity
-  };
+  const userBubbleStyle = styles.customColor ? {
+    backgroundColor: `${styles.customColor}25` // 25 is hex for 15% opacity
+  } : undefined;
 
   return (
     <div className={cn(

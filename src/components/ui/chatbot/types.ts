@@ -6,7 +6,10 @@ export interface Message {
 
 export interface ChatStylesType {
   container: string;
-  header: string;
+  header: {
+    container: string;
+    font: string;
+  };
   userBubble: string;
   botBubble: string;
   inputContainer: string;
