@@ -51,7 +51,7 @@ serve(async (req) => {
       // Use a proper query with only the necessary parameters
       const { data: settingsData, error: settingsError } = await supabase
         .from('chatbot_settings')
-        .select('settings')
+        .select('settings, id')
         .eq('user_id', userId)
         .order('updated_at', { ascending: false })
         .limit(1)
