@@ -1,8 +1,9 @@
-
 (function() {
   // Get the user ID from the script tag
   const scriptTag = document.currentScript;
-  const userId = scriptTag.src.split('?user=')[1];
+  // Use URLSearchParams to properly parse ?user= so we don't include other unwanted parameters
+  const urlParams = new URL(scriptTag.src).searchParams;
+  const userId = urlParams.get('user');
   
   if (!userId) {
     console.error('RealHome.AI Chatbot: User ID not provided');
@@ -199,8 +200,17 @@
   const button = document.createElement('div');
   button.className = 'realhome-chatbot-button';
   button.innerHTML = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
+      viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+      stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8
+               8.5 8.5 0 0 1-7.6 4.7
+               8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7
+               a8.38 8.38 0 0 1-.9-3.8
+               8.5 8.5 0 0 1 4.7-7.6
+               8.38 8.38 0 0 1 3.8-.9h.5
+               a8.48 8.48 0 0 1 8 8v.5z">
+      </path>
     </svg>
   `;
   
@@ -226,7 +236,9 @@
   inputContainer.innerHTML = `
     <input type="text" class="realhome-chatbot-input" placeholder="Type your message...">
     <button class="realhome-chatbot-send">
-      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+        viewBox="0 0 24 24" fill="none" stroke="currentColor"
+        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <line x1="22" y1="2" x2="11" y2="13"></line>
         <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
       </svg>
@@ -241,10 +253,10 @@
   container.appendChild(chatWindow);
   document.body.appendChild(container);
   
-  // Add welcome message
+  // Add a default welcome message
   addMessage('bot', 'Hi there! I\'m your RealHome assistant. How can I help you with your real estate needs today?');
   
-  // Event listeners
+  // Event listeners for opening/closing the window
   button.addEventListener('click', () => {
     chatWindow.classList.toggle('open');
   });
@@ -253,6 +265,7 @@
     chatWindow.classList.remove('open');
   });
   
+  // Send message on Enter or Send button
   const input = inputContainer.querySelector('.realhome-chatbot-input');
   const sendButton = inputContainer.querySelector('.realhome-chatbot-send');
   
@@ -266,9 +279,7 @@
       // Call the chatbot API
       fetch('https://ckgaqkbsnrvccctqxsqv.supabase.co/functions/v1/chatbot-response', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message,
           userId,
@@ -335,26 +346,42 @@
     }
   }
   
-  // Load settings from API
+  // -------------------------------------------
+  // BELOW IS THE UPDATED loadSettings() FUNCTION
+  // -------------------------------------------
   async function loadSettings() {
     try {
-      const response = await fetch(`https://ckgaqkbsnrvccctqxsqv.supabase.co/rest/v1/chatbot_settings?user_id=eq.${userId}&select=settings`, {
-        headers: {
-          'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNrZ2Fxa2JzbnJ2Y2NjdHF4c3F2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDEwMTEyODksImV4cCI6MjA1NjU4NzI4OX0.z62BR5psK8FBR5lfqbnpbFMfQLKgzFCisqDiuWg4MKM'
+      // **This URL is stripped down to only user_id and select=settings** 
+      // to avoid extra query params that cause 400 Bad Request.
+      const response = await fetch(
+        `https://ckgaqkbsnrvccctqxsqv.supabase.co/rest/v1/chatbot_settings?user_id=eq.${userId}&select=settings`,
+        {
+          method: 'GET',
+          headers: {
+            // Must include both apikey and Authorization for Supabase
+            'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNrZ2Fxa2JzbnJ2Y2NjdHF4c3F2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDEwMTEyODksImV4cCI6MjA1NjU4NzI4OX0.z62BR5psK8FBR5lfqbnpbFMfQLKgzFCisqDiuWg4MKM',
+            'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNrZ2Fxa2JzbnJ2Y2NjdHF4c3F2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDEwMTEyODksImV4cCI6MjA1NjU4NzI4OX0.z62BR5psK8FBR5lfqbnpbFMfQLKgzFCisqDiuWg4MKM',
+            'Content-Type': 'application/json'
+          }
         }
-      });
+      );
       
       if (response.ok) {
         const data = await response.json();
         if (data && data.length > 0) {
           applySettings(data[0].settings);
+        } else {
+          console.warn('No settings found for this user ID.');
         }
+      } else {
+        console.error('Failed to fetch settings:', response.statusText);
       }
     } catch (error) {
       console.error('Error loading chatbot settings:', error);
     }
   }
   
+  // This function applies the retrieved settings
   function applySettings(settings) {
     if (!settings) return;
     
@@ -395,10 +422,12 @@
           iconSvg = '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>';
           break;
         case 'brain':
-          iconSvg = '<path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 4.44-5.04Z"></path><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24A2.5 2.5 0 0 0 14.5 2Z"></path>';
+          iconSvg = '<path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 4.44-5.04Z\"></path><path d=\"M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24A2.5 2.5 0 0 0 14.5 2Z\"></path>';
           break;
       }
-      button.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${iconSvg}</svg>`;
+      button.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
+        viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+        stroke-linecap="round" stroke-linejoin="round">${iconSvg}</svg>`;
     }
     
     // Update font size
@@ -424,7 +453,7 @@
     }
   }
   
-  // Load settings when the script loads
+  // Finally, load settings when the script loads
   loadSettings();
 })();
 
