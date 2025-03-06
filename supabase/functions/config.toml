@@ -1,5 +1,5 @@
 
 project_id = "ckgaqkbsnrvccctqxsqv"
 
-[process_pdf_content]
-name = "process-pdf-content"
+[functions.process_pdf_content]
+verify_jwt = false
