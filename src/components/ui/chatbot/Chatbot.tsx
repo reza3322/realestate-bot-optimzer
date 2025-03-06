@@ -12,27 +12,27 @@ import { testChatbotResponse } from './responseHandlers';
 // Default translations for various languages
 const DEFAULT_TRANSLATIONS = {
   en: {
-    welcomeMessage: "Hi there! I'm your {botName} assistant. How can I help you today?",
+    welcomeMessage: "Hi there! I'm your RealHomeAI assistant. How can I help you today?",
     placeholderText: "Type your message...",
     errorMessage: "Sorry, there was an error processing your request."
   },
   es: {
-    welcomeMessage: "¡Hola! Soy tu asistente {botName}. ¿Cómo puedo ayudarte hoy?",
+    welcomeMessage: "¡Hola! Soy tu asistente RealHomeAI. ¿Cómo puedo ayudarte hoy?",
     placeholderText: "Escribe tu mensaje...",
     errorMessage: "Lo siento, hubo un error al procesar tu solicitud."
   },
   fr: {
-    welcomeMessage: "Bonjour! Je suis votre assistant {botName}. Comment puis-je vous aider aujourd'hui?",
+    welcomeMessage: "Bonjour! Je suis votre assistant RealHomeAI. Comment puis-je vous aider aujourd'hui?",
     placeholderText: "Tapez votre message...",
     errorMessage: "Désolé, une erreur s'est produite lors du traitement de votre demande."
   },
   de: {
-    welcomeMessage: "Hallo! Ich bin Ihr {botName}-Assistent. Wie kann ich Ihnen heute helfen?",
+    welcomeMessage: "Hallo! Ich bin Ihr RealHomeAI-Assistent. Wie kann ich Ihnen heute helfen?",
     placeholderText: "Geben Sie Ihre Nachricht ein...",
     errorMessage: "Entschuldigung, bei der Verarbeitung Ihrer Anfrage ist ein Fehler aufgetreten."
   },
   pt: {
-    welcomeMessage: "Olá! Sou seu assistente {botName}. Como posso ajudá-lo hoje?",
+    welcomeMessage: "Olá! Sou seu assistente RealHomeAI. Como posso ajudá-lo hoje?",
     placeholderText: "Digite sua mensagem...",
     errorMessage: "Desculpe, ocorreu um erro ao processar sua solicitação."
   }
@@ -78,7 +78,7 @@ const Chatbot = ({
   const translations = DEFAULT_TRANSLATIONS[language] || DEFAULT_TRANSLATIONS.en;
   
   // Set default welcome message and placeholder if not provided
-  const defaultWelcomeMessage = welcomeMessage || translations.welcomeMessage.replace("{botName}", botName);
+  const defaultWelcomeMessage = welcomeMessage || translations.welcomeMessage;
   const defaultPlaceholderText = placeholderText || translations.placeholderText;
   
   const [messages, setMessages] = useState<Message[]>([
@@ -89,8 +89,7 @@ const Chatbot = ({
   const [error, setError] = useState<string | null>(null);
 
   // Apply theme styles
-  const baseStyles = getChatStyles(theme, variation, primaryColor);
-  const styles = applyFontStyle(baseStyles, fontStyle);
+  const styles: ChatTheme = getChatStyles(theme, variation, primaryColor);
 
   // Update messages if welcome message changes
   useEffect(() => {
@@ -143,11 +142,11 @@ const Chatbot = ({
       setTimeout(async () => {
         // Simple logic for demo purposes - get a random response
         const demoResponses = [
-          `I'd be happy to help you find a property. What's your budget range?`,
+          "I'd be happy to help you find a property. What's your budget range?",
           "Great! And what neighborhoods are you interested in?",
           "I've found 3 properties that match your criteria. Would you like to schedule a viewing?",
           "Perfect! I've notified your agent and scheduled a viewing for Saturday at 2pm.",
-          `As ${botName}, I specialize in luxury properties in downtown and suburban areas.`,
+          "Our agents specialize in luxury properties in downtown and suburban areas.",
           "Yes, we have several properties with pools available right now.",
           "The average price in that neighborhood has increased by 12% over the last year.",
           "I can help you get pre-approved for a mortgage through our partner lenders."

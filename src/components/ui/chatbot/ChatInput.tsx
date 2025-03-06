@@ -1,53 +1,74 @@
 
-import React, { useState, KeyboardEvent } from 'react';
+import { useState, useRef, KeyboardEvent } from 'react';
 import { Send } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface ChatInputProps {
-  onSendMessage: (message: string) => void;
   inputContainerStyle?: string;
+  onSendMessage: (message: string) => void;
   placeholderText?: string;
   buttonStyle?: React.CSSProperties;
 }
 
 const ChatInput = ({ 
-  onSendMessage, 
-  inputContainerStyle = '',
-  placeholderText = 'Type your message...',
-  buttonStyle
+  inputContainerStyle, 
+  onSendMessage,
+  placeholderText = "Type a message...",
+  buttonStyle = {}
 }: ChatInputProps) => {
   const [message, setMessage] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  const handleSend = () => {
+  const handleSubmit = (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation(); // Prevent event from bubbling up
+    }
+    
     if (message.trim()) {
-      onSendMessage(message);
-      setMessage('');
+      // Call onSendMessage without triggering page scroll
+      setTimeout(() => {
+        onSendMessage(message.trim());
+        setMessage('');
+      }, 0);
     }
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      handleSend();
+      e.stopPropagation(); // Prevent event from bubbling up
+      handleSubmit();
     }
   };
 
   return (
-    <div className={cn('flex gap-2 items-center p-4', inputContainerStyle)}>
+    <div className={cn(
+      "border-t p-3 flex items-center gap-2",
+      inputContainerStyle
+    )}>
       <input
+        ref={inputRef}
         type="text"
-        placeholder={placeholderText}
         value={message}
         onChange={(e) => setMessage(e.target.value)}
         onKeyDown={handleKeyDown}
-        className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-md focus:outline-none focus:ring-2 focus:ring-primary dark:bg-gray-800"
+        placeholder={placeholderText}
+        className="flex-1 bg-transparent border border-input rounded-md h-10 px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ring"
       />
       <button
-        onClick={handleSend}
-        className="p-2 rounded-md text-white"
-        style={buttonStyle || { backgroundColor: '#3b82f6' }}
+        onClick={(e) => handleSubmit(e)}
+        disabled={!message.trim()}
+        className={cn(
+          "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors h-10 w-10",
+          "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+          message.trim() 
+            ? "text-primary-foreground bg-primary hover:bg-primary/90" 
+            : "text-muted-foreground bg-secondary hover:bg-secondary/80"
+        )}
+        style={buttonStyle}
       >
-        <Send className="w-5 h-5" />
+        <Send className="h-5 w-5" />
       </button>
     </div>
   );

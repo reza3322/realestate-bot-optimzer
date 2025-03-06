@@ -319,10 +319,9 @@ const Demo = () => {
               theme={theme}
               variation={variation}
               fontStyle={fontStyle}
-              welcomeMessage={`👋 Hi there! I'm your ${buttonText.includes("Chat") ? "RealHomeAI Assistant" : buttonText}. I can help you find properties, answer questions about listings, and even schedule viewings. Try asking me about available properties or how I can help with your real estate needs!`}
+              welcomeMessage="👋 Hi there! I'm your RealHomeAI assistant. I can help you find properties, answer questions about listings, and even schedule viewings. Try asking me about available properties or how I can help with your real estate needs!"
               placeholderText="Type your message here..."
               useRealAPI={useRealAPI}
-              botName={buttonText.includes("Chat") ? "RealHomeAI Assistant" : buttonText}
               buttonStyle={getButtonStyleObject()} // Apply the button style object
             />
           </div>

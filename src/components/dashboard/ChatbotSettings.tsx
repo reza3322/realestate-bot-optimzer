@@ -14,7 +14,6 @@ import Chatbot from "@/components/ui/chatbot/Chatbot";
 import { MessageCircle, Bot, Headphones, MessageSquare, BrainCircuit } from "lucide-react";
 import { testChatbotResponse } from "@/components/ui/chatbot/responseHandlers";
 import ChatbotTraining from "@/components/ui/chatbot/ChatbotTraining";
-import { LanguageCode } from "@/components/ui/chatbot/types";
 
 interface ChatbotSettingsProps {
   userId: string;
@@ -86,7 +85,7 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
     buttonTextColor: "#ffffff",
     buttonStyle: "pill",
     buttonPosition: "bottom-right",
-    language: "en" as LanguageCode,
+    language: "en",
   });
 
   const [loading, setLoading] = useState(true);
@@ -149,8 +148,7 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
               buttonColor: "#3b82f6",
               buttonTextColor: "#ffffff",
               buttonStyle: "pill",
-              buttonPosition: "bottom-right",
-              language: "en" as LanguageCode,
+              buttonPosition: "bottom-right"
             };
             setSettings(defaultSettings);
             setInitialSettings(defaultSettings);
