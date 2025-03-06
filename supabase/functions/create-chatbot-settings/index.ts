@@ -26,7 +26,12 @@ serve(async (req) => {
     const url = new URL(req.url);
     
     // Get user_id from the query string if available
-    const userId = url.searchParams.get('user_id');
+    let userId = url.searchParams.get('user_id');
+    
+    // Also check for 'user' parameter which might be used in some client implementations
+    if (!userId) {
+      userId = url.searchParams.get('user');
+    }
     
     console.log('Calling database function to create/check the chatbot_settings table')
     
@@ -56,9 +61,9 @@ serve(async (req) => {
         console.error('Error fetching user settings:', settingsError);
       } else if (settingsData) {
         userSettings = settingsData.settings;
-        console.log('Found user settings:', userSettings);
+        console.log('Found user settings:', JSON.stringify(userSettings));
       } else {
-        console.log('No settings found for this user');
+        console.log(`No settings found for this user ID: ${userId}`);
       }
     }
 
@@ -70,7 +75,8 @@ serve(async (req) => {
         message: 'Chatbot settings table checked/created successfully',
         data,
         settings: userSettings,
-        anon_key: supabaseAnonKey // Include the anon key for client-side usage
+        anon_key: supabaseAnonKey, // Include the anon key for client-side usage
+        user_id: userId // Echo back the user ID for debugging
       }),
       {
         headers: {

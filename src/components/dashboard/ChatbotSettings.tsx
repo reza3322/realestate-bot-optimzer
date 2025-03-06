@@ -93,11 +93,13 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
     const initializeChatbot = async () => {
       setLoading(true);
       try {
-        const { data: initData } = await createChatbotSettingsTable(userId);
+        const result = await createChatbotSettingsTable(userId);
+        console.log("Chatbot initialization result:", result);
         
-        if (initData?.settings) {
-          setSettings(initData.settings);
-          setInitialSettings(initData.settings);
+        if (result.data?.settings) {
+          console.log("Setting initial settings from edge function response:", result.data.settings);
+          setSettings(result.data.settings);
+          setInitialSettings(result.data.settings);
           
           const scriptResult = await generateChatbotScript(userId);
           if (scriptResult && typeof scriptResult.script === 'string') {
@@ -146,6 +148,7 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
             toast.error('Error loading chatbot settings');
           }
         } else if (data) {
+          console.log("Settings loaded from database:", data.settings);
           setSettings(data.settings);
           setInitialSettings(data.settings);
         }
@@ -245,7 +248,7 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
     
     setSaving(true);
     try {
-      console.log(`Saving settings for user ID: ${userId}`);
+      console.log(`Saving settings for user ID: ${userId}`, settings);
       
       const { data, error } = await supabase
         .from("chatbot_settings")
