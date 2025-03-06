@@ -1,14 +1,6 @@
 
 import { ChatTheme } from './types';
 
-// Define the ChatStylesType interface
-export interface ChatStylesType {
-  theme: string;
-  variation: string;
-  primaryColor?: string;
-  fontStyle?: string;
-}
-
 // Get base theme styles
 const getThemeStyles = (theme: string): ChatTheme => {
   switch (theme) {

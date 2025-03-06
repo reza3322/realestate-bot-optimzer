@@ -1,57 +1,79 @@
 
-import React, { useState } from "react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { MessageCircle } from "lucide-react";
-import Chatbot from "./chatbot/Chatbot";
-import { ChatStylesType } from "./chatbot/chatStyles";
+import { useState } from "react";
+import { Message, ChatStylesType } from "./chatbot/types";
+import ChatHeader from "./chatbot/ChatHeader";
+import ChatMessage from "./chatbot/ChatMessage";
+import ChatInput from "./chatbot/ChatInput";
+import TypingIndicator from "./chatbot/TypingIndicator";
+import { cn } from "@/lib/utils";
 
 interface ChatbotDemoProps {
-  apiKey?: string;
-  apiKeyStatus?: "valid" | "invalid" | "checking" | "none";
-  styles?: ChatStylesType;
+  className?: string;
+  styles: ChatStylesType;
+  botName?: string;
+  placeholderText?: string;
 }
 
-const ChatbotDemo = ({ 
-  apiKey = "",
-  apiKeyStatus = "none",
-  styles = { theme: "default", variation: "default" } 
+const ChatbotDemo = ({
+  className,
+  styles,
+  botName = "RealHome Assistant",
+  placeholderText = "Type your message..."
 }: ChatbotDemoProps) => {
-  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [messages, setMessages] = useState<Message[]>([
+    { role: 'bot', content: "Hi! I'm your AI assistant. How can I help you today?" }
+  ]);
+  const [isTyping, setIsTyping] = useState(false);
+
+  const handleSendMessage = (message: string) => {
+    setMessages(prev => [...prev, { role: 'user', content: message }]);
+    setIsTyping(true);
+    
+    setTimeout(() => {
+      setIsTyping(false);
+      setMessages(prev => [...prev, { 
+        role: 'bot', 
+        content: "I'm a demo bot. In the real app, I'll help you manage your real estate business!" 
+      }]);
+    }, 1000);
+  };
 
   return (
-    <Card className="overflow-hidden border-0 shadow-none">
-      <CardContent className="p-0 relative">
-        {!isChatOpen ? (
-          <div className="flex flex-col items-center justify-center p-6 min-h-[300px] text-center">
-            <MessageCircle size={48} className="mb-4 text-primary" />
-            <h3 className="text-xl font-medium mb-2">Live Chat Preview</h3>
-            <p className="text-muted-foreground mb-4">
-              Click the button below to see how your chatbot will appear to your
-              website visitors
-            </p>
-            <Button 
-              onClick={() => setIsChatOpen(true)}
-              className="mt-2"
-            >
-              Open Chat
-            </Button>
-          </div>
-        ) : (
-          <div className="min-h-[500px] flex relative">
-            <Chatbot
-              theme={styles.theme}
-              variation={styles.variation}
-              primaryColor={styles.primaryColor}
-              onClose={() => setIsChatOpen(false)}
-              apiKey={apiKey}
-              apiKeyStatus={apiKeyStatus}
-              demoMode={true}
-            />
-          </div>
+    <div className={cn(
+      'flex flex-col overflow-hidden rounded-lg shadow-md h-[500px]',
+      className
+    )}>
+      <ChatHeader 
+        botName={botName}
+        botIconName="bot"
+        apiKeyStatus="not-set"
+      />
+      
+      <div className="flex-1 p-4 overflow-y-auto space-y-4">
+        {messages.map((message, index) => (
+          <ChatMessage 
+            key={index}
+            message={message}
+            index={index}
+            styles={styles}
+            botIconName="bot"
+          />
+        ))}
+        
+        {isTyping && (
+          <TypingIndicator 
+            botIconStyle={styles.botIcon}
+            botBubbleStyle={styles.botBubble}
+            botIconName="bot"
+          />
         )}
-      </CardContent>
-    </Card>
+      </div>
+      
+      <ChatInput 
+        onSendMessage={handleSendMessage}
+        placeholderText={placeholderText}
+      />
+    </div>
   );
 };
 
