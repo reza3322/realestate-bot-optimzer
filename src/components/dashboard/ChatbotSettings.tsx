@@ -257,34 +257,42 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
         
       if (fetchError) {
         console.error("Error fetching existing settings:", fetchError);
-      } else if (existingSettings && existingSettings.length > 0) {
-        console.log(`Found ${existingSettings.length} existing settings to delete`);
-        
-        const { error: deleteError } = await supabase
-          .from("chatbot_settings")
-          .delete()
-          .eq("user_id", userId);
-          
-        if (deleteError) {
-          console.error("Error deleting existing settings:", deleteError);
-          toast.error("Error cleaning up old settings");
-        } else {
-          console.log("Successfully deleted old settings");
-        }
+        toast.error("Error checking existing settings");
+        throw fetchError;
       }
       
-      const { data, error } = await supabase
-        .from("chatbot_settings")
-        .insert({ 
-          user_id: userId,
-          settings,
-          updated_at: new Date().toISOString()
-        });
+      let saveError;
       
-      if (error) {
-        console.error("Error saving settings:", error);
+      if (existingSettings && existingSettings.length > 0) {
+        console.log(`Updating existing settings for user ID: ${userId}`);
+        
+        const { error } = await supabase
+          .from("chatbot_settings")
+          .update({ 
+            settings,
+            updated_at: new Date().toISOString()
+          })
+          .eq("user_id", userId);
+          
+        saveError = error;
+      } else {
+        console.log(`Creating new settings for user ID: ${userId}`);
+        
+        const { error } = await supabase
+          .from("chatbot_settings")
+          .insert({ 
+            user_id: userId,
+            settings,
+            updated_at: new Date().toISOString()
+          });
+          
+        saveError = error;
+      }
+      
+      if (saveError) {
+        console.error("Error saving settings:", saveError);
         toast.error("Failed to save settings");
-        throw error;
+        throw saveError;
       }
       
       const scriptResult = await generateChatbotScript(userId);
