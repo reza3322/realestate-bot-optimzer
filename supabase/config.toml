@@ -1,5 +1,4 @@
 
-
 [functions.create-chatbot-settings]
 verify_jwt = false
 
@@ -29,7 +28,3 @@ verify_jwt = true
 
 [functions.process-whatsapp-message]
 verify_jwt = true
-
-[functions.web-scraper]
-verify_jwt = true
-

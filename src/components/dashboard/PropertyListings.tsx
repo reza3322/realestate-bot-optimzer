@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,7 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
-import { PlusCircle, Upload, FileSpreadsheet, Link, Lock, Globe } from "lucide-react";
+import { PlusCircle, Upload, FileSpreadsheet, Link, Lock } from "lucide-react";
 import WebsiteIntegration from "./WebsiteIntegration";
 
 interface PropertyListingsProps {
@@ -62,15 +63,11 @@ const PropertyListings = ({ userPlan, isPremiumFeature, userId = "" }: PropertyL
       </div>
       
       <Tabs defaultValue="manual" value={activePropertyTab} onValueChange={setActivePropertyTab}>
-        <TabsList className="grid grid-cols-4 w-full max-w-3xl">
+        <TabsList className="grid grid-cols-3 w-full max-w-3xl">
           <TabsTrigger value="manual">Manual Upload</TabsTrigger>
           <TabsTrigger value="automated" disabled={isPremiumFeature('professional')}>
             {isPremiumFeature('professional') && <Lock className="mr-2 h-4 w-4" />}
             Automated Import
-          </TabsTrigger>
-          <TabsTrigger value="website">
-            <Globe className="mr-2 h-4 w-4" />
-            Website Scraper
           </TabsTrigger>
           <TabsTrigger value="analytics" disabled={isPremiumFeature('professional')}>
             {isPremiumFeature('professional') && <Lock className="mr-2 h-4 w-4" />}
@@ -150,7 +147,7 @@ const PropertyListings = ({ userPlan, isPremiumFeature, userId = "" }: PropertyL
                 >
                   {isPremiumFeature('professional') && <Lock className="mr-2 h-4 w-4" />}
                   {!isPremiumFeature('professional') && <Link className="mr-2 h-4 w-4" />}
-                  Website Scraping
+                  API Integration
                   {isPremiumFeature('professional') && <span className="ml-auto text-xs text-muted-foreground">(Pro)</span>}
                 </Button>
               </CardContent>
@@ -204,21 +201,6 @@ const PropertyListings = ({ userPlan, isPremiumFeature, userId = "" }: PropertyL
             <div className="space-y-6">
               <Card>
                 <CardHeader>
-                  <CardTitle>Website Scraping</CardTitle>
-                  <CardDescription>
-                    Paste a website URL to automatically import properties
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex gap-2">
-                    <Input placeholder="https://realestatewebsite.com/listings" />
-                    <Button>Import</Button>
-                  </div>
-                </CardContent>
-              </Card>
-              
-              <Card>
-                <CardHeader>
                   <CardTitle>API Integration</CardTitle>
                   <CardDescription>
                     Connect to your MLS or agency platform
@@ -238,16 +220,14 @@ const PropertyListings = ({ userPlan, isPremiumFeature, userId = "" }: PropertyL
                   </div>
                 </CardContent>
               </Card>
+              
+              <WebsiteIntegration 
+                userId={userId} 
+                userPlan={userPlan} 
+                isPremiumFeature={isPremiumFeature}
+              />
             </div>
           )}
-        </TabsContent>
-        
-        <TabsContent value="website">
-          <WebsiteIntegration 
-            userId={userId} 
-            userPlan={userPlan} 
-            isPremiumFeature={isPremiumFeature}
-          />
         </TabsContent>
         
         <TabsContent value="analytics">

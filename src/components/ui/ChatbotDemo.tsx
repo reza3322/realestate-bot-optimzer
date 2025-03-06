@@ -1,98 +1,104 @@
 
-import { useState, useEffect } from 'react';
-import { User } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { BotIcon } from './chatbot/BotIcon';
-import { Message, ChatStylesType } from './chatbot/types';
+import { useState } from 'react';
+import { Card, CardContent } from '@/components/ui/card';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Toggle } from '@/components/ui/toggle';
+import { Moon, Sun, Smartphone, Monitor } from 'lucide-react';
+import { twMerge } from 'tailwind-merge';
+import { chatStyles, ThemeVariant } from '@/components/ui/chatbot/chatStyles';
+import Chatbot from '@/components/ui/chatbot/Chatbot';
 
-export interface ChatbotDemoProps {
-  className?: string;
-  maxHeight?: string;
-}
+export function ChatbotDemo({
+  theme = 'light',
+  variation = 'default',
+  primaryColor = '#3b82f6',
+  fontFamily = 'Inter',
+  fontSize = 16,
+  botName = 'RealHome Assistant',
+  welcomeMessage = 'Hi there! How can I help you find your dream property today?',
+  placeholderText = 'Type your message...',
+  botIcon = 'message-circle',
+}) {
+  const [viewMode, setViewMode] = useState('desktop');
+  const [colorMode, setColorMode] = useState(theme);
 
-const ChatbotDemo = ({ className, maxHeight = "300px" }: ChatbotDemoProps) => {
-  const [messages, setMessages] = useState<Message[]>([
-    { role: 'bot', content: "Hi there! I'm your assistant. How can I help you today?" },
-    { role: 'user', content: "Can you tell me about your real estate services?" },
-    { role: 'bot', content: "We offer a complete range of real estate services including property listings, buyer representation, and market analysis. Are you looking to buy or sell a property?" },
-  ]);
-
-  // Generate a demo styles object that matches ChatStylesType
-  const styles: ChatStylesType = {
-    container: 'bg-white dark:bg-gray-800 shadow-md rounded-lg',
-    header: 'bg-primary text-white p-3 rounded-t-lg flex items-center',
-    userBubble: 'bg-primary/10 text-foreground rounded-lg p-3 max-w-[80%] ml-auto',
-    botBubble: 'bg-muted text-foreground rounded-lg p-3 max-w-[80%]',
-    inputContainer: 'border-t border-border p-3 bg-background',
-    botIcon: 'bg-primary text-white h-8 w-8 rounded-full flex items-center justify-center',
-    userIcon: 'bg-primary/20 h-8 w-8 rounded-full flex items-center justify-center',
-    font: 'font-sans'
-  };
+  const resolvedVariation = (variation as ThemeVariant) || 'default';
+  const themeClass = chatStyles[colorMode][resolvedVariation].container;
+  const fontClass = chatStyles[colorMode][resolvedVariation].font;
 
   return (
-    <div className={cn(
-      'flex flex-col overflow-hidden rounded-lg shadow-md',
-      styles.container,
-      className
-    )}>
-      {/* Chat Header */}
-      <div className={cn(styles.header)}>
-        <div className={cn(styles.botIcon, 'mr-2')}>
-          <BotIcon iconName="bot" className="h-5 w-5" />
-        </div>
-        <span className="font-medium">RealHome Assistant</span>
-      </div>
-      
-      {/* Messages Container */}
-      <div 
-        className="flex-1 p-3 overflow-y-auto space-y-3"
-        style={{ height: maxHeight }}
-      >
-        {messages.map((message, index) => (
-          <div
-            key={index}
-            className="flex items-start gap-3"
+    <div className="w-full max-w-3xl mx-auto">
+      <div className="flex justify-between mb-6">
+        <Tabs defaultValue={viewMode} onValueChange={setViewMode}>
+          <TabsList>
+            <TabsTrigger value="desktop">
+              <Monitor className="h-4 w-4 mr-2" />
+              Desktop
+            </TabsTrigger>
+            <TabsTrigger value="mobile">
+              <Smartphone className="h-4 w-4 mr-2" />
+              Mobile
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+        
+        <div className="flex space-x-2">
+          <Toggle
+            pressed={colorMode === 'light'}
+            onPressedChange={() => setColorMode('light')}
+            aria-label="Toggle light mode"
           >
-            {message.role === 'bot' && (
-              <div className={cn(styles.botIcon)}>
-                <BotIcon iconName="bot" className="h-5 w-5" />
-              </div>
-            )}
-            
-            <div 
-              className={cn(
-                message.role === 'user' ? styles.userBubble : styles.botBubble
-              )}
-            >
-              {message.content}
-            </div>
-            
-            {message.role === 'user' && (
-              <div className={cn(styles.userIcon)}>
-                <User className="h-5 w-5" />
-              </div>
-            )}
-          </div>
-        ))}
+            <Sun className="h-4 w-4" />
+          </Toggle>
+          <Toggle
+            pressed={colorMode === 'dark'}
+            onPressedChange={() => setColorMode('dark')}
+            aria-label="Toggle dark mode"
+          >
+            <Moon className="h-4 w-4" />
+          </Toggle>
+        </div>
       </div>
-      
-      {/* Input Area (disabled in demo) */}
-      <div className={cn(styles.inputContainer, 'flex items-center')}>
-        <input 
-          type="text" 
-          disabled 
-          className="flex-1 p-2 bg-muted rounded-md opacity-50 text-muted-foreground"
-          placeholder="Type your message... (demo only)"
-        />
-        <button 
-          disabled
-          className="ml-2 p-2 bg-primary/50 text-primary-foreground rounded-md opacity-50"
-        >
-          Send
-        </button>
+
+      <div 
+        className={twMerge(
+          "border rounded-lg p-6",
+          colorMode === 'dark' ? "bg-gray-900 border-gray-800" : "bg-gray-100 border-gray-200",
+          viewMode === 'mobile' ? "max-w-[375px] mx-auto" : "w-full" 
+        )}
+      >
+        <Card className={twMerge(
+          "overflow-hidden",
+          viewMode === 'mobile' ? "w-full" : "max-w-md mx-auto",
+          colorMode === 'dark' ? "border-gray-800" : "border-gray-200",
+        )}>
+          <CardContent className="p-0">
+            <div className={twMerge(
+              "w-full",
+              viewMode === 'mobile' ? "h-[550px]" : "h-[500px]",
+            )}>
+              <Chatbot
+                theme={colorMode as 'light' | 'dark'}
+                variation={resolvedVariation}
+                primaryColor={primaryColor}
+                fontFamily={fontFamily}
+                fontSize={fontSize}
+                botName={botName}
+                welcomeMessage={welcomeMessage}
+                placeholderText={placeholderText}
+                botIcon={botIcon}
+                demoMode={true}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="mt-4 text-center text-sm text-muted-foreground">
+          <p>The preview above shows how your chatbot will appear to visitors</p>
+        </div>
       </div>
     </div>
   );
-};
+}
 
 export default ChatbotDemo;
