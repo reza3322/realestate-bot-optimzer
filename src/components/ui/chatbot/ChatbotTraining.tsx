@@ -10,6 +10,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
 import { Plus, Trash2, FileUp, Edit, Save, X, AlertCircle, FileText, Check } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface TrainingItem {
   id?: string;
@@ -40,6 +41,7 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadSuccess, setUploadSuccess] = useState(false);
+  const [uploadedFileName, setUploadedFileName] = useState<string>("");
 
   useEffect(() => {
     fetchTrainingData();
@@ -221,6 +223,7 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
 
     setSelectedFile(file);
     setUploadSuccess(false);
+    setUploadedFileName("");
   };
 
   const uploadFile = async () => {
@@ -289,7 +292,7 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
       }
       
       setUploadSuccess(true);
-      setSelectedFile(null);
+      setUploadedFileName(selectedFile.name);
       
       // Clear the file input
       const fileInput = document.getElementById('file-upload') as HTMLInputElement;
@@ -302,6 +305,15 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
     } finally {
       setFileUploading(false);
     }
+  };
+
+  const resetUpload = () => {
+    setSelectedFile(null);
+    setUploadSuccess(false);
+    setUploadedFileName("");
+    // Clear the file input
+    const fileInput = document.getElementById('file-upload') as HTMLInputElement;
+    if (fileInput) fileInput.value = '';
   };
 
   const filteredItems = items.filter(item => 
@@ -429,6 +441,26 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
                 
                 <div className="pt-4 border-t">
                   <p className="text-sm font-medium mb-2">Bulk Import</p>
+                  
+                  {uploadSuccess && (
+                    <Alert variant="success" className="mb-3 bg-green-50 border-green-200">
+                      <div className="flex items-center gap-2">
+                        <Check className="h-4 w-4 text-green-600" />
+                        <AlertDescription className="text-green-700">
+                          <strong>Upload successful!</strong> File: {uploadedFileName}
+                        </AlertDescription>
+                      </div>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={resetUpload} 
+                        className="mt-2 text-green-700 border-green-300 hover:bg-green-100/50"
+                      >
+                        Upload another file
+                      </Button>
+                    </Alert>
+                  )}
+                  
                   <div className="flex flex-col gap-2">
                     <div className="flex items-center gap-2">
                       <label 
@@ -445,15 +477,15 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
                           accept=".txt,.pdf" 
                           className="hidden"
                           onChange={handleFileChange}
-                          disabled={fileUploading}
+                          disabled={fileUploading || uploadSuccess}
                         />
                       </label>
                       
-                      {selectedFile && (
+                      {selectedFile && !uploadSuccess && (
                         <Button 
                           onClick={uploadFile} 
                           disabled={fileUploading}
-                          variant="outline"
+                          variant={fileUploading ? "outline" : "success"}
                           size="sm"
                           className="gap-1"
                         >
@@ -461,21 +493,16 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
                             <><span className="animate-spin">↻</span> Uploading...</>
                           ) : (
                             <>
-                              {uploadSuccess ? <Check size={16} /> : <FileUp size={16} />}
-                              Upload
+                              <FileUp size={16} />
+                              Upload Now
                             </>
                           )}
                         </Button>
                       )}
-                      
-                      {uploadSuccess && (
-                        <span className="flex items-center text-green-600 text-sm">
-                          <Check size={14} className="mr-1" /> Uploaded
-                        </span>
-                      )}
                     </div>
                     <p className="text-xs text-muted-foreground">
                       For text files: Each question and answer should be on separate lines.
+                      For PDF files: Content will be automatically processed and added as training data.
                     </p>
                   </div>
                 </div>
