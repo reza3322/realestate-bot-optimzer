@@ -45,6 +45,24 @@ export const getAIResponse = async (
   }
 };
 
+// Adding this function to fix the build error
+export const testChatbotResponse = async (
+  message: string,
+  userId?: string
+): Promise<{ response: string; error?: string }> => {
+  try {
+    // This is a simplified test version
+    const response = await getAIResponse(message, userId);
+    return { response: response.response };
+  } catch (error) {
+    console.error('Error in test chatbot response:', error);
+    return { 
+      response: "I'm sorry, I encountered an error processing your request.",
+      error: error instanceof Error ? error.message : 'Unknown error'
+    };
+  }
+};
+
 export const getTrainingResponse = async (
   message: string,
   userId: string

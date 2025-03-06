@@ -36,14 +36,14 @@ serve(async (req) => {
     
     // Get conversation history if there's a conversationId
     let chatHistory = [];
-    if (conversationId) {
+    if (conversationId && userId) {
       console.log(`Fetching history for conversation ID: ${conversationId}`);
       const { data: history, error } = await supabase
         .from('chat_sessions')
-        .select('user_message, ai_response')
+        .select('user_message, ai_response, created_at')
         .eq('session_id', conversationId)
         .order('created_at', { ascending: true })
-        .limit(5); // Get the last 5 messages for context
+        .limit(10); // Get the last 10 messages for context
       
       if (error) {
         console.error('Error fetching chat history:', error);
@@ -57,7 +57,8 @@ serve(async (req) => {
     if (chatHistory.length === 0 && previousMessages && previousMessages.length > 0) {
       chatHistory = previousMessages.map(msg => ({
         user_message: msg.role === 'user' ? msg.content : '',
-        ai_response: msg.role === 'bot' ? msg.content : ''
+        ai_response: msg.role === 'bot' ? msg.content : '',
+        created_at: new Date().toISOString()
       })).filter(msg => msg.user_message || msg.ai_response);
       console.log(`Using ${chatHistory.length} client-provided messages for context`);
     }
@@ -77,6 +78,8 @@ serve(async (req) => {
         5. If the user asks about properties with specific criteria, ask about budget, location, or preferences if that information is missing.
         6. Don't reset the conversation with each message - continue the flow naturally.
         7. Respond with concise but helpful answers, formatted in a conversational way.
+        8. Always reference previous parts of the conversation when appropriate.
+        9. If the user asks a follow-up question, make sure to answer in the context of the previous conversation.
         
         Remember that you should never make up property listings - only reference information you have been trained on or 
         that the user has provided. If asked for specific properties that you don't have information about, 
@@ -86,14 +89,17 @@ serve(async (req) => {
     
     // Add conversation history to provide context
     if (chatHistory.length > 0) {
-      chatHistory.forEach(item => {
+      // Convert the history into a format OpenAI can understand
+      for (const item of chatHistory) {
         if (item.user_message) {
           messages.push({ role: "user", content: item.user_message });
         }
         if (item.ai_response) {
           messages.push({ role: "assistant", content: item.ai_response });
         }
-      });
+      }
+      
+      console.log(`Added ${chatHistory.length} historical messages to context`);
     }
     
     // Add the current message
