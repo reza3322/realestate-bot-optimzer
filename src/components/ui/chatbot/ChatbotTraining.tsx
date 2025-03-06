@@ -233,9 +233,9 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
     setFileUploading(true);
     setUploadSuccess(false);
     try {
-      const filePath = `${userId}/${activeTab}/${Date.now()}_${selectedFile.name}`;
+      const filePath = `${userId}/${Date.now()}_${selectedFile.name.replace(/\s+/g, '_')}`;
       
-      console.log('Uploading file to path:', filePath);
+      console.log('Uploading file to storage path:', filePath);
       
       const { error: uploadError, data: uploadData } = await supabase.storage
         .from('chatbot_training_files')
@@ -292,8 +292,8 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
         if (failureCount > 0) {
           toast.error(`Failed to import ${failureCount} items`);
         }
-      } else {
-        console.log('Calling process-pdf-content function with:', { filePath, userId, contentType: activeTab });
+      } else if (selectedFile.type === 'application/pdf') {
+        console.log('Processing PDF file, calling edge function with:', { filePath, userId, contentType: activeTab });
         
         const { data, error } = await supabase.functions.invoke('process-pdf-content', {
           body: {
@@ -305,16 +305,20 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
         
         if (error) {
           console.error('Edge function error:', error);
-          throw error;
+          throw new Error(`Edge function failed: ${error.message}`);
         }
         
         console.log('PDF processing result:', data);
         
-        toast.success(`PDF file processed successfully. Added ${data.entriesCount || 1} training items.`);
-        
-        setTimeout(() => {
-          fetchTrainingData();
-        }, 1000);
+        if (data.success) {
+          toast.success(`PDF file processed successfully. Added ${data.entriesCount || 0} training items.`);
+          
+          setTimeout(() => {
+            fetchTrainingData();
+          }, 1500);
+        } else {
+          throw new Error(data.error || 'Unknown error during PDF processing');
+        }
       }
       
       setUploadSuccess(true);
@@ -324,8 +328,8 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
       if (fileInput) fileInput.value = '';
       
     } catch (error) {
-      console.error('Error uploading file:', error);
-      toast.error(`Failed to upload file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error('Error in file upload process:', error);
+      toast.error(`Failed to process file: ${error instanceof Error ? error.message : 'Unknown error'}`);
       setUploadSuccess(false);
     } finally {
       setFileUploading(false);
