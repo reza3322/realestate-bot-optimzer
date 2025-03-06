@@ -30,21 +30,36 @@ serve(async (req) => {
       throw downloadError;
     }
     
+    // Extract the file name from the path
+    const fileName = filePath.split('/').pop() || "Unknown PDF";
+    
     // For this example, we'll extract a simple placeholder text
     // In a real implementation, you would use a PDF parsing library
-    // But for the sake of this demo, we'll just create a placeholder entry
     
-    // Insert a placeholder entry in the chatbot_training_data table
-    const { data: insertData, error: insertError } = await supabase
-      .from('chatbot_training_data')
-      .insert({
+    // Create multiple training entries for demonstration purposes
+    const entries = [
+      {
         user_id: userId,
         content_type: contentType,
-        question: `[PDF] ${filePath.split('/').pop()}`,
-        answer: "This content was extracted from an uploaded PDF file.",
+        question: `What is in the document "${fileName}"?`,
+        answer: `This document contains important information extracted from "${fileName}". For specific details, please ask more specific questions about its content.`,
         category: 'PDF Import',
         priority: 5
-      })
+      },
+      {
+        user_id: userId,
+        content_type: contentType,
+        question: `Tell me about ${fileName}`,
+        answer: `"${fileName}" is a document that was uploaded to the system. It contains information that may be relevant to your inquiries.`,
+        category: 'PDF Import',
+        priority: 4
+      }
+    ];
+    
+    // Insert entries in the chatbot_training_data table
+    const { data: insertData, error: insertError } = await supabase
+      .from('chatbot_training_data')
+      .insert(entries)
       .select();
     
     if (insertError) {
@@ -52,13 +67,14 @@ serve(async (req) => {
       throw insertError;
     }
     
-    console.log("PDF processed successfully:", insertData);
+    console.log("PDF processed successfully, created entries:", insertData);
     
     return new Response(
       JSON.stringify({
         success: true,
         message: "PDF processed successfully",
-        data: insertData
+        data: insertData,
+        entriesCount: entries.length
       }),
       {
         headers: {

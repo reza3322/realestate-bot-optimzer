@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -235,11 +234,22 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
     setUploadSuccess(false);
     try {
       const filePath = `${userId}/${activeTab}/${Date.now()}_${selectedFile.name}`;
-      const { error: uploadError } = await supabase.storage
+      
+      console.log('Uploading file to path:', filePath);
+      
+      const { error: uploadError, data: uploadData } = await supabase.storage
         .from('chatbot_training_files')
-        .upload(filePath, selectedFile);
+        .upload(filePath, selectedFile, {
+          cacheControl: '3600',
+          upsert: false
+        });
 
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        console.error('Upload error:', uploadError);
+        throw uploadError;
+      }
+      
+      console.log('File uploaded successfully:', uploadData);
 
       if (selectedFile.type === 'text/plain') {
         const text = await selectedFile.text();
@@ -283,24 +293,28 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
           toast.error(`Failed to import ${failureCount} items`);
         }
       } else {
-        // For PDF files, process them using the edge function
-        try {
-          const { data, error } = await supabase.functions.invoke('process-pdf-content', {
-            body: {
-              filePath,
-              userId,
-              contentType: activeTab
-            }
-          });
-          
-          if (error) throw error;
-          
-          toast.success('PDF file processed successfully. Content has been added to your training data.');
-          fetchTrainingData(); // Refresh the data to show the newly added items
-        } catch (processingError) {
-          console.error('Error processing PDF:', processingError);
-          toast.error('Error processing PDF content.');
+        console.log('Calling process-pdf-content function with:', { filePath, userId, contentType: activeTab });
+        
+        const { data, error } = await supabase.functions.invoke('process-pdf-content', {
+          body: {
+            filePath,
+            userId,
+            contentType: activeTab
+          }
+        });
+        
+        if (error) {
+          console.error('Edge function error:', error);
+          throw error;
         }
+        
+        console.log('PDF processing result:', data);
+        
+        toast.success(`PDF file processed successfully. Added ${data.entriesCount || 1} training items.`);
+        
+        setTimeout(() => {
+          fetchTrainingData();
+        }, 1000);
       }
       
       setUploadSuccess(true);
@@ -311,7 +325,7 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
       
     } catch (error) {
       console.error('Error uploading file:', error);
-      toast.error('Failed to upload file');
+      toast.error(`Failed to upload file: ${error instanceof Error ? error.message : 'Unknown error'}`);
       setUploadSuccess(false);
     } finally {
       setFileUploading(false);
