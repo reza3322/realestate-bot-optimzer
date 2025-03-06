@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -23,9 +22,11 @@ const CATEGORIES = [
 
 interface ChatbotTrainingManagerProps {
   userId: string;
+  userPlan: string;
+  isPremiumFeature: (requiredPlan: string) => boolean;
 }
 
-const ChatbotTrainingManager = ({ userId }: ChatbotTrainingManagerProps) => {
+const ChatbotTrainingManager = ({ userId, userPlan, isPremiumFeature }: ChatbotTrainingManagerProps) => {
   const [activeTab, setActiveTab] = useState<"examples" | "upload">("examples");
   const [examples, setExamples] = useState<Array<{
     id?: string;
