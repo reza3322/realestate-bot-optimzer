@@ -25,12 +25,6 @@ export interface ChatStylesType {
   botIcon: string;
   userIcon: string;
   font: string;
-  container?: string;
-  header?: {
-    container: string;
-    font: string;
-  };
-  inputContainer?: string;
 }
 
 export type LanguageCode = 'en' | 'es' | 'fr' | 'de' | 'pt';

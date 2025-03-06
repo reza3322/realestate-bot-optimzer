@@ -44,21 +44,13 @@ const ChatHeader = ({
     }
   };
 
-  // Create a gradient background style that works with the base color
-  const gradientStyle = {
-    ...customStyle,
-    backgroundImage: customStyle.backgroundColor ? 
-      `linear-gradient(to right, ${customStyle.backgroundColor}, ${adjustColorBrightness(customStyle.backgroundColor as string, 20)})` : 
-      undefined
-  };
-
   return (
     <div 
       className={cn(
         "p-4 flex justify-between items-center",
         headerStyle.container
       )}
-      style={gradientStyle}
+      style={customStyle}
     >
       <div className="flex items-center gap-2">
         <BotIcon iconName={botIconName} className="w-5 h-5" />
@@ -88,28 +80,5 @@ const ChatHeader = ({
     </div>
   );
 };
-
-// Helper function to adjust color brightness
-function adjustColorBrightness(color: string, percent: number): string {
-  // Remove the # if it exists
-  color = color.replace('#', '');
-  
-  // Parse the color components
-  const r = parseInt(color.substring(0, 2), 16);
-  const g = parseInt(color.substring(2, 4), 16);
-  const b = parseInt(color.substring(4, 6), 16);
-  
-  // Adjust brightness
-  const adjustR = Math.min(255, Math.max(0, r + (r * percent / 100)));
-  const adjustG = Math.min(255, Math.max(0, g + (g * percent / 100)));
-  const adjustB = Math.min(255, Math.max(0, b + (b * percent / 100)));
-  
-  // Convert back to hex
-  const rHex = Math.round(adjustR).toString(16).padStart(2, '0');
-  const gHex = Math.round(adjustG).toString(16).padStart(2, '0');
-  const bHex = Math.round(adjustB).toString(16).padStart(2, '0');
-  
-  return `#${rHex}${gHex}${bHex}`;
-}
 
 export default ChatHeader;
