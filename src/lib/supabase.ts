@@ -1,4 +1,3 @@
-
 import { createClient } from '@supabase/supabase-js';
 import { toast } from 'sonner';
 
@@ -399,5 +398,60 @@ export const getSystemLogs = async () => {
     console.error('Error fetching system logs:', error);
     toast.error('Failed to fetch system logs');
     return [];
+  }
+};
+
+// Function to fetch chatbot conversations
+export const getChatbotConversations = async (limit = 10) => {
+  try {
+    const { data, error } = await supabase
+      .from('chatbot_conversations')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    
+    return { data, error };
+  } catch (err) {
+    console.error('Error fetching chatbot conversations:', err);
+    return { data: null, error: err };
+  }
+};
+
+// Function to create a chat session for memory
+export const createChatSession = async (userId, sessionId, message, response) => {
+  try {
+    const { data, error } = await supabase
+      .from('chat_sessions')
+      .insert([
+        { 
+          user_id: userId,
+          session_id: sessionId,
+          user_message: message,
+          ai_response: response,
+          created_at: new Date().toISOString()
+        }
+      ]);
+    
+    return { data, error };
+  } catch (err) {
+    console.error('Error creating chat session:', err);
+    return { data: null, error: err };
+  }
+};
+
+// Function to get chat history for a session
+export const getChatHistory = async (sessionId, limit = 5) => {
+  try {
+    const { data, error } = await supabase
+      .from('chat_sessions')
+      .select('*')
+      .eq('session_id', sessionId)
+      .order('created_at', { ascending: true })
+      .limit(limit);
+    
+    return { data, error };
+  } catch (err) {
+    console.error('Error fetching chat history:', err);
+    return { data: null, error: err };
   }
 };
