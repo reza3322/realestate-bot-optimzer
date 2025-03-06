@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -215,7 +214,6 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Only accept text or PDF files
     if (file.type !== 'text/plain' && file.type !== 'application/pdf') {
       toast.error('Only text or PDF files are accepted');
       return;
@@ -235,7 +233,6 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
     setFileUploading(true);
     setUploadSuccess(false);
     try {
-      // Upload file to storage
       const filePath = `${userId}/${activeTab}/${Date.now()}_${selectedFile.name}`;
       const { error: uploadError } = await supabase.storage
         .from('chatbot_training_files')
@@ -243,7 +240,6 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
 
       if (uploadError) throw uploadError;
 
-      // For text files, we can parse and add content directly
       if (selectedFile.type === 'text/plain') {
         const text = await selectedFile.text();
         const lines = text.split('\n');
@@ -251,7 +247,6 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
         let successCount = 0;
         let failureCount = 0;
         
-        // Simple parser: Assumes pairs of lines where odd lines are questions and even lines are answers
         for (let i = 0; i < lines.length; i += 2) {
           const question = lines[i]?.trim();
           const answer = lines[i + 1]?.trim();
@@ -287,14 +282,12 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
           toast.error(`Failed to import ${failureCount} items`);
         }
       } else {
-        // For PDF files, just notify the user
         toast.success('PDF file uploaded successfully. PDF content will be processed soon.');
       }
       
       setUploadSuccess(true);
       setUploadedFileName(selectedFile.name);
       
-      // Clear the file input
       const fileInput = document.getElementById('file-upload') as HTMLInputElement;
       if (fileInput) fileInput.value = '';
       
@@ -311,7 +304,6 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
     setSelectedFile(null);
     setUploadSuccess(false);
     setUploadedFileName("");
-    // Clear the file input
     const fileInput = document.getElementById('file-upload') as HTMLInputElement;
     if (fileInput) fileInput.value = '';
   };
@@ -443,7 +435,7 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
                   <p className="text-sm font-medium mb-2">Bulk Import</p>
                   
                   {uploadSuccess && (
-                    <Alert variant="success" className="mb-3 bg-green-50 border-green-200">
+                    <Alert className="mb-3 bg-green-50 border-green-200">
                       <div className="flex items-center gap-2">
                         <Check className="h-4 w-4 text-green-600" />
                         <AlertDescription className="text-green-700">
@@ -485,7 +477,7 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
                         <Button 
                           onClick={uploadFile} 
                           disabled={fileUploading}
-                          variant={fileUploading ? "outline" : "success"}
+                          variant={fileUploading ? "outline" : "default"}
                           size="sm"
                           className="gap-1"
                         >

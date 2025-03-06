@@ -126,7 +126,7 @@ const Chatbot = ({
         const previousMessages = messages.map(msg => ({
           role: msg.role === 'bot' ? 'bot' : 'user',
           content: msg.content
-        }));
+        })) as Message[];
         
         const response = await getAIResponse(
           message, 
