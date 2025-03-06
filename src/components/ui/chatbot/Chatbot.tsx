@@ -53,6 +53,7 @@ interface ChatbotProps {
   primaryColor?: string;
   language?: LanguageCode;
   buttonStyle?: React.CSSProperties;
+  fontSize?: number;
 }
 
 const Chatbot = ({
@@ -70,7 +71,8 @@ const Chatbot = ({
   botIconName = 'bot',
   primaryColor,
   language = 'en',
-  buttonStyle
+  buttonStyle,
+  fontSize = 16
 }: ChatbotProps) => {
   const translations = DEFAULT_TRANSLATIONS[language] || DEFAULT_TRANSLATIONS.en;
   

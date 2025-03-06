@@ -33,7 +33,7 @@ export interface ChatStylesType {
   inputContainer?: string;
 }
 
-export type LanguageCode = 'en' | 'es' | 'fr' | 'de' | 'pt';
+export type LanguageCode = 'en' | 'es' | 'fr' | 'de' | 'pt' | string;
 
 export interface ChatbotSettings {
   primaryColor: string;

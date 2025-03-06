@@ -12,6 +12,8 @@ interface StatsData {
 
 interface QuickStatsProps {
   stats: StatsData;
+  userPlan?: string;
+  isPremiumFeature?: (requiredPlan: string) => boolean;
 }
 
 const QuickStats = ({ stats }: QuickStatsProps) => {
