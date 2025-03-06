@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -96,6 +97,7 @@ const WebsiteIntegration = ({ userId, userPlan, isPremiumFeature }: WebsiteInteg
     const url = e.target.value;
     setWebsiteUrl(url);
     
+    // Basic URL validation
     if (url && !validateUrl(url)) {
       setIsValidUrl(false);
     } else {
@@ -113,6 +115,7 @@ const WebsiteIntegration = ({ userId, userPlan, isPremiumFeature }: WebsiteInteg
     setIsLoading(true);
     
     try {
+      // Check if this website is already added
       const { data: existingWebsites } = await supabase
         .from('user_websites')
         .select('id')
@@ -125,14 +128,19 @@ const WebsiteIntegration = ({ userId, userPlan, isPremiumFeature }: WebsiteInteg
         return;
       }
       
+      // Try to detect if the website has an API
       let apiAvailable = false;
       try {
-        apiAvailable = false;
+        // This would be replaced with actual API detection logic
+        // const apiCheckResponse = await fetch(`${websiteUrl}/api/properties`);
+        // apiAvailable = apiCheckResponse.ok;
+        apiAvailable = false; // For demo purposes
       } catch (error) {
         console.log('API check failed, assuming no API is available');
         apiAvailable = false;
       }
       
+      // Save website to database
       const { data, error } = await supabase
         .from('user_websites')
         .insert({
@@ -168,6 +176,7 @@ const WebsiteIntegration = ({ userId, userPlan, isPremiumFeature }: WebsiteInteg
     setIsScraping(true);
     
     try {
+      // Create scrape history record
       const { data: scrapeRecord, error: scrapeError } = await supabase
         .from('scrape_history')
         .insert({
@@ -182,6 +191,7 @@ const WebsiteIntegration = ({ userId, userPlan, isPremiumFeature }: WebsiteInteg
         throw scrapeError;
       }
       
+      // Call the web scraper edge function
       toast.info('Starting to scrape your website. This may take a few minutes.');
       
       const { data, error } = await supabase.functions.invoke('web-scraper', {
@@ -196,6 +206,7 @@ const WebsiteIntegration = ({ userId, userPlan, isPremiumFeature }: WebsiteInteg
         throw error;
       }
       
+      // Update scrape history record
       await supabase
         .from('scrape_history')
         .update({
@@ -205,6 +216,7 @@ const WebsiteIntegration = ({ userId, userPlan, isPremiumFeature }: WebsiteInteg
         })
         .eq('id', scrapeRecord.id);
       
+      // Update last scraped timestamp on website
       await supabase
         .from('user_websites')
         .update({
@@ -214,6 +226,7 @@ const WebsiteIntegration = ({ userId, userPlan, isPremiumFeature }: WebsiteInteg
       
       toast.success(`Scrape completed. Imported ${data.properties_imported} properties.`);
       
+      // Refresh the lists
       fetchUserWebsites();
       fetchScrapeHistory();
       
@@ -221,6 +234,7 @@ const WebsiteIntegration = ({ userId, userPlan, isPremiumFeature }: WebsiteInteg
       console.error('Error during scraping:', error);
       toast.error('Scraping failed. Please try again or contact support.');
       
+      // Update scrape history with error
       await supabase
         .from('scrape_history')
         .update({
@@ -378,9 +392,9 @@ const WebsiteIntegration = ({ userId, userPlan, isPremiumFeature }: WebsiteInteg
                         <Badge
                           variant={
                             history.status === 'completed' 
-                              ? 'default' 
+                              ? 'success' 
                               : history.status === 'processing' 
-                                ? 'secondary' 
+                                ? 'default' 
                                 : 'destructive'
                           }
                         >
