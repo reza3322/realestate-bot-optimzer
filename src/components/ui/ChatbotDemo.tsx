@@ -46,7 +46,7 @@ const ChatbotDemo = ({
       <ChatHeader 
         botName={botName}
         botIconName="bot"
-        apiKeyStatus="demo"
+        apiKeyStatus="not-set"
       />
       
       <div className="flex-1 p-4 overflow-y-auto space-y-4">
