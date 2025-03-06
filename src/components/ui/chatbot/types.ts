@@ -40,5 +40,5 @@ export interface ChatbotSettings {
   buttonTextColor: string;
   buttonStyle: string;
   buttonPosition: string;
-  language?: LanguageCode;
+  language: LanguageCode;
 }

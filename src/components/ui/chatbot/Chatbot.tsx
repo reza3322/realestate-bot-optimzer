@@ -6,7 +6,7 @@ import ChatMessage from './ChatMessage';
 import ChatInput from './ChatInput';
 import TypingIndicator from './TypingIndicator';
 import { getChatStyles, applyFontStyle } from './chatStyles';
-import { Message, ChatTheme } from './types';
+import { Message, ChatTheme, LanguageCode } from './types';
 import { testChatbotResponse } from './responseHandlers';
 
 // Default translations for various languages
@@ -53,7 +53,7 @@ interface ChatbotProps {
   useRealAPI?: boolean;
   botIconName?: string;
   primaryColor?: string;
-  language?: 'en' | 'es' | 'fr' | 'de' | 'pt';
+  language?: LanguageCode;
   buttonStyle?: React.CSSProperties;
 }
 
@@ -89,8 +89,7 @@ const Chatbot = ({
   const [error, setError] = useState<string | null>(null);
 
   // Apply theme styles
-  const baseStyles = getChatStyles(theme, variation, primaryColor);
-  const styles = applyFontStyle(baseStyles, fontStyle);
+  const styles: ChatTheme = getChatStyles(theme, variation, primaryColor);
 
   // Update messages if welcome message changes
   useEffect(() => {

@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { GradientHeading } from '@/components/ui/gradient-heading';
 import Chatbot from '@/components/ui/chatbot/Chatbot';
@@ -61,6 +60,16 @@ const Demo = () => {
         <span>{buttonText}</span>
       </div>
     );
+  };
+
+  // Get the button style object based on current settings
+  const getButtonStyleObject = () => {
+    return {
+      backgroundColor: buttonColor,
+      color: "#ffffff",
+      borderRadius: buttonStyle === 'pill' ? '9999px' : 
+                  buttonStyle === 'rounded' ? '0.375rem' : '0'
+    };
   };
 
   return (
@@ -313,6 +322,7 @@ const Demo = () => {
               welcomeMessage="👋 Hi there! I'm your RealHomeAI assistant. I can help you find properties, answer questions about listings, and even schedule viewings. Try asking me about available properties or how I can help with your real estate needs!"
               placeholderText="Type your message here..."
               useRealAPI={useRealAPI}
+              buttonStyle={getButtonStyleObject()} // Apply the button style object
             />
           </div>
         </div>
