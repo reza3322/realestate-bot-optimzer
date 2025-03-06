@@ -57,7 +57,7 @@ const ChatInput = ({
         className="flex-1 bg-transparent border border-input rounded-md h-10 px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ring"
       />
       <button
-        onClick={(e) => handleSubmit(e)}
+        onClick={handleSubmit}
         disabled={!message.trim()}
         className={cn(
           "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors h-10 w-10",
