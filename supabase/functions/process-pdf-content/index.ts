@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { corsHeaders } from "../_shared/cors.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.26.0";
@@ -13,206 +12,188 @@ serve(async (req) => {
     // Get request body and parse JSON
     const requestBody = await req.text();
     let parsedBody;
-    
+
     try {
       parsedBody = JSON.parse(requestBody);
     } catch (parseError) {
-      console.error("Error parsing request body:", parseError, "Raw body:", requestBody);
-      throw new Error(`Invalid JSON in request body: ${parseError.message}`);
+      console.error("❌ Error parsing request body:", parseError, "Raw body:", requestBody);
+      return new Response(JSON.stringify({ error: "Invalid JSON format" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400,
+      });
     }
-    
+
     const { filePath, userId, contentType } = parsedBody;
-    
+
     if (!filePath || !userId || !contentType) {
-      console.error("Missing required parameters:", { filePath, userId, contentType });
-      throw new Error("Missing required parameters: filePath, userId, and contentType are required");
+      console.error("❌ Missing required parameters:", { filePath, userId, contentType });
+      return new Response(JSON.stringify({ error: "Missing filePath, userId, or contentType" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400,
+      });
     }
-    
-    console.log(`Processing file at path: ${filePath}, user: ${userId}, type: ${contentType}`);
-    
-    // Create a Supabase client with the project URL and service_role key
-    const supabaseUrl = Deno.env.get("SUPABASE_URL") as string;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") as string;
-    
+
+    console.log(`✅ Processing file at path: ${filePath}, user: ${userId}, type: ${contentType}`);
+
+    // Initialize Supabase client
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
     if (!supabaseUrl || !supabaseKey) {
-      console.error("Missing Supabase credentials");
-      throw new Error("Server configuration error: Missing Supabase credentials");
+      console.error("❌ Missing Supabase credentials");
+      return new Response(JSON.stringify({ error: "Server configuration error: Missing Supabase credentials" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 500,
+      });
     }
-    
+
     const supabase = createClient(supabaseUrl, supabaseKey);
-    
-    console.log(`Downloading file from: ${filePath}`);
-    
+
+    console.log(`📥 Downloading file from: ${filePath}`);
+
     // Download the file from storage
-    const { data: fileData, error: downloadError } = await supabase
-      .storage
-      .from('chatbot_training_files')
+    const { data: fileData, error: downloadError } = await supabase.storage
+      .from("chatbot_training_files")
       .download(filePath);
-    
-    if (downloadError) {
-      console.error("Error downloading file:", downloadError);
-      throw downloadError;
+
+    if (downloadError || !fileData) {
+      console.error("❌ Error downloading file:", downloadError || "No file data found");
+      return new Response(JSON.stringify({ error: "Failed to download file" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 500,
+      });
     }
-    
-    if (!fileData) {
-      console.error("No file data downloaded");
-      throw new Error("No file data could be downloaded");
-    }
-    
-    console.log("File downloaded successfully, size:", fileData.size);
-    
-    // Extract the file name and extension from the path
-    const fileName = filePath.split('/').pop() || "Unknown File";
-    const fileExt = fileName.split('.').pop()?.toLowerCase() || "";
-    
-    // Create training entries based on the file
+
+    console.log("✅ File downloaded successfully!");
+
+    // Extract file name and extension
+    const fileName = filePath.split("/").pop() || "Unknown File";
+    const fileExt = fileName.split(".").pop()?.toLowerCase() || "";
+
     let fileContent = "";
-    
+
     // Extract text content from the file based on its type
-    if (fileExt === "pdf") {
-      // For PDFs, we can only get the binary content currently
-      // In the future, we could integrate with a PDF parsing library
-      // But for now, we'll create placeholder entries
-      fileContent = `Content from PDF file: ${fileName}`;
-      try {
-        // Try to get some text content if possible
-        const text = await fileData.text();
-        if (text && text.length > 0) {
-          fileContent = text.substring(0, 10000); // Limit to first 10k chars
-        }
-      } catch (textError) {
-        console.error("Could not extract text from PDF:", textError);
-      }
-    } else if (fileExt === "txt" || fileExt === "csv") {
-      // For text files, we can get the content directly
+    try {
       fileContent = await fileData.text();
-    } else {
-      console.log(`Unsupported file extension: ${fileExt}, treating as text`);
-      try {
-        fileContent = await fileData.text();
-      } catch (textError) {
-        console.error("Error extracting text from file:", textError);
-        fileContent = `Content from ${fileName} (format not fully supported)`;
-      }
+    } catch (textError) {
+      console.error("❌ Error extracting text from file:", textError);
+      fileContent = `Unable to extract full content from ${fileName}.`;
     }
-    
-    console.log(`Extracted ${fileContent.length} characters of content from ${fileName}`);
-    
+
+    console.log(`📜 Extracted ${fileContent.length} characters from ${fileName}`);
+
     // Generate training entries
     const entries = [
       {
         user_id: userId,
         content_type: contentType,
         question: `What information do you have about ${fileName}?`,
-        answer: `The file "${fileName}" contains the following information: ${fileContent.substring(0, 500)}${fileContent.length > 500 ? '...' : ''}`,
-        category: 'Imported Content',
-        priority: 5
+        answer: `The file "${fileName}" contains: ${fileContent.substring(0, 500)}${fileContent.length > 500 ? "..." : ""}`,
+        category: "Imported Content",
+        priority: 5,
       },
       {
         user_id: userId,
         content_type: contentType,
-        question: `Tell me about the content in ${fileName}`,
-        answer: `Here's a summary of "${fileName}": ${fileContent.substring(0, 500)}${fileContent.length > 500 ? '...' : ''}`,
-        category: 'Imported Content',
-        priority: 4
-      }
+        question: `Tell me about ${fileName}`,
+        answer: `Here's a summary: ${fileContent.substring(0, 500)}${fileContent.length > 500 ? "..." : ""}`,
+        category: "Imported Content",
+        priority: 4,
+      },
     ];
-    
-    // If it's a CSV file, try to parse it as Q&A pairs
+
+    // Parse CSV files into Q&A format
     if (fileExt === "csv") {
       try {
-        const lines = fileContent.split('\n');
-        for (let i = 0; i < lines.length; i++) {
-          const parts = lines[i].split(',');
+        const lines = fileContent.split("\n");
+        for (let line of lines) {
+          const parts = line.split(",");
           if (parts.length >= 2) {
             const question = parts[0].trim();
-            const answer = parts[1].trim();
-            
+            const answer = parts.slice(1).join(",").trim();
+
             if (question && answer) {
               entries.push({
                 user_id: userId,
                 content_type: contentType,
-                question: question,
-                answer: answer,
-                category: 'CSV Import',
-                priority: 3
+                question,
+                answer,
+                category: "CSV Import",
+                priority: 3,
               });
             }
           }
         }
       } catch (csvError) {
-        console.error("Error parsing CSV content:", csvError);
+        console.error("❌ Error parsing CSV content:", csvError);
       }
     }
-    
-    // If it's a TXT file, try to parse it as alternating Q&A
+
+    // Parse TXT files into alternating Q&A format
     if (fileExt === "txt") {
       try {
-        const lines = fileContent.split('\n').filter(line => line.trim().length > 0);
+        const lines = fileContent.split("\n").filter((line) => line.trim().length > 0);
         for (let i = 0; i < lines.length - 1; i += 2) {
           const question = lines[i].trim();
           const answer = lines[i + 1]?.trim() || "";
-          
+
           if (question && answer) {
             entries.push({
               user_id: userId,
               content_type: contentType,
-              question: question,
-              answer: answer,
-              category: 'TXT Import',
-              priority: 3
+              question,
+              answer,
+              category: "TXT Import",
+              priority: 3,
             });
           }
         }
       } catch (txtError) {
-        console.error("Error parsing TXT content:", txtError);
+        console.error("❌ Error parsing TXT content:", txtError);
       }
     }
-    
-    console.log(`Inserting ${entries.length} training entries`);
-    
-    // Insert entries in the chatbot_training_data table
+
+    console.log(`✅ Inserting ${entries.length} training entries`);
+
+    // Insert entries into the chatbot_training_data table
     const { data: insertData, error: insertError } = await supabase
-      .from('chatbot_training_data')
+      .from("chatbot_training_data")
       .insert(entries)
       .select();
-    
+
     if (insertError) {
-      console.error("Error inserting content:", insertError);
-      throw insertError;
+      console.error("❌ Error inserting training data:", insertError);
+      return new Response(JSON.stringify({ error: "Failed to store training data" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 500,
+      });
     }
-    
-    console.log("File processed successfully, created entries:", insertData?.length || 0);
-    
+
+    console.log("✅ Training data stored successfully!");
+
     return new Response(
       JSON.stringify({
         success: true,
         message: "File processed successfully",
         data: insertData,
-        entriesCount: entries.length
+        entriesCount: entries.length,
       }),
       {
-        headers: {
-          ...corsHeaders,
-          "Content-Type": "application/json",
-        },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 200,
       }
     );
   } catch (error) {
-    console.error("Error processing file:", error);
-    
+    console.error("❌ Error processing file:", error);
+
     return new Response(
       JSON.stringify({
         success: false,
         error: error.message,
       }),
       {
-        headers: {
-          ...corsHeaders,
-          "Content-Type": "application/json",
-        },
-        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 500,
       }
     );
   }
