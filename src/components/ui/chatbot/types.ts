@@ -56,3 +56,20 @@ export interface ChatbotSettings {
   buttonPosition: string;
   language: LanguageCode;
 }
+
+export interface VisitorInfo {
+  name?: string;
+  email?: string;
+  phone?: string;
+  propertyInterest?: string;
+  budget?: string;
+  [key: string]: any;
+}
+
+export interface ChatbotResponse {
+  response: string;
+  suggestedFollowUp?: string;
+  source?: 'ai' | 'training';
+  conversationId?: string;
+  leadInfo?: VisitorInfo;
+}

@@ -5,16 +5,18 @@ import { cn } from '@/lib/utils';
 
 interface ChatInputProps {
   inputContainerStyle?: string;
-  onSendMessage: (message: string) => void;
+  onSendMessage: (message: string, visitorInfo?: Record<string, any>) => void;
   placeholderText?: string;
   buttonStyle?: React.CSSProperties;
+  visitorInfo?: Record<string, any>;
 }
 
 const ChatInput = ({ 
   inputContainerStyle, 
   onSendMessage,
   placeholderText = "Type a message...",
-  buttonStyle = {}
+  buttonStyle = {},
+  visitorInfo = {}
 }: ChatInputProps) => {
   const [message, setMessage] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -28,7 +30,7 @@ const ChatInput = ({
     if (message.trim()) {
       // Call onSendMessage without triggering page scroll
       setTimeout(() => {
-        onSendMessage(message.trim());
+        onSendMessage(message.trim(), visitorInfo);
         setMessage('');
       }, 0);
     }
