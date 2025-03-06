@@ -43,9 +43,11 @@ const formSchema = z.object({
 
 interface ChatbotSettingsProps {
   userId: string;
+  userPlan?: string; // Add userPlan as an optional prop
+  isPremiumFeature?: (requiredPlan: string) => boolean; // Add isPremiumFeature as an optional function
 }
 
-const ChatbotSettings = ({ userId }: ChatbotSettingsProps) => {
+const ChatbotSettings = ({ userId, userPlan = 'starter', isPremiumFeature }: ChatbotSettingsProps) => {
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   
@@ -199,7 +201,7 @@ const ChatbotSettings = ({ userId }: ChatbotSettingsProps) => {
         }));
       }
     } finally {
-      setIsSaving(true);
+      setIsSaving(false);
     }
   };
   
