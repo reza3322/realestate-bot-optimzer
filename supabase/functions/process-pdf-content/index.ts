@@ -28,7 +28,7 @@ serve(async (req) => {
       throw new Error("Missing required parameters: filePath, userId, and contentType are required");
     }
     
-    console.log(`Processing PDF file: ${filePath}, user: ${userId}, type: ${contentType}`);
+    console.log(`Processing file at path: ${filePath}, user: ${userId}, type: ${contentType}`);
     
     // Create a Supabase client with the project URL and service_role key
     const supabaseUrl = Deno.env.get("SUPABASE_URL") as string;
@@ -70,8 +70,19 @@ serve(async (req) => {
     
     // Extract text content from the file based on its type
     if (fileExt === "pdf") {
-      // For now, we'll create placeholder entries since true PDF parsing requires additional libraries
-      fileContent = `Content extracted from ${fileName}`;
+      // For PDFs, we can only get the binary content currently
+      // In the future, we could integrate with a PDF parsing library
+      // But for now, we'll create placeholder entries
+      fileContent = `Content from PDF file: ${fileName}`;
+      try {
+        // Try to get some text content if possible
+        const text = await fileData.text();
+        if (text && text.length > 0) {
+          fileContent = text.substring(0, 10000); // Limit to first 10k chars
+        }
+      } catch (textError) {
+        console.error("Could not extract text from PDF:", textError);
+      }
     } else if (fileExt === "txt" || fileExt === "csv") {
       // For text files, we can get the content directly
       fileContent = await fileData.text();
@@ -84,6 +95,8 @@ serve(async (req) => {
         fileContent = `Content from ${fileName} (format not fully supported)`;
       }
     }
+    
+    console.log(`Extracted ${fileContent.length} characters of content from ${fileName}`);
     
     // Generate training entries
     const entries = [

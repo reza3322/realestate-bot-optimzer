@@ -233,6 +233,7 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
 
     setFileUploading(true);
     setUploadSuccess(false);
+    
     try {
       const timestamp = Date.now();
       const safeFileName = selectedFile.name.replace(/\s+/g, '_');
@@ -254,93 +255,37 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
       
       console.log('File uploaded successfully to path:', filePath);
 
-      if (selectedFile.type === 'text/plain' || selectedFile.type === 'text/csv') {
-        console.log('Processing text/CSV file');
-        const text = await selectedFile.text();
-        let lines: string[] = [];
+      try {
+        console.log('Processing file, calling edge function with:', { filePath, userId, contentType: activeTab });
         
-        if (selectedFile.type === 'text/csv') {
-          lines = text.split('\n').flatMap(line => {
-            const columns = line.split(',');
-            if (columns.length >= 2) {
-              return [columns[0].trim(), columns[1].trim()];
-            }
-            return [];
-          });
+        const { data, error } = await supabase.functions.invoke('process-pdf-content', {
+          body: JSON.stringify({
+            filePath,
+            userId,
+            contentType: activeTab
+          })
+        });
+        
+        console.log('Edge function response:', data);
+        
+        if (error) {
+          console.error('Edge function error:', error);
+          throw new Error(`Edge function failed: ${error.message || JSON.stringify(error)}`);
+        }
+        
+        if (data && data.success) {
+          toast.success(`File processed successfully. Added ${data.entriesCount || 0} training items.`);
+          
+          setTimeout(() => {
+            fetchTrainingData();
+          }, 1000);
         } else {
-          lines = text.split('\n').filter(line => line.trim().length > 0);
+          throw new Error((data && data.error) || 'Unknown error during file processing');
         }
-        
-        let successCount = 0;
-        let failureCount = 0;
-        
-        for (let i = 0; i < lines.length; i += 2) {
-          const question = lines[i]?.trim();
-          const answer = lines[i + 1]?.trim();
-          
-          if (question && answer) {
-            try {
-              const { error } = await supabase
-                .from('chatbot_training_data')
-                .insert({
-                  user_id: userId,
-                  content_type: activeTab,
-                  question,
-                  answer,
-                  category: 'Imported',
-                  priority: 0
-                });
-              
-              if (error) throw error;
-              successCount++;
-            } catch (e) {
-              failureCount++;
-              console.error('Error inserting item:', e);
-            }
-          }
-        }
-        
-        if (successCount > 0) {
-          toast.success(`Successfully imported ${successCount} items`);
-          fetchTrainingData();
-        }
-        
-        if (failureCount > 0) {
-          toast.error(`Failed to import ${failureCount} items`);
-        }
-      } else if (selectedFile.type === 'application/pdf') {
-        console.log('Processing PDF file, calling edge function with:', { filePath, userId, contentType: activeTab });
-        
-        try {
-          const { data, error } = await supabase.functions.invoke('process-pdf-content', {
-            body: JSON.stringify({
-              filePath,
-              userId,
-              contentType: activeTab
-            })
-          });
-          
-          console.log('Edge function response:', data);
-          
-          if (error) {
-            console.error('Edge function error:', error);
-            throw new Error(`Edge function failed: ${error.message || JSON.stringify(error)}`);
-          }
-          
-          if (data && data.success) {
-            toast.success(`File processed successfully. Added ${data.entriesCount || 0} training items.`);
-            
-            setTimeout(() => {
-              fetchTrainingData();
-            }, 2000);
-          } else {
-            throw new Error((data && data.error) || 'Unknown error during file processing');
-          }
-        } catch (funcError) {
-          console.error('Error invoking edge function:', funcError);
-          toast.error(`Failed to process file: ${funcError.message}`);
-          throw funcError;
-        }
+      } catch (funcError) {
+        console.error('Error invoking edge function:', funcError);
+        toast.error(`Failed to process file: ${funcError.message}`);
+        throw funcError;
       }
       
       setUploadSuccess(true);
