@@ -6,7 +6,7 @@ import ChatMessage from './ChatMessage';
 import ChatInput from './ChatInput';
 import TypingIndicator from './TypingIndicator';
 import { getChatStyles, applyFontStyle } from './chatStyles';
-import { Message, ChatTheme, LanguageCode } from './types';
+import { Message, ChatTheme, LanguageCode, ChatStylesType } from './types';
 import { testChatbotResponse } from './responseHandlers';
 
 // Default translations for various languages
@@ -78,7 +78,7 @@ const Chatbot = ({
   const translations = DEFAULT_TRANSLATIONS[language] || DEFAULT_TRANSLATIONS.en;
   
   // Set default welcome message and placeholder if not provided
-  const defaultWelcomeMessage = welcomeMessage || translations.welcomeMessage;
+  const defaultWelcomeMessage = welcomeMessage || translations.welcomeMessage.replace("RealHomeAI", botName);
   const defaultPlaceholderText = placeholderText || translations.placeholderText;
   
   const [messages, setMessages] = useState<Message[]>([
@@ -90,6 +90,15 @@ const Chatbot = ({
 
   // Apply theme styles
   const styles: ChatTheme = getChatStyles(theme, variation, primaryColor);
+  
+  // Convert the styles to the type expected by ChatMessage
+  const chatStyles: ChatStylesType = {
+    botBubble: styles.botBubble,
+    userBubble: styles.userBubble,
+    botIcon: styles.botIcon,
+    userIcon: styles.userIcon,
+    font: styles.font
+  };
 
   // Update messages if welcome message changes
   useEffect(() => {
@@ -215,7 +224,7 @@ const Chatbot = ({
             key={index}
             message={message}
             index={index}
-            styles={styles}
+            styles={chatStyles}
             botIconName={botIconName}
             customBotIconStyle={botIconStyle}
             customUserBubbleStyle={userBubbleStyle}

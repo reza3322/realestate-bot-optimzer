@@ -1,3 +1,4 @@
+
 import { ChatTheme } from './types';
 
 // Get base theme styles
@@ -36,7 +37,7 @@ const getThemeStyles = (theme: string): ChatTheme => {
       return {
         container: 'border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-800',
         header: {
-          container: 'bg-gray-50 dark:bg-gray-700 p-3 border-b border-gray-300 dark:border-gray-700',
+          container: 'bg-blue-100 dark:bg-blue-900 p-3 border-b border-gray-300 dark:border-gray-700',
           font: 'text-lg font-medium text-gray-700 dark:text-gray-300'
         },
         inputContainer: 'p-3 bg-gray-50 dark:bg-gray-800 border-t border-gray-300 dark:border-gray-700',
@@ -55,26 +56,29 @@ const applyColorVariation = (theme: ChatTheme, variation: string): ChatTheme => 
   
   switch (variation) {
     case 'blue':
+      updatedTheme.header.container = updatedTheme.header.container.replace('bg-gray-100', 'bg-sky-100').replace('bg-gray-700', 'bg-sky-900');
       updatedTheme.userBubble = 'bg-sky-100 dark:bg-sky-500 text-sky-800 dark:text-sky-50 rounded-md p-2';
       updatedTheme.userIcon = 'bg-sky-200 dark:bg-sky-600 rounded-full p-1.5 text-sky-700 dark:text-sky-300';
       updatedTheme.botIcon = 'bg-sky-200 dark:bg-gray-500 rounded-full p-1.5 text-sky-700 dark:text-gray-300';
-      updatedTheme.header.container = 'bg-sky-50 dark:bg-gray-700 p-3 border-b border-sky-200 dark:border-gray-700';
       break;
     case 'green':
+      updatedTheme.header.container = updatedTheme.header.container.replace('bg-gray-100', 'bg-green-100').replace('bg-gray-700', 'bg-green-900');
       updatedTheme.userBubble = 'bg-green-100 dark:bg-green-500 text-green-800 dark:text-green-50 rounded-md p-2';
       updatedTheme.userIcon = 'bg-green-200 dark:bg-green-600 rounded-full p-1.5 text-green-700 dark:text-green-300';
       updatedTheme.botIcon = 'bg-green-200 dark:bg-gray-500 rounded-full p-1.5 text-green-700 dark:text-gray-300';
-      updatedTheme.header.container = 'bg-green-50 dark:bg-gray-700 p-3 border-b border-green-200 dark:border-gray-700';
       break;
     case 'purple':
+      updatedTheme.header.container = updatedTheme.header.container.replace('bg-gray-100', 'bg-purple-100').replace('bg-gray-700', 'bg-purple-900');
       updatedTheme.userBubble = 'bg-purple-100 dark:bg-purple-500 text-purple-800 dark:text-purple-50 rounded-md p-2';
       updatedTheme.userIcon = 'bg-purple-200 dark:bg-purple-600 rounded-full p-1.5 text-purple-700 dark:text-purple-300';
       updatedTheme.botIcon = 'bg-purple-200 dark:bg-gray-500 rounded-full p-1.5 text-purple-700 dark:text-gray-300';
-      updatedTheme.header.container = 'bg-purple-50 dark:bg-gray-700 p-3 border-b border-purple-200 dark:border-gray-700';
       break;
     case 'default':
     default:
-      // Keep default theme
+      // For default, we'll ensure the header has a blue tint
+      if (!updatedTheme.header.container.includes('bg-blue')) {
+        updatedTheme.header.container = updatedTheme.header.container.replace('bg-gray-100', 'bg-blue-100').replace('bg-gray-700', 'bg-blue-900');
+      }
       break;
   }
   
@@ -122,6 +126,10 @@ export const getChatStyles = (theme: string, variation: string, primaryColor?: s
     return {
       ...coloredTheme,
       customColor: primaryColor,
+      header: {
+        ...coloredTheme.header,
+        container: coloredTheme.header.container.replace(/bg-\w+-\d+/g, `bg-[${primaryColor}]`)
+      }
     };
   }
   

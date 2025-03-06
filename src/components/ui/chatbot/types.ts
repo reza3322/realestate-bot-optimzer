@@ -19,6 +19,14 @@ export interface ChatTheme {
   customColor?: string;
 }
 
+export interface ChatStylesType {
+  botBubble: string;
+  userBubble: string;
+  botIcon: string;
+  userIcon: string;
+  font: string;
+}
+
 export type LanguageCode = 'en' | 'es' | 'fr' | 'de' | 'pt';
 
 export interface ChatbotSettings {

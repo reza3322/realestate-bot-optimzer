@@ -85,7 +85,7 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
     buttonTextColor: "#ffffff",
     buttonStyle: "pill",
     buttonPosition: "bottom-right",
-    language: "en",
+    language: "en" as LanguageCode,
   });
 
   const [loading, setLoading] = useState(true);
