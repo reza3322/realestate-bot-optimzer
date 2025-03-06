@@ -1,95 +1,180 @@
 
-import { useState, useEffect } from 'react';
-import { User } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { BotIcon } from './chatbot/BotIcon';
-import { Message, ChatStylesType } from './chatbot/types';
+import React, { useState } from 'react';
+import Chatbot from '@/components/ui/chatbot/Chatbot';
+import { Button } from '@/components/ui/button';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { getChatStyles } from '@/components/ui/chatbot/chatStyles';
+import type { ChatStylesType, ChatTheme } from '@/components/ui/chatbot/types';
 
-export interface ChatbotDemoProps {
-  className?: string;
-  maxHeight?: string;
-}
+// Type for the theme options
+type ThemeOption = "default" | "modern" | "minimal";
+type VariationOption = "default" | "blue" | "green" | "purple";
 
-const ChatbotDemo = ({ className, maxHeight = "300px" }: ChatbotDemoProps) => {
-  const [messages, setMessages] = useState<Message[]>([
-    { role: 'bot', content: "Hi there! I'm your assistant. How can I help you today?" },
-    { role: 'user', content: "Can you tell me about your real estate services?" },
-    { role: 'bot', content: "We offer a complete range of real estate services including property listings, buyer representation, and market analysis. Are you looking to buy or sell a property?" },
-  ]);
-
-  // Generate a demo styles object that matches ChatStylesType
-  const styles: ChatStylesType = {
-    container: 'bg-white dark:bg-gray-800 shadow-md rounded-lg',
-    header: 'bg-primary text-white p-3 rounded-t-lg flex items-center',
-    userBubble: 'bg-primary/10 text-foreground rounded-lg p-3 max-w-[80%] ml-auto',
-    botBubble: 'bg-muted text-foreground rounded-lg p-3 max-w-[80%]',
-    inputContainer: 'border-t border-border p-3 bg-background',
-    botIcon: 'bg-primary text-white h-8 w-8 rounded-full flex items-center justify-center',
-    userIcon: 'bg-primary/20 h-8 w-8 rounded-full flex items-center justify-center',
-    font: 'font-sans'
+const ChatbotDemo = () => {
+  const [theme, setTheme] = useState<ThemeOption>('default');
+  const [variation, setVariation] = useState<VariationOption>('default');
+  const [fontStyle, setFontStyle] = useState('default');
+  const [showCode, setShowCode] = useState(false);
+  
+  // Generate embed code for the selected theme/variation
+  const generateEmbedCode = () => {
+    return `<script src="https://realhome.ai/chatbot.js?theme=${theme}&variation=${variation}&font=${fontStyle}"></script>`;
+  };
+  
+  // Convert the theme options to the actual chat styles
+  const styles: ChatTheme = getChatStyles(theme, variation);
+  
+  // Convert the styles to the type expected by ChatMessage
+  const chatStyles: ChatStylesType = {
+    botBubble: styles.botBubble,
+    userBubble: styles.userBubble,
+    botIcon: styles.botIcon,
+    userIcon: styles.userIcon,
+    font: styles.font
   };
 
   return (
-    <div className={cn(
-      'flex flex-col overflow-hidden rounded-lg shadow-md',
-      styles.container,
-      className
-    )}>
-      {/* Chat Header */}
-      <div className={cn(styles.header)}>
-        <div className={cn(styles.botIcon, 'mr-2')}>
-          <BotIcon iconName="bot" className="h-5 w-5" />
+    <div className="space-y-4">
+      <div className="grid md:grid-cols-2 gap-4">
+        <div className="space-y-4">
+          <Tabs defaultValue="theme" className="w-full">
+            <TabsList className="w-full">
+              <TabsTrigger value="theme" className="flex-1">Theme</TabsTrigger>
+              <TabsTrigger value="font" className="flex-1">Font</TabsTrigger>
+              <TabsTrigger value="code" className="flex-1">Embed</TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="theme" className="space-y-4 py-4">
+              <div>
+                <h3 className="text-lg font-medium mb-2">Chat Theme</h3>
+                <div className="grid grid-cols-3 gap-2">
+                  <Button 
+                    variant={theme === 'default' ? 'default' : 'outline'} 
+                    onClick={() => setTheme('default')}
+                    className="justify-start"
+                  >
+                    Default
+                  </Button>
+                  <Button 
+                    variant={theme === 'modern' ? 'default' : 'outline'} 
+                    onClick={() => setTheme('modern')}
+                    className="justify-start"
+                  >
+                    Modern
+                  </Button>
+                  <Button 
+                    variant={theme === 'minimal' ? 'default' : 'outline'} 
+                    onClick={() => setTheme('minimal')}
+                    className="justify-start"
+                  >
+                    Minimal
+                  </Button>
+                </div>
+              </div>
+              
+              <div>
+                <h3 className="text-lg font-medium mb-2">Color Scheme</h3>
+                <div className="grid grid-cols-4 gap-2">
+                  <Button 
+                    variant={variation === 'default' ? 'default' : 'outline'} 
+                    onClick={() => setVariation('default')}
+                    className="justify-start"
+                  >
+                    Default
+                  </Button>
+                  <Button 
+                    variant={variation === 'blue' ? 'default' : 'outline'} 
+                    onClick={() => setVariation('blue')}
+                    className="justify-start"
+                    className="bg-blue-500 text-white hover:bg-blue-600"
+                  >
+                    Blue
+                  </Button>
+                  <Button 
+                    variant={variation === 'green' ? 'default' : 'outline'} 
+                    onClick={() => setVariation('green')}
+                    className="justify-start"
+                    className="bg-green-500 text-white hover:bg-green-600"
+                  >
+                    Green
+                  </Button>
+                  <Button 
+                    variant={variation === 'purple' ? 'default' : 'outline'} 
+                    onClick={() => setVariation('purple')}
+                    className="justify-start"
+                    className="bg-purple-500 text-white hover:bg-purple-600"
+                  >
+                    Purple
+                  </Button>
+                </div>
+              </div>
+            </TabsContent>
+            
+            <TabsContent value="font" className="space-y-4 py-4">
+              <div>
+                <h3 className="text-lg font-medium mb-2">Font Style</h3>
+                <div className="grid grid-cols-3 gap-2">
+                  <Button 
+                    variant={fontStyle === 'default' ? 'default' : 'outline'} 
+                    onClick={() => setFontStyle('default')}
+                    className="justify-start font-sans"
+                  >
+                    Sans Serif
+                  </Button>
+                  <Button 
+                    variant={fontStyle === 'serif' ? 'default' : 'outline'} 
+                    onClick={() => setFontStyle('serif')}
+                    className="justify-start font-serif"
+                  >
+                    Serif
+                  </Button>
+                  <Button 
+                    variant={fontStyle === 'mono' ? 'default' : 'outline'} 
+                    onClick={() => setFontStyle('mono')}
+                    className="justify-start font-mono"
+                  >
+                    Monospace
+                  </Button>
+                </div>
+              </div>
+            </TabsContent>
+            
+            <TabsContent value="code" className="py-4">
+              <div>
+                <h3 className="text-lg font-medium mb-2">Embed Code</h3>
+                <p className="text-sm text-gray-500 mb-2">
+                  Copy this code and place it in your website's HTML to add the chatbot.
+                </p>
+                <div className="relative">
+                  <pre className="bg-gray-100 dark:bg-gray-800 p-4 rounded-md overflow-x-auto">
+                    <code>{generateEmbedCode()}</code>
+                  </pre>
+                  <Button 
+                    size="sm" 
+                    className="absolute top-2 right-2"
+                    onClick={() => {
+                      navigator.clipboard.writeText(generateEmbedCode());
+                      alert('Copied to clipboard!');
+                    }}
+                  >
+                    Copy
+                  </Button>
+                </div>
+              </div>
+            </TabsContent>
+          </Tabs>
         </div>
-        <span className="font-medium">RealHome Assistant</span>
-      </div>
-      
-      {/* Messages Container */}
-      <div 
-        className="flex-1 p-3 overflow-y-auto space-y-3"
-        style={{ height: maxHeight }}
-      >
-        {messages.map((message, index) => (
-          <div
-            key={index}
-            className="flex items-start gap-3"
-          >
-            {message.role === 'bot' && (
-              <div className={cn(styles.botIcon)}>
-                <BotIcon iconName="bot" className="h-5 w-5" />
-              </div>
-            )}
-            
-            <div 
-              className={cn(
-                message.role === 'user' ? styles.userBubble : styles.botBubble
-              )}
-            >
-              {message.content}
-            </div>
-            
-            {message.role === 'user' && (
-              <div className={cn(styles.userIcon)}>
-                <User className="h-5 w-5" />
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-      
-      {/* Input Area (disabled in demo) */}
-      <div className={cn(styles.inputContainer, 'flex items-center')}>
-        <input 
-          type="text" 
-          disabled 
-          className="flex-1 p-2 bg-muted rounded-md opacity-50 text-muted-foreground"
-          placeholder="Type your message... (demo only)"
-        />
-        <button 
-          disabled
-          className="ml-2 p-2 bg-primary/50 text-primary-foreground rounded-md opacity-50"
-        >
-          Send
-        </button>
+        
+        <div className="flex justify-center items-start">
+          <Chatbot 
+            theme={theme} 
+            variation={variation} 
+            fontStyle={fontStyle as any}
+            maxHeight="500px"
+            botName="RealHome Assistant"
+            useRealAPI={false}
+          />
+        </div>
       </div>
     </div>
   );
