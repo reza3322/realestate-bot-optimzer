@@ -14,10 +14,14 @@ serve(async (req) => {
   }
 
   try {
+    console.log("Web scraper function started")
+    
     // Get request body
     const { userId, sourceUrl, sourceType } = await req.json()
+    console.log(`Received request: userId=${userId}, sourceUrl=${sourceUrl}, sourceType=${sourceType}`)
 
     if (!userId || !sourceUrl) {
+      console.error("Missing required parameters: userId or sourceUrl")
       return new Response(
         JSON.stringify({ error: 'User ID and source URL are required' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
@@ -27,9 +31,12 @@ serve(async (req) => {
     // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    console.log(`Initializing Supabase with URL: ${supabaseUrl.substring(0, 10)}... and key: ${supabaseKey.substring(0, 5)}...`)
+    
     const supabase = createClient(supabaseUrl, supabaseKey)
     
     // Create a new import record
+    console.log("Creating property_imports record")
     const { data: importRecord, error: importError } = await supabase
       .from('property_imports')
       .insert({
@@ -44,63 +51,85 @@ serve(async (req) => {
     if (importError) {
       console.error('Error creating import record:', importError)
       return new Response(
-        JSON.stringify({ error: 'Failed to initialize import process' }),
+        JSON.stringify({ error: 'Failed to initialize import process', details: importError }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
       )
     }
     
+    console.log(`Import record created with ID: ${importRecord.id}`)
+    
     // For demonstration purposes, we'll simulate scraping with mock data
     // In a production environment, you would implement actual web scraping logic here
+    console.log(`Simulating web scraping from: ${sourceUrl}`)
     const scrapedProperties = simulateWebScraping(sourceUrl)
     
     // Insert the scraped properties
     let successCount = 0
     let failCount = 0
     
+    console.log(`Attempting to insert ${scrapedProperties.length} properties`)
     for (const property of scrapedProperties) {
-      const { error: insertError } = await supabase
-        .from('listings')
-        .insert({
-          ...property,
-          user_id: userId
-        })
-      
-      if (insertError) {
-        console.error('Error inserting property:', insertError)
+      try {
+        const { error: insertError } = await supabase
+          .from('listings')
+          .insert({
+            ...property,
+            user_id: userId
+          })
+        
+        if (insertError) {
+          console.error('Error inserting property:', insertError)
+          failCount++
+        } else {
+          successCount++
+        }
+      } catch (err) {
+        console.error('Exception during property insert:', err)
         failCount++
-      } else {
-        successCount++
       }
     }
     
-    // Update the import record
-    const { error: updateError } = await supabase
-      .from('property_imports')
-      .update({
-        status: 'completed',
-        records_total: scrapedProperties.length,
-        records_imported: successCount,
-        records_failed: failCount,
-        log: JSON.stringify({
-          message: `Import completed. ${successCount} properties imported, ${failCount} failed.`,
-          timestamp: new Date().toISOString()
-        })
-      })
-      .eq('id', importRecord.id)
+    console.log(`Insertion complete. Success: ${successCount}, Failed: ${failCount}`)
     
-    if (updateError) {
-      console.error('Error updating import record:', updateError)
+    // Update the import record
+    try {
+      console.log(`Updating import record ${importRecord.id}`)
+      const { error: updateError } = await supabase
+        .from('property_imports')
+        .update({
+          status: 'completed',
+          records_total: scrapedProperties.length,
+          records_imported: successCount,
+          records_failed: failCount,
+          log: JSON.stringify({
+            message: `Import completed. ${successCount} properties imported, ${failCount} failed.`,
+            timestamp: new Date().toISOString()
+          })
+        })
+        .eq('id', importRecord.id)
+      
+      if (updateError) {
+        console.error('Error updating import record:', updateError)
+      }
+    } catch (err) {
+      console.error('Exception during import record update:', err)
     }
     
     // Log activity
-    await supabase
-      .from('activities')
-      .insert({
-        user_id: userId,
-        type: 'property_import',
-        description: `Imported ${successCount} properties from ${sourceUrl}`
-      })
+    try {
+      console.log(`Logging activity for user ${userId}`)
+      await supabase
+        .from('activities')
+        .insert({
+          user_id: userId,
+          type: 'property_import',
+          description: `Imported ${successCount} properties from ${sourceUrl}`
+        })
+    } catch (err) {
+      console.error('Exception during activity logging:', err)
+    }
     
+    console.log("Web scraper function completed successfully")
     return new Response(
       JSON.stringify({
         status: 'completed',
@@ -113,7 +142,7 @@ serve(async (req) => {
   } catch (error) {
     console.error('Error processing scraper request:', error)
     return new Response(
-      JSON.stringify({ error: 'Internal server error' }),
+      JSON.stringify({ error: 'Internal server error', details: error.message }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     )
   }
