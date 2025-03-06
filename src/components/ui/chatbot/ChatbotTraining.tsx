@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -222,6 +223,7 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
     setSelectedFile(file);
     setUploadSuccess(false);
     setUploadedFileName("");
+    console.log(`Selected file: ${file.name}, type: ${file.type}`);
   };
 
   const uploadFile = async () => {
@@ -233,10 +235,12 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
     setFileUploading(true);
     setUploadSuccess(false);
     try {
+      // Create a more reliable path with user ID and timestamp
       const filePath = `${userId}/${Date.now()}_${selectedFile.name.replace(/\s+/g, '_')}`;
       
       console.log('Uploading file to storage path:', filePath);
       
+      // Upload the file to the chatbot_training_files bucket
       const { error: uploadError, data: uploadData } = await supabase.storage
         .from('chatbot_training_files')
         .upload(filePath, selectedFile, {
@@ -246,12 +250,13 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
 
       if (uploadError) {
         console.error('Upload error:', uploadError);
-        throw uploadError;
+        throw new Error(`File upload failed: ${uploadError.message}`);
       }
       
       console.log('File uploaded successfully:', uploadData);
 
       if (selectedFile.type === 'text/plain') {
+        // Process text file
         const text = await selectedFile.text();
         const lines = text.split('\n');
         
@@ -293,37 +298,45 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
           toast.error(`Failed to import ${failureCount} items`);
         }
       } else if (selectedFile.type === 'application/pdf') {
+        // Process PDF file using the edge function
         console.log('Processing PDF file, calling edge function with:', { filePath, userId, contentType: activeTab });
         
-        const { data, error } = await supabase.functions.invoke('process-pdf-content', {
-          body: {
-            filePath,
-            userId,
-            contentType: activeTab
-          }
-        });
-        
-        if (error) {
-          console.error('Edge function error:', error);
-          throw new Error(`Edge function failed: ${error.message}`);
-        }
-        
-        console.log('PDF processing result:', data);
-        
-        if (data.success) {
-          toast.success(`PDF file processed successfully. Added ${data.entriesCount || 0} training items.`);
+        try {
+          const { data, error } = await supabase.functions.invoke('process-pdf-content', {
+            body: JSON.stringify({
+              filePath,
+              userId,
+              contentType: activeTab
+            })
+          });
           
-          setTimeout(() => {
-            fetchTrainingData();
-          }, 1500);
-        } else {
-          throw new Error(data.error || 'Unknown error during PDF processing');
+          if (error) {
+            console.error('Edge function error:', error);
+            throw new Error(`Edge function failed: ${error.message}`);
+          }
+          
+          console.log('PDF processing result:', data);
+          
+          if (data.success) {
+            toast.success(`PDF file processed successfully. Added ${data.entriesCount || 0} training items.`);
+            
+            // Give the database time to update before fetching data
+            setTimeout(() => {
+              fetchTrainingData();
+            }, 1500);
+          } else {
+            throw new Error(data.error || 'Unknown error during PDF processing');
+          }
+        } catch (funcError) {
+          console.error('Error invoking edge function:', funcError);
+          throw new Error(`Failed to process PDF: ${funcError.message}`);
         }
       }
       
       setUploadSuccess(true);
       setUploadedFileName(selectedFile.name);
       
+      // Reset the file input
       const fileInput = document.getElementById('file-upload') as HTMLInputElement;
       if (fileInput) fileInput.value = '';
       
