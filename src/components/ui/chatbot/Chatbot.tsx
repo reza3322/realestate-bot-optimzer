@@ -78,7 +78,7 @@ const Chatbot = ({
   const translations = DEFAULT_TRANSLATIONS[language] || DEFAULT_TRANSLATIONS.en;
   
   // Set default welcome message and placeholder if not provided
-  const defaultWelcomeMessage = welcomeMessage || translations.welcomeMessage;
+  const defaultWelcomeMessage = welcomeMessage || translations.welcomeMessage.replace("RealHomeAI", botName);
   const defaultPlaceholderText = placeholderText || translations.placeholderText;
   
   const [messages, setMessages] = useState<Message[]>([
@@ -89,7 +89,8 @@ const Chatbot = ({
   const [error, setError] = useState<string | null>(null);
 
   // Apply theme styles
-  const styles: ChatTheme = getChatStyles(theme, variation, primaryColor);
+  const baseStyles = getChatStyles(theme, variation, primaryColor);
+  const styles = applyFontStyle(baseStyles, fontStyle);
 
   // Update messages if welcome message changes
   useEffect(() => {
@@ -142,11 +143,11 @@ const Chatbot = ({
       setTimeout(async () => {
         // Simple logic for demo purposes - get a random response
         const demoResponses = [
-          "I'd be happy to help you find a property. What's your budget range?",
+          `I'd be happy to help you find a property. What's your budget range?`,
           "Great! And what neighborhoods are you interested in?",
           "I've found 3 properties that match your criteria. Would you like to schedule a viewing?",
           "Perfect! I've notified your agent and scheduled a viewing for Saturday at 2pm.",
-          "Our agents specialize in luxury properties in downtown and suburban areas.",
+          `As ${botName}, I specialize in luxury properties in downtown and suburban areas.`,
           "Yes, we have several properties with pools available right now.",
           "The average price in that neighborhood has increased by 12% over the last year.",
           "I can help you get pre-approved for a mortgage through our partner lenders."
