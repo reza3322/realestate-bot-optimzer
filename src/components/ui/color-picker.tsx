@@ -1,72 +1,124 @@
 
-import React, { useState } from "react";
-import { Input } from "@/components/ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import React, { useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { CheckIcon, ChevronDownIcon } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
-interface ColorPickerProps {
-  color: string;
-  onChange: (color: string) => void;
+interface ColorOption {
+  name: string;
+  value: string;
 }
 
-export function ColorPicker({ color, onChange }: ColorPickerProps) {
+interface ColorPickerProps {
+  defaultColor?: string;
+  onChange?: (color: string) => void;
+  className?: string;
+  presetColors?: ColorOption[];
+  allowCustom?: boolean;
+}
+
+const DEFAULT_COLORS: ColorOption[] = [
+  { name: 'Blue', value: '#3b82f6' },
+  { name: 'Red', value: '#ef4444' },
+  { name: 'Green', value: '#22c55e' },
+  { name: 'Purple', value: '#8b5cf6' },
+  { name: 'Orange', value: '#f97316' },
+  { name: 'Teal', value: '#14b8a6' },
+  { name: 'Pink', value: '#ec4899' },
+  { name: 'Gray', value: '#6b7280' }
+];
+
+export const ColorPicker = ({
+  defaultColor = '#3b82f6',
+  onChange,
+  className,
+  presetColors = DEFAULT_COLORS,
+  allowCustom = true
+}: ColorPickerProps) => {
+  const [selectedColor, setSelectedColor] = useState(defaultColor);
+  const [customColor, setCustomColor] = useState(defaultColor);
   const [isOpen, setIsOpen] = useState(false);
-  
+
+  const handleColorChange = (color: string) => {
+    setSelectedColor(color);
+    onChange?.(color);
+    setIsOpen(false);
+  };
+
+  const handleCustomColorChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setCustomColor(e.target.value);
+    setSelectedColor(e.target.value);
+    onChange?.(e.target.value);
+  };
+
   return (
-    <div className="flex items-center gap-2">
-      <div className="relative flex-1">
-        <div 
-          className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full"
-          style={{ backgroundColor: color }}
-        />
-        <Input
-          type="text"
-          value={color}
-          onChange={(e) => onChange(e.target.value)}
-          className="pl-9"
-        />
-      </div>
-      
+    <div className={cn("flex flex-col space-y-2", className)}>
       <Popover open={isOpen} onOpenChange={setIsOpen}>
         <PopoverTrigger asChild>
-          <div 
-            className="h-9 w-9 rounded cursor-pointer border border-input flex items-center justify-center"
-            style={{ backgroundColor: color }}
-          />
-        </PopoverTrigger>
-        <PopoverContent className="w-64">
-          <div className="grid grid-cols-8 gap-1">
-            {colorOptions.map((colorOption) => (
-              <button
-                key={colorOption}
-                type="button"
-                className="w-6 h-6 rounded-md border border-input"
-                style={{ backgroundColor: colorOption }}
-                onClick={() => {
-                  onChange(colorOption);
-                  setIsOpen(false);
-                }}
+          <Button 
+            variant="outline" 
+            className="w-full justify-between font-normal"
+          >
+            <div className="flex items-center gap-2">
+              <div 
+                className="h-4 w-4 rounded-full border border-gray-200" 
+                style={{ backgroundColor: selectedColor }}
               />
-            ))}
-          </div>
-          
-          <div className="mt-4">
-            <input
-              type="color"
-              value={color}
-              onChange={(e) => onChange(e.target.value)}
-              className="w-full h-8"
-            />
+              <span>{selectedColor}</span>
+            </div>
+            <ChevronDownIcon className="h-4 w-4 opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-64 p-3">
+          <div className="grid gap-4">
+            <div className="grid grid-cols-4 gap-2">
+              {presetColors.map((color) => (
+                <Button
+                  key={color.value}
+                  variant="outline"
+                  className="relative flex aspect-square h-auto w-auto items-center justify-center rounded-md p-0"
+                  style={{ backgroundColor: color.value }}
+                  onClick={() => handleColorChange(color.value)}
+                >
+                  {selectedColor === color.value && (
+                    <CheckIcon className="h-4 w-4 text-white" />
+                  )}
+                  <span className="sr-only">{color.name}</span>
+                </Button>
+              ))}
+            </div>
+            
+            {allowCustom && (
+              <div className="grid gap-2">
+                <label 
+                  htmlFor="custom-color" 
+                  className="text-xs font-medium"
+                >
+                  Custom Color
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="color"
+                    id="custom-color"
+                    value={customColor}
+                    onChange={handleCustomColorChange}
+                    className="h-8 w-8 cursor-pointer rounded-md border-0"
+                  />
+                  <input
+                    type="text"
+                    value={customColor}
+                    onChange={handleCustomColorChange}
+                    className="flex-1 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors"
+                  />
+                </div>
+              </div>
+            )}
           </div>
         </PopoverContent>
       </Popover>
     </div>
   );
-}
+};
 
-const colorOptions = [
-  "#000000", "#ffffff", "#f44336", "#e91e63", "#9c27b0", "#673ab7", 
-  "#3f51b5", "#2196f3", "#03a9f4", "#00bcd4", "#009688", "#4caf50",
-  "#8bc34a", "#cddc39", "#ffeb3b", "#ffc107", "#ff9800", "#ff5722",
-  "#795548", "#9e9e9e", "#607d8b", "#1abc9c", "#2ecc71", "#3498db",
-  "#9b59b6", "#f1c40f", "#e67e22", "#e74c3c", "#ecf0f1", "#95a5a6"
-];
+export default ColorPicker;
