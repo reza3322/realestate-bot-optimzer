@@ -1,6 +1,7 @@
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { MessageSquare } from "lucide-react";
 
 interface Activity {
   id: string;
@@ -17,30 +18,6 @@ interface RecentActivityProps {
 }
 
 const RecentActivity = ({ activities }: RecentActivityProps) => {
-  // If no activities are available yet, show sample data
-  const displayActivities = activities.length > 0 
-    ? activities 
-    : [
-        {
-          id: "1",
-          type: 'lead',
-          description: 'New lead from AI chatbot',
-          created_at: new Date(Date.now() - 10 * 60 * 1000).toISOString(), // 10 minutes ago
-          user_id: "1",
-          target_type: "lead",
-          target_id: "1"
-        },
-        {
-          id: "2",
-          type: 'property',
-          description: 'Property view requested',
-          created_at: new Date(Date.now() - 45 * 60 * 1000).toISOString(), // 45 minutes ago
-          user_id: "1",
-          target_type: "property",
-          target_id: "1"
-        }
-      ];
-
   // Helper function to get the initials for the avatar
   const getInitials = (type: string) => {
     switch (type) {
@@ -50,6 +27,8 @@ const RecentActivity = ({ activities }: RecentActivityProps) => {
         return 'PR';
       case 'message':
         return 'MS';
+      case 'conversation':
+        return 'CH';
       default:
         return 'AC';
     }
@@ -64,6 +43,8 @@ const RecentActivity = ({ activities }: RecentActivityProps) => {
         return <Badge className="bg-blue-500">Property</Badge>;
       case 'message':
         return <Badge variant="outline">Message</Badge>;
+      case 'conversation':
+        return <Badge className="bg-purple-500">Chat</Badge>;
       default:
         return <Badge variant="outline">Activity</Badge>;
     }
@@ -99,35 +80,37 @@ const RecentActivity = ({ activities }: RecentActivityProps) => {
 
   return (
     <div className="space-y-4">
-      {displayActivities.map((activity) => (
-        <div key={activity.id} className="flex items-start space-x-4 pb-4 border-b">
-          <Avatar className="h-10 w-10">
-            <AvatarImage src="" alt={activity.type} />
-            <AvatarFallback>{getInitials(activity.type)}</AvatarFallback>
-          </Avatar>
-          
-          <div className="flex-1 space-y-1">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-medium leading-none">
-                {activity.description}
-              </p>
-              <p className="text-xs text-muted-foreground">{formatRelativeTime(activity.created_at)}</p>
+      {activities.length > 0 ? (
+        activities.map((activity) => (
+          <div key={activity.id} className="flex items-start space-x-4 pb-4 border-b">
+            <Avatar className="h-10 w-10">
+              <AvatarImage src="" alt={activity.type} />
+              <AvatarFallback>{getInitials(activity.type)}</AvatarFallback>
+            </Avatar>
+            
+            <div className="flex-1 space-y-1">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium leading-none">
+                  {activity.description}
+                </p>
+                <p className="text-xs text-muted-foreground">{formatRelativeTime(activity.created_at)}</p>
+              </div>
+              
+              {activity.target_id && (
+                <p className="text-xs text-muted-foreground">
+                  ID: {activity.target_id.substring(0, 8)}...
+                </p>
+              )}
             </div>
             
-            {activity.target_id && (
-              <p className="text-xs text-muted-foreground">
-                ID: {activity.target_id.substring(0, 8)}...
-              </p>
-            )}
+            {getActivityBadge(activity.type)}
           </div>
-          
-          {getActivityBadge(activity.type)}
-        </div>
-      ))}
-      
-      {displayActivities.length === 0 && (
-        <div className="text-center py-6 text-muted-foreground">
-          No recent activities to display
+        ))
+      ) : (
+        <div className="flex flex-col items-center justify-center py-4 space-y-2 text-center">
+          <MessageSquare className="h-8 w-8 text-muted-foreground opacity-40" />
+          <p className="text-muted-foreground">No recent activities to display</p>
+          <p className="text-xs text-muted-foreground">Activities will appear here as you use the platform</p>
         </div>
       )}
     </div>

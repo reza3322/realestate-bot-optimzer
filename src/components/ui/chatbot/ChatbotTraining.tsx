@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
-import { Plus, Trash2, FileUp, Edit, Save, X, AlertCircle, FileText } from "lucide-react";
+import { Plus, Trash2, FileUp, Edit, Save, X, AlertCircle, FileText, Check } from "lucide-react";
 
 interface TrainingItem {
   id?: string;
@@ -38,6 +38,8 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [fileUploading, setFileUploading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploadSuccess, setUploadSuccess] = useState(false);
 
   useEffect(() => {
     fetchTrainingData();
@@ -207,7 +209,7 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
     });
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -217,19 +219,30 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
       return;
     }
 
+    setSelectedFile(file);
+    setUploadSuccess(false);
+  };
+
+  const uploadFile = async () => {
+    if (!selectedFile) {
+      toast.error('Please select a file first');
+      return;
+    }
+
     setFileUploading(true);
+    setUploadSuccess(false);
     try {
       // Upload file to storage
-      const filePath = `${userId}/${activeTab}/${Date.now()}_${file.name}`;
+      const filePath = `${userId}/${activeTab}/${Date.now()}_${selectedFile.name}`;
       const { error: uploadError } = await supabase.storage
         .from('chatbot_training_files')
-        .upload(filePath, file);
+        .upload(filePath, selectedFile);
 
       if (uploadError) throw uploadError;
 
       // For text files, we can parse and add content directly
-      if (file.type === 'text/plain') {
-        const text = await file.text();
+      if (selectedFile.type === 'text/plain') {
+        const text = await selectedFile.text();
         const lines = text.split('\n');
         
         let successCount = 0;
@@ -272,15 +285,22 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
         }
       } else {
         // For PDF files, just notify the user
-        toast.success('File uploaded successfully. PDF content will be processed soon.');
+        toast.success('PDF file uploaded successfully. PDF content will be processed soon.');
       }
+      
+      setUploadSuccess(true);
+      setSelectedFile(null);
+      
+      // Clear the file input
+      const fileInput = document.getElementById('file-upload') as HTMLInputElement;
+      if (fileInput) fileInput.value = '';
+      
     } catch (error) {
       console.error('Error uploading file:', error);
       toast.error('Failed to upload file');
+      setUploadSuccess(false);
     } finally {
       setFileUploading(false);
-      // Clear the file input
-      e.target.value = '';
     }
   };
 
@@ -410,23 +430,50 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
                 <div className="pt-4 border-t">
                   <p className="text-sm font-medium mb-2">Bulk Import</p>
                   <div className="flex flex-col gap-2">
-                    <label 
-                      htmlFor="file-upload" 
-                      className="cursor-pointer"
-                    >
-                      <div className="flex items-center gap-2 px-4 py-2 border border-dashed border-gray-300 rounded-md hover:bg-secondary/50 transition-colors">
-                        <FileUp size={16} />
-                        <span>{fileUploading ? 'Uploading...' : 'Upload text or PDF file'}</span>
-                      </div>
-                      <Input 
-                        id="file-upload" 
-                        type="file" 
-                        accept=".txt,.pdf" 
-                        className="hidden"
-                        onChange={handleFileUpload}
-                        disabled={fileUploading}
-                      />
-                    </label>
+                    <div className="flex items-center gap-2">
+                      <label 
+                        htmlFor="file-upload" 
+                        className="cursor-pointer"
+                      >
+                        <div className="flex items-center gap-2 px-4 py-2 border border-dashed border-gray-300 rounded-md hover:bg-secondary/50 transition-colors">
+                          <FileUp size={16} />
+                          <span>{selectedFile ? selectedFile.name : 'Select text or PDF file'}</span>
+                        </div>
+                        <Input 
+                          id="file-upload" 
+                          type="file" 
+                          accept=".txt,.pdf" 
+                          className="hidden"
+                          onChange={handleFileChange}
+                          disabled={fileUploading}
+                        />
+                      </label>
+                      
+                      {selectedFile && (
+                        <Button 
+                          onClick={uploadFile} 
+                          disabled={fileUploading}
+                          variant="outline"
+                          size="sm"
+                          className="gap-1"
+                        >
+                          {fileUploading ? (
+                            <><span className="animate-spin">↻</span> Uploading...</>
+                          ) : (
+                            <>
+                              {uploadSuccess ? <Check size={16} /> : <FileUp size={16} />}
+                              Upload
+                            </>
+                          )}
+                        </Button>
+                      )}
+                      
+                      {uploadSuccess && (
+                        <span className="flex items-center text-green-600 text-sm">
+                          <Check size={14} className="mr-1" /> Uploaded
+                        </span>
+                      )}
+                    </div>
                     <p className="text-xs text-muted-foreground">
                       For text files: Each question and answer should be on separate lines.
                     </p>

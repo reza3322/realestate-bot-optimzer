@@ -161,20 +161,22 @@ const Dashboard = () => {
         });
       }
       
-      const totalLeads = leadsData?.length || 0;
-      const totalProperties = propertiesData?.length || 0;
-      const featuredProperties = propertiesData?.filter(p => p.featured)?.length || 0;
-      
-      // Get recent website visitors - this would ideally come from analytics
-      // For now, we'll use a combination of real data and estimates
-      const weeklyVisitorEstimate = Math.max(50, totalLeads * 5 + uniqueConversationIds.size * 2);
+      // Calculate actual visitor count - assuming each unique conversation represents at least one visitor
+      const visitorIds = new Set();
+      if (conversationsData) {
+        conversationsData.forEach(convo => {
+          if (convo.visitor_id) {
+            visitorIds.add(convo.visitor_id);
+          }
+        });
+      }
       
       setStats({
-        totalLeads,
+        totalLeads: leadsData?.length || 0,
         activeConversations: uniqueConversationIds.size,
-        websiteVisitors: weeklyVisitorEstimate,
-        totalProperties,
-        featuredProperties
+        websiteVisitors: Math.max(visitorIds.size, uniqueConversationIds.size),
+        totalProperties: propertiesData?.length || 0,
+        featuredProperties: propertiesData?.filter(p => p.featured)?.length || 0
       });
     } catch (error) {
       console.error('Error fetching stats:', error);
@@ -183,10 +185,33 @@ const Dashboard = () => {
   
   const fetchActivities = async (userId) => {
     try {
-      const { data } = await getRecentActivities(10);
-      if (data) {
-        setActivities(data);
-      }
+      // Get regular activities
+      const { data: activitiesData } = await getRecentActivities(5);
+      
+      // Get recent chatbot conversations
+      const { data: conversationsData } = await supabase
+        .from('chatbot_conversations')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(5);
+      
+      // Convert conversations to activity format
+      const conversationActivities = conversationsData ? conversationsData.map(convo => ({
+        id: convo.id,
+        type: 'conversation',
+        description: `Chatbot conversation: "${convo.message.substring(0, 30)}${convo.message.length > 30 ? '...' : ''}"`,
+        created_at: convo.created_at,
+        user_id: convo.user_id,
+        target_id: convo.conversation_id,
+        target_type: 'conversation'
+      })) : [];
+      
+      // Combine and sort by date
+      const allActivities = [...(activitiesData || []), ...conversationActivities]
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        .slice(0, 10);
+      
+      setActivities(allActivities);
     } catch (error) {
       console.error('Error fetching activities:', error);
     }

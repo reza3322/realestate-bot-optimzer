@@ -57,7 +57,7 @@ serve(async (req) => {
     if (chatHistory.length === 0 && previousMessages && previousMessages.length > 0) {
       chatHistory = previousMessages.map(msg => ({
         user_message: msg.role === 'user' ? msg.content : '',
-        ai_response: msg.role === 'bot' ? msg.content : '',
+        ai_response: msg.role === 'assistant' ? msg.content : '',
         created_at: new Date().toISOString()
       })).filter(msg => msg.user_message || msg.ai_response);
       console.log(`Using ${chatHistory.length} client-provided messages for context`);

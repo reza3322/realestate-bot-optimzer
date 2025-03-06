@@ -10,6 +10,12 @@ export const getAIResponse = async (
   previousMessages?: Message[]
 ): Promise<ChatbotResponse> => {
   try {
+    // Convert the Message[] to the format expected by the Edge Function
+    const formattedMessages = previousMessages?.map(msg => ({
+      role: msg.role === 'user' ? 'user' : 'assistant',
+      content: msg.content
+    }));
+    
     // Prepare the request to the Edge Function
     const response = await supabase.functions.invoke('chatbot-response', {
       body: {
@@ -17,7 +23,7 @@ export const getAIResponse = async (
         userId,
         visitorId,
         conversationId,
-        previousMessages
+        previousMessages: formattedMessages
       }
     });
     
@@ -68,9 +74,33 @@ export const getTrainingResponse = async (
   userId: string
 ): Promise<ChatbotResponse | null> => {
   try {
-    // You could implement a training response handler here
-    // This would be used to get responses from the training data
-    // For now, we'll just return null to fall back to the AI response
+    // Query the training data to find relevant responses
+    const { data } = await supabase
+      .from('chatbot_training_data')
+      .select('*')
+      .eq('user_id', userId)
+      .order('priority', { ascending: false });
+    
+    if (!data || data.length === 0) {
+      return null;
+    }
+    
+    // Simple matching logic - look for keywords in the question
+    const lowerMessage = message.toLowerCase();
+    const matchedItem = data.find(item => {
+      // Check if message includes keywords from the training question
+      const keywords = item.question.toLowerCase().split(' ');
+      const significantKeywords = keywords.filter(word => word.length > 3);
+      return significantKeywords.some(keyword => lowerMessage.includes(keyword));
+    });
+    
+    if (matchedItem) {
+      return {
+        response: matchedItem.answer,
+        source: 'training'
+      };
+    }
+    
     return null;
   } catch (error) {
     console.error('Error getting training response:', error);
