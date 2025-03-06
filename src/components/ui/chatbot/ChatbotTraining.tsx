@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -276,9 +277,8 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
         if (data && data.success) {
           toast.success(`File processed successfully. Added ${data.entriesCount || 0} training items.`);
           
-          setTimeout(() => {
-            fetchTrainingData();
-          }, 1000);
+          // Fetch updated data after processing completes
+          fetchTrainingData();
         } else {
           throw new Error((data && data.error) || 'Unknown error during file processing');
         }

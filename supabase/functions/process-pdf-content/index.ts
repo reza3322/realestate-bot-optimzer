@@ -1,3 +1,4 @@
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { corsHeaders } from "../_shared/cors.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.26.0";
@@ -25,9 +26,9 @@ serve(async (req) => {
       );
     }
 
-    const { filePath, userId } = parsedBody;
+    const { filePath, userId, contentType = "faqs" } = parsedBody;
 
-    console.log(`📂 Received request to process file: ${filePath} for user: ${userId}`);
+    console.log(`📂 Received request to process file: ${filePath} for user: ${userId} with contentType: ${contentType}`);
 
     if (!filePath || !userId) {
       console.error("❌ Missing required parameters:", { filePath, userId });
@@ -51,7 +52,7 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    console.log(`📥 Downloading PDF from: ${filePath}`);
+    console.log(`📥 Downloading file from storage: ${filePath}`);
 
     // Download the file from Supabase storage
     const { data: fileData, error: downloadError } = await supabase.storage
@@ -76,24 +77,54 @@ serve(async (req) => {
     let extractedText = "";
 
     try {
-      extractedText = await fileData.text();
+      // Get file type from fileName
+      const fileType = fileName.split('.').pop()?.toLowerCase();
+      
+      // For different file types, process differently
+      if (fileType === 'pdf') {
+        // For PDFs, use text() as a simple extraction method
+        // In a production environment, you might want to use a more robust PDF parsing library
+        extractedText = await fileData.text();
+      } else if (fileType === 'txt' || fileType === 'csv') {
+        // For text and CSV files, simply get the text content
+        extractedText = await fileData.text();
+      } else {
+        throw new Error(`Unsupported file type: ${fileType}`);
+      }
     } catch (textError) {
-      console.error("❌ Could not extract text from PDF:", textError);
+      console.error("❌ Could not extract text from file:", textError);
       extractedText = `Unable to extract content from ${fileName}.`;
     }
 
     console.log(`📜 Extracted ${extractedText.length} characters from ${fileName}`);
 
+    if (extractedText.length === 0) {
+      console.error("❌ No text extracted from file");
+      return new Response(
+        JSON.stringify({ error: "No text could be extracted from the file" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 }
+      );
+    }
+
     // Create chatbot training data entry
     const chatbotEntry = {
       user_id: userId,
+      content_type: contentType,
       question: `What information is in ${fileName}?`,
-      answer: extractedText.substring(0, 1000), // Limit to 1000 characters
-      category: "PDF Import",
+      answer: extractedText.substring(0, 5000), // Limit to 5000 characters
+      category: "File Import",
       priority: 5,
     };
 
-    console.log(`📥 Inserting training data into Supabase:`, chatbotEntry);
+    console.log(`📥 Inserting training data into Supabase:`, 
+      JSON.stringify({
+        user_id: chatbotEntry.user_id, 
+        content_type: chatbotEntry.content_type,
+        question: chatbotEntry.question,
+        category: chatbotEntry.category,
+        text_length: chatbotEntry.answer.length
+      })
+    );
 
     // Insert into chatbot training database
     const { data: insertData, error: insertError } = await supabase
@@ -109,13 +140,14 @@ serve(async (req) => {
       );
     }
 
-    console.log("✅ Training data stored successfully!");
+    console.log("✅ Training data stored successfully!", insertData);
 
     return new Response(
       JSON.stringify({
         success: true,
-        message: "PDF processed successfully",
+        message: "File processed successfully",
         data: insertData,
+        entriesCount: 1
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
