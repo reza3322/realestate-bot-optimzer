@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import ChatHeader from './ChatHeader';
@@ -9,7 +8,6 @@ import { getChatStyles, applyFontStyle } from './chatStyles';
 import { Message, ChatTheme, LanguageCode, ChatStylesType } from './types';
 import { testChatbotResponse } from './responseHandlers';
 
-// Default translations for various languages
 const DEFAULT_TRANSLATIONS = {
   en: {
     welcomeMessage: "Hi there! I'm your RealHomeAI assistant. How can I help you today?",
@@ -74,10 +72,8 @@ const Chatbot = ({
   language = 'en',
   buttonStyle
 }: ChatbotProps) => {
-  // Get translations based on language
   const translations = DEFAULT_TRANSLATIONS[language] || DEFAULT_TRANSLATIONS.en;
   
-  // Set default welcome message and placeholder if not provided
   const defaultWelcomeMessage = welcomeMessage || translations.welcomeMessage.replace("RealHomeAI", botName);
   const defaultPlaceholderText = placeholderText || translations.placeholderText;
   
@@ -88,26 +84,25 @@ const Chatbot = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Apply theme styles
   const styles: ChatTheme = getChatStyles(theme, variation, primaryColor);
   
-  // Convert the styles to the type expected by ChatMessage
   const chatStyles: ChatStylesType = {
     botBubble: styles.botBubble,
     userBubble: styles.userBubble,
     botIcon: styles.botIcon,
     userIcon: styles.userIcon,
-    font: styles.font
+    font: styles.font,
+    container: styles.container,
+    header: styles.header,
+    inputContainer: styles.inputContainer
   };
 
-  // Update messages if welcome message changes
   useEffect(() => {
     if (messages.length === 1 && messages[0].role === 'bot') {
       setMessages([{ role: 'bot', content: defaultWelcomeMessage }]);
     }
   }, [defaultWelcomeMessage]);
 
-  // Scroll chat messages to bottom without affecting page scroll
   useEffect(() => {
     if (messagesEndRef.current) {
       const chatContainer = messagesEndRef.current.parentElement;
@@ -118,26 +113,19 @@ const Chatbot = ({
   }, [messages]);
 
   const handleSendMessage = async (message: string) => {
-    // Add user message
     setMessages(prev => [...prev, { role: 'user', content: message }]);
-    
-    // Call optional callback
     onSendMessage?.(message);
-    
-    // Simulate typing
     setIsTyping(true);
     setError(null);
     
     if (useRealAPI) {
       try {
-        // Use the real OpenAI API through Supabase edge function
         const { response, error } = await testChatbotResponse(message, userId);
         
         if (error) {
           console.error('Chatbot error:', error);
           setError(`Error: ${error}`);
         } else {
-          // Add bot response
           setMessages(prev => [...prev, { role: 'bot', content: response }]);
         }
       } catch (err) {
@@ -147,9 +135,7 @@ const Chatbot = ({
         setIsTyping(false);
       }
     } else {
-      // Use demo responses with delay
       setTimeout(async () => {
-        // Simple logic for demo purposes - get a random response
         const demoResponses = [
           "I'd be happy to help you find a property. What's your budget range?",
           "Great! And what neighborhoods are you interested in?",
@@ -170,7 +156,6 @@ const Chatbot = ({
     }
   };
 
-  // Generate the appropriate font class based on the fontStyle prop
   const getFontClass = () => {
     switch (fontStyle) {
       case 'serif':
@@ -183,7 +168,6 @@ const Chatbot = ({
     }
   };
 
-  // Apply custom color styling to elements if provided
   const headerStyle = styles.customColor ? {
     backgroundColor: styles.customColor
   } : undefined;
@@ -193,18 +177,21 @@ const Chatbot = ({
   } : undefined;
 
   const userBubbleStyle = styles.customColor ? {
-    backgroundColor: `${styles.customColor}25` // 25 is hex for 15% opacity
+    backgroundColor: `${styles.customColor}25`
+  } : undefined;
+
+  const sendButtonStyle = buttonStyle ? {
+    ...buttonStyle
   } : undefined;
 
   return (
     <div className={cn(
       'flex flex-col overflow-hidden rounded-lg shadow-md',
-      'h-[500px]', // Fixed height
+      'h-[500px]',
       styles.container,
-      getFontClass(), // Apply font class dynamically
+      getFontClass(),
       className
     )}>
-      {/* Chat Header */}
       <ChatHeader 
         botName={botName}
         headerStyle={styles.header}
@@ -214,7 +201,6 @@ const Chatbot = ({
         customStyle={headerStyle}
       />
       
-      {/* Messages Container */}
       <div 
         className="flex-1 p-4 overflow-y-auto space-y-4 scrollbar-none relative"
         style={{ height: `calc(100% - 120px)` }}
@@ -249,12 +235,11 @@ const Chatbot = ({
         <div ref={messagesEndRef} />
       </div>
       
-      {/* Input Area */}
       <ChatInput 
         inputContainerStyle={styles.inputContainer}
         onSendMessage={handleSendMessage}
         placeholderText={defaultPlaceholderText}
-        buttonStyle={buttonStyle}
+        buttonStyle={sendButtonStyle}
       />
     </div>
   );
