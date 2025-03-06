@@ -1,2 +1,5 @@
 
 project_id = "ckgaqkbsnrvccctqxsqv"
+
+[process_pdf_content]
+name = "process-pdf-content"

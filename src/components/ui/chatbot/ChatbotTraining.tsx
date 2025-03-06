@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -282,7 +283,24 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
           toast.error(`Failed to import ${failureCount} items`);
         }
       } else {
-        toast.success('PDF file uploaded successfully. PDF content will be processed soon.');
+        // For PDF files, process them using the edge function
+        try {
+          const { data, error } = await supabase.functions.invoke('process-pdf-content', {
+            body: {
+              filePath,
+              userId,
+              contentType: activeTab
+            }
+          });
+          
+          if (error) throw error;
+          
+          toast.success('PDF file processed successfully. Content has been added to your training data.');
+          fetchTrainingData(); // Refresh the data to show the newly added items
+        } catch (processingError) {
+          console.error('Error processing PDF:', processingError);
+          toast.error('Error processing PDF content.');
+        }
       }
       
       setUploadSuccess(true);
