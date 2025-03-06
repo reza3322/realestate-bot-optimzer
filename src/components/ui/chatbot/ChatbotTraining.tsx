@@ -252,9 +252,10 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
         throw new Error(`File upload failed: ${uploadError.message}`);
       }
       
-      console.log('File uploaded successfully:', uploadData);
+      console.log('File uploaded successfully to path:', filePath);
 
       if (selectedFile.type === 'text/plain' || selectedFile.type === 'text/csv') {
+        console.log('Processing text/CSV file');
         const text = await selectedFile.text();
         let lines: string[] = [];
         
@@ -267,7 +268,7 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
             return [];
           });
         } else {
-          lines = text.split('\n');
+          lines = text.split('\n').filter(line => line.trim().length > 0);
         }
         
         let successCount = 0;
@@ -319,28 +320,26 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
             })
           });
           
-          console.log('Edge function response:', data, 'Error:', error);
+          console.log('Edge function response:', data);
           
           if (error) {
             console.error('Edge function error:', error);
-            throw new Error(`Edge function failed: ${error.message}`);
+            throw new Error(`Edge function failed: ${error.message || JSON.stringify(error)}`);
           }
           
-          console.log('PDF processing result:', data);
-          
           if (data && data.success) {
-            toast.success(`PDF file processed successfully. Added ${data.entriesCount || 0} training items.`);
+            toast.success(`File processed successfully. Added ${data.entriesCount || 0} training items.`);
             
             setTimeout(() => {
               fetchTrainingData();
             }, 2000);
           } else {
-            throw new Error((data && data.error) || 'Unknown error during PDF processing');
+            throw new Error((data && data.error) || 'Unknown error during file processing');
           }
         } catch (funcError) {
           console.error('Error invoking edge function:', funcError);
-          toast.error(`Failed to process PDF: ${funcError.message}`);
-          throw new Error(`Failed to process PDF: ${funcError.message}`);
+          toast.error(`Failed to process file: ${funcError.message}`);
+          throw funcError;
         }
       }
       
@@ -349,6 +348,7 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
       
       const fileInput = document.getElementById('file-upload') as HTMLInputElement;
       if (fileInput) fileInput.value = '';
+      setSelectedFile(null);
       
     } catch (error) {
       console.error('Error in file upload process:', error);

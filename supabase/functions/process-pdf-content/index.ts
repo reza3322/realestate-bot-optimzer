@@ -28,7 +28,7 @@ serve(async (req) => {
       throw new Error("Missing required parameters: filePath, userId, and contentType are required");
     }
     
-    console.log(`Starting PDF processing for file: ${filePath}, user: ${userId}, type: ${contentType}`);
+    console.log(`Processing PDF file: ${filePath}, user: ${userId}, type: ${contentType}`);
     
     // Create a Supabase client with the project URL and service_role key
     const supabaseUrl = Deno.env.get("SUPABASE_URL") as string;
@@ -61,40 +61,100 @@ serve(async (req) => {
     
     console.log("File downloaded successfully, size:", fileData.size);
     
-    // Extract the file name from the path
-    const fileName = filePath.split('/').pop() || "Unknown PDF";
+    // Extract the file name and extension from the path
+    const fileName = filePath.split('/').pop() || "Unknown File";
+    const fileExt = fileName.split('.').pop()?.toLowerCase() || "";
     
-    // Simple text extraction from PDF for demonstration
-    // In a real implementation, you would use a proper PDF parsing library
-    // For now, we'll create some basic training entries based on the file name
+    // Create training entries based on the file
+    let fileContent = "";
     
-    // Create multiple training entries for demonstration purposes
+    // Extract text content from the file based on its type
+    if (fileExt === "pdf") {
+      // For now, we'll create placeholder entries since true PDF parsing requires additional libraries
+      fileContent = `Content extracted from ${fileName}`;
+    } else if (fileExt === "txt" || fileExt === "csv") {
+      // For text files, we can get the content directly
+      fileContent = await fileData.text();
+    } else {
+      console.log(`Unsupported file extension: ${fileExt}, treating as text`);
+      try {
+        fileContent = await fileData.text();
+      } catch (textError) {
+        console.error("Error extracting text from file:", textError);
+        fileContent = `Content from ${fileName} (format not fully supported)`;
+      }
+    }
+    
+    // Generate training entries
     const entries = [
       {
         user_id: userId,
         content_type: contentType,
-        question: `What is in the document "${fileName}"?`,
-        answer: `This document contains important information extracted from "${fileName}". For specific details, please ask more specific questions about its content.`,
-        category: 'PDF Import',
+        question: `What information do you have about ${fileName}?`,
+        answer: `The file "${fileName}" contains the following information: ${fileContent.substring(0, 500)}${fileContent.length > 500 ? '...' : ''}`,
+        category: 'Imported Content',
         priority: 5
       },
       {
         user_id: userId,
         content_type: contentType,
-        question: `Tell me about ${fileName}`,
-        answer: `"${fileName}" is a document that was uploaded to the system. It contains information that may be relevant to your inquiries.`,
-        category: 'PDF Import',
+        question: `Tell me about the content in ${fileName}`,
+        answer: `Here's a summary of "${fileName}": ${fileContent.substring(0, 500)}${fileContent.length > 500 ? '...' : ''}`,
+        category: 'Imported Content',
         priority: 4
-      },
-      {
-        user_id: userId,
-        content_type: contentType,
-        question: `When was "${fileName}" created?`,
-        answer: `"${fileName}" was added to the system on ${new Date().toLocaleDateString()}. The original creation date of the document is not available.`,
-        category: 'PDF Import',
-        priority: 3
       }
     ];
+    
+    // If it's a CSV file, try to parse it as Q&A pairs
+    if (fileExt === "csv") {
+      try {
+        const lines = fileContent.split('\n');
+        for (let i = 0; i < lines.length; i++) {
+          const parts = lines[i].split(',');
+          if (parts.length >= 2) {
+            const question = parts[0].trim();
+            const answer = parts[1].trim();
+            
+            if (question && answer) {
+              entries.push({
+                user_id: userId,
+                content_type: contentType,
+                question: question,
+                answer: answer,
+                category: 'CSV Import',
+                priority: 3
+              });
+            }
+          }
+        }
+      } catch (csvError) {
+        console.error("Error parsing CSV content:", csvError);
+      }
+    }
+    
+    // If it's a TXT file, try to parse it as alternating Q&A
+    if (fileExt === "txt") {
+      try {
+        const lines = fileContent.split('\n').filter(line => line.trim().length > 0);
+        for (let i = 0; i < lines.length - 1; i += 2) {
+          const question = lines[i].trim();
+          const answer = lines[i + 1]?.trim() || "";
+          
+          if (question && answer) {
+            entries.push({
+              user_id: userId,
+              content_type: contentType,
+              question: question,
+              answer: answer,
+              category: 'TXT Import',
+              priority: 3
+            });
+          }
+        }
+      } catch (txtError) {
+        console.error("Error parsing TXT content:", txtError);
+      }
+    }
     
     console.log(`Inserting ${entries.length} training entries`);
     
@@ -105,16 +165,16 @@ serve(async (req) => {
       .select();
     
     if (insertError) {
-      console.error("Error inserting PDF content:", insertError);
+      console.error("Error inserting content:", insertError);
       throw insertError;
     }
     
-    console.log("PDF processed successfully, created entries:", insertData);
+    console.log("File processed successfully, created entries:", insertData?.length || 0);
     
     return new Response(
       JSON.stringify({
         success: true,
-        message: "PDF processed successfully",
+        message: "File processed successfully",
         data: insertData,
         entriesCount: entries.length
       }),
@@ -127,7 +187,7 @@ serve(async (req) => {
       }
     );
   } catch (error) {
-    console.error("Error processing PDF:", error);
+    console.error("Error processing file:", error);
     
     return new Response(
       JSON.stringify({
