@@ -1,3 +1,4 @@
+
 import { useState, useRef, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import ChatHeader from './ChatHeader';
@@ -5,7 +6,7 @@ import ChatMessage from './ChatMessage';
 import ChatInput from './ChatInput';
 import TypingIndicator from './TypingIndicator';
 import { getChatStyles, applyFontStyle } from './chatStyles';
-import { Message, ChatStylesType } from './types';
+import { Message } from './types';
 import { testChatbotResponse } from './responseHandlers';
 
 interface ChatbotProps {
@@ -48,7 +49,8 @@ const Chatbot = ({
   const [error, setError] = useState<string | null>(null);
 
   // Apply theme styles
-  const styles: ChatStylesType = getChatStyles(theme, variation, primaryColor);
+  const baseStyles = getChatStyles(theme, variation, primaryColor);
+  const styles = applyFontStyle(baseStyles, fontStyle);
 
   // Update messages if welcome message changes
   useEffect(() => {

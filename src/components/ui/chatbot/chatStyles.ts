@@ -1,6 +1,3 @@
-
-import { ChatStylesType } from './types';
-
 interface ChatTheme {
   container: string;
   header: {
@@ -67,7 +64,7 @@ const getThemeStyles = (theme: string): ChatTheme => {
 
 // Apply color variation
 const applyColorVariation = (theme: ChatTheme, variation: string): ChatTheme => {
-  const updatedTheme = { ...theme };
+  let updatedTheme = { ...theme };
   
   switch (variation) {
     case 'blue':
@@ -119,7 +116,7 @@ export const applyFontStyle = (theme: ChatTheme, fontStyle: string): ChatTheme =
 };
 
 // Get base styling based on theme & variation
-export const getChatStyles = (theme: string, variation: string, primaryColor?: string): ChatStylesType => {
+export const getChatStyles = (theme: string, variation: string, primaryColor?: string) => {
   // First, get the base theme styles
   const baseTheme = getThemeStyles(theme);
   
