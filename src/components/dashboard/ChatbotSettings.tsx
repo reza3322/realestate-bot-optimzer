@@ -250,27 +250,15 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
     try {
       console.log(`Saving settings for user ID: ${userId}`, settings);
       
-      const { data: existingSettings, error: fetchError } = await supabase
+      const { error: deleteError } = await supabase
         .from("chatbot_settings")
-        .select("id")
+        .delete()
         .eq("user_id", userId);
         
-      if (fetchError) {
-        console.error("Error fetching existing settings:", fetchError);
-      } else if (existingSettings && existingSettings.length > 0) {
-        console.log(`Found ${existingSettings.length} existing settings to delete`);
-        
-        const { error: deleteError } = await supabase
-          .from("chatbot_settings")
-          .delete()
-          .eq("user_id", userId);
-          
-        if (deleteError) {
-          console.error("Error deleting existing settings:", deleteError);
-          toast.error("Error cleaning up old settings");
-        } else {
-          console.log("Successfully deleted old settings");
-        }
+      if (deleteError) {
+        console.error("Error deleting existing settings:", deleteError);
+        toast.error("Error cleaning up old settings");
+        throw deleteError;
       }
       
       const { data, error } = await supabase
