@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -215,15 +214,15 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.type !== 'text/plain' && file.type !== 'application/pdf') {
-      toast.error('Only text or PDF files are accepted');
+    if (file.type !== 'text/plain' && file.type !== 'application/pdf' && file.type !== 'text/csv') {
+      toast.error('Only text, CSV, or PDF files are accepted');
       return;
     }
 
     setSelectedFile(file);
     setUploadSuccess(false);
     setUploadedFileName("");
-    console.log(`Selected file: ${file.name}, type: ${file.type}`);
+    console.log(`Selected file: ${file.name}, type: ${file.type}, size: ${file.size} bytes`);
   };
 
   const uploadFile = async () => {
@@ -235,12 +234,12 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
     setFileUploading(true);
     setUploadSuccess(false);
     try {
-      // Create a more reliable path with user ID and timestamp
-      const filePath = `${userId}/${Date.now()}_${selectedFile.name.replace(/\s+/g, '_')}`;
+      const timestamp = Date.now();
+      const safeFileName = selectedFile.name.replace(/\s+/g, '_');
+      const filePath = `${userId}/${timestamp}_${safeFileName}`;
       
-      console.log('Uploading file to storage path:', filePath);
+      console.log('Preparing to upload file to storage path:', filePath);
       
-      // Upload the file to the chatbot_training_files bucket
       const { error: uploadError, data: uploadData } = await supabase.storage
         .from('chatbot_training_files')
         .upload(filePath, selectedFile, {
@@ -255,10 +254,21 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
       
       console.log('File uploaded successfully:', uploadData);
 
-      if (selectedFile.type === 'text/plain') {
-        // Process text file
+      if (selectedFile.type === 'text/plain' || selectedFile.type === 'text/csv') {
         const text = await selectedFile.text();
-        const lines = text.split('\n');
+        let lines: string[] = [];
+        
+        if (selectedFile.type === 'text/csv') {
+          lines = text.split('\n').flatMap(line => {
+            const columns = line.split(',');
+            if (columns.length >= 2) {
+              return [columns[0].trim(), columns[1].trim()];
+            }
+            return [];
+          });
+        } else {
+          lines = text.split('\n');
+        }
         
         let successCount = 0;
         let failureCount = 0;
@@ -298,7 +308,6 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
           toast.error(`Failed to import ${failureCount} items`);
         }
       } else if (selectedFile.type === 'application/pdf') {
-        // Process PDF file using the edge function
         console.log('Processing PDF file, calling edge function with:', { filePath, userId, contentType: activeTab });
         
         try {
@@ -310,6 +319,8 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
             })
           });
           
+          console.log('Edge function response:', data, 'Error:', error);
+          
           if (error) {
             console.error('Edge function error:', error);
             throw new Error(`Edge function failed: ${error.message}`);
@@ -317,18 +328,18 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
           
           console.log('PDF processing result:', data);
           
-          if (data.success) {
+          if (data && data.success) {
             toast.success(`PDF file processed successfully. Added ${data.entriesCount || 0} training items.`);
             
-            // Give the database time to update before fetching data
             setTimeout(() => {
               fetchTrainingData();
-            }, 1500);
+            }, 2000);
           } else {
-            throw new Error(data.error || 'Unknown error during PDF processing');
+            throw new Error((data && data.error) || 'Unknown error during PDF processing');
           }
         } catch (funcError) {
           console.error('Error invoking edge function:', funcError);
+          toast.error(`Failed to process PDF: ${funcError.message}`);
           throw new Error(`Failed to process PDF: ${funcError.message}`);
         }
       }
@@ -336,7 +347,6 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
       setUploadSuccess(true);
       setUploadedFileName(selectedFile.name);
       
-      // Reset the file input
       const fileInput = document.getElementById('file-upload') as HTMLInputElement;
       if (fileInput) fileInput.value = '';
       
@@ -510,12 +520,12 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
                       >
                         <div className="flex items-center gap-2 px-4 py-2 border border-dashed border-gray-300 rounded-md hover:bg-secondary/50 transition-colors">
                           <FileUp size={16} />
-                          <span>{selectedFile ? selectedFile.name : 'Select text or PDF file'}</span>
+                          <span>{selectedFile ? selectedFile.name : 'Select text, CSV or PDF file'}</span>
                         </div>
                         <Input 
                           id="file-upload" 
                           type="file" 
-                          accept=".txt,.pdf" 
+                          accept=".txt,.pdf,.csv" 
                           className="hidden"
                           onChange={handleFileChange}
                           disabled={fileUploading || uploadSuccess}
@@ -543,6 +553,7 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
                     </div>
                     <p className="text-xs text-muted-foreground">
                       For text files: Each question and answer should be on separate lines.
+                      For CSV files: Each row should have a question and answer in separate columns.
                       For PDF files: Content will be automatically processed and added as training data.
                     </p>
                   </div>

@@ -10,19 +10,36 @@ serve(async (req) => {
   }
 
   try {
-    const { filePath, userId, contentType } = await req.json();
+    // Get request body and parse JSON
+    const requestBody = await req.text();
+    let parsedBody;
+    
+    try {
+      parsedBody = JSON.parse(requestBody);
+    } catch (parseError) {
+      console.error("Error parsing request body:", parseError, "Raw body:", requestBody);
+      throw new Error(`Invalid JSON in request body: ${parseError.message}`);
+    }
+    
+    const { filePath, userId, contentType } = parsedBody;
+    
+    if (!filePath || !userId || !contentType) {
+      console.error("Missing required parameters:", { filePath, userId, contentType });
+      throw new Error("Missing required parameters: filePath, userId, and contentType are required");
+    }
     
     console.log(`Starting PDF processing for file: ${filePath}, user: ${userId}, type: ${contentType}`);
     
     // Create a Supabase client with the project URL and service_role key
     const supabaseUrl = Deno.env.get("SUPABASE_URL") as string;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") as string;
-    const supabase = createClient(supabaseUrl, supabaseKey);
     
     if (!supabaseUrl || !supabaseKey) {
       console.error("Missing Supabase credentials");
       throw new Error("Server configuration error: Missing Supabase credentials");
     }
+    
+    const supabase = createClient(supabaseUrl, supabaseKey);
     
     console.log(`Downloading file from: ${filePath}`);
     
@@ -46,6 +63,10 @@ serve(async (req) => {
     
     // Extract the file name from the path
     const fileName = filePath.split('/').pop() || "Unknown PDF";
+    
+    // Simple text extraction from PDF for demonstration
+    // In a real implementation, you would use a proper PDF parsing library
+    // For now, we'll create some basic training entries based on the file name
     
     // Create multiple training entries for demonstration purposes
     const entries = [
