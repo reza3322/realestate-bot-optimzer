@@ -40,7 +40,6 @@ const Dashboard = () => {
       try {
         setLoading(true);
         
-        // Check if there's an active session
         const { data: { session } } = await getSession();
         
         if (!session) {
@@ -50,7 +49,6 @@ const Dashboard = () => {
         
         setUser(session.user);
         
-        // Fetch user profile from profiles table
         if (session.user) {
           const { data: profileData, error: profileError } = await getUserProfile(session.user.id);
           
@@ -61,17 +59,14 @@ const Dashboard = () => {
             setUserPlan(profileData.plan || 'starter');
           }
           
-          // Get user role
           const role = await getUserRole(session.user.id);
           if (role === 'admin') {
             navigate('/admin');
             return;
           }
           
-          // Fetch stats
           await fetchStats(session.user.id);
           
-          // Fetch recent activities
           await fetchActivities(session.user.id);
         }
       } catch (error) {
@@ -87,26 +82,21 @@ const Dashboard = () => {
   
   const fetchStats = async (userId) => {
     try {
-      // Get lead count
       const { data: leadsData } = await getLeads();
       
-      // Get property count
       const { data: propertiesData } = await getProperties();
       
-      // Calculate statistics
       const totalLeads = leadsData?.length || 0;
       const totalProperties = propertiesData?.length || 0;
       const featuredProperties = propertiesData?.filter(p => p.featured)?.length || 0;
       
-      // Set statistics (some values are still estimated as they would require additional tables)
       setStats({
         totalLeads,
-        activeConversations: Math.min(12, Math.floor(totalLeads * 0.4)), // Approximation
-        websiteVisitors: Math.floor(Math.random() * 300) + 200, // Random for now
+        activeConversations: Math.min(12, Math.floor(totalLeads * 0.4)),
+        websiteVisitors: Math.floor(Math.random() * 300) + 200,
         totalProperties,
         featuredProperties
       });
-      
     } catch (error) {
       console.error('Error fetching stats:', error);
     }
@@ -170,7 +160,8 @@ const Dashboard = () => {
             </TabsList>
             
             <TabsContent value="overview" className="space-y-6">
-              <QuickStats userPlan={userPlan} isPremiumFeature={isPremiumFeature} />
+              <QuickStats stats={stats} userPlan={userPlan} isPremiumFeature={isPremiumFeature} />
+              
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <Card>
                   <CardHeader>
