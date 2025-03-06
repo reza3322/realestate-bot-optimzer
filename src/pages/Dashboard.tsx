@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '@/components/layout/Navbar';
@@ -5,7 +6,7 @@ import Footer from '@/components/sections/Footer';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { getSession, getUserProfile, getUserRole, getLeads, getProperties, getRecentActivities } from '@/lib/supabase';
+import { getSession, getUserProfile, getUserRole, getLeads, getProperties, getRecentActivities, getChatbotConversations } from '@/lib/supabase';
 import { toast } from 'sonner';
 import DashboardSidebar from '@/components/dashboard/DashboardSidebar';
 import QuickStats from '@/components/dashboard/QuickStats';
@@ -17,7 +18,9 @@ import Integrations from '@/components/dashboard/Integrations';
 import AccountSettings from '@/components/dashboard/AccountSettings';
 import ChatbotSettings from '@/components/dashboard/ChatbotSettings';
 import ChatConversations from "@/components/dashboard/ChatConversations";
+import ChatbotTrainingManager from '@/components/dashboard/ChatbotTrainingManager';
 import { PlusCircle, Upload, FileSpreadsheet, Users, Bell, Lock } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 
 const Dashboard = () => {
   const [user, setUser] = useState(null);
@@ -33,6 +36,7 @@ const Dashboard = () => {
     featuredProperties: 0
   });
   const [activities, setActivities] = useState([]);
+  const [realTimeUpdate, setRealTimeUpdate] = useState(0); // For triggering refreshes
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -78,22 +82,97 @@ const Dashboard = () => {
     };
     
     getUser();
-  }, [navigate]);
+  }, [navigate, realTimeUpdate]);
+  
+  // Set up a real-time subscription for data changes
+  useEffect(() => {
+    // Subscribe to changes in chatbot_conversations
+    const conversationsChannel = supabase
+      .channel('chatbot_conversations_changes')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'chatbot_conversations'
+      }, () => {
+        // Refresh data when changes occur
+        setRealTimeUpdate(prev => prev + 1);
+      })
+      .subscribe();
+      
+    // Subscribe to changes in leads
+    const leadsChannel = supabase
+      .channel('leads_changes')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'leads'
+      }, () => {
+        setRealTimeUpdate(prev => prev + 1);
+      })
+      .subscribe();
+      
+    // Subscribe to changes in properties
+    const propertiesChannel = supabase
+      .channel('properties_changes')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'properties'
+      }, () => {
+        setRealTimeUpdate(prev => prev + 1);
+      })
+      .subscribe();
+      
+    // Subscribe to changes in chatbot training data
+    const trainingChannel = supabase
+      .channel('training_changes')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'chatbot_training_data'
+      }, () => {
+        setRealTimeUpdate(prev => prev + 1);
+      })
+      .subscribe();
+    
+    return () => {
+      supabase.removeChannel(conversationsChannel);
+      supabase.removeChannel(leadsChannel);
+      supabase.removeChannel(propertiesChannel);
+      supabase.removeChannel(trainingChannel);
+    };
+  }, []);
   
   const fetchStats = async (userId) => {
     try {
+      // Get real counts from the database
       const { data: leadsData } = await getLeads();
       
       const { data: propertiesData } = await getProperties();
+      
+      // Get active conversations count
+      const { data: conversationsData } = await getChatbotConversations();
+      const uniqueConversationIds = new Set();
+      if (conversationsData) {
+        conversationsData.forEach(convo => {
+          if (convo.conversation_id) {
+            uniqueConversationIds.add(convo.conversation_id);
+          }
+        });
+      }
       
       const totalLeads = leadsData?.length || 0;
       const totalProperties = propertiesData?.length || 0;
       const featuredProperties = propertiesData?.filter(p => p.featured)?.length || 0;
       
+      // Get recent website visitors - this would ideally come from analytics
+      // For now, we'll use a combination of real data and estimates
+      const weeklyVisitorEstimate = Math.max(50, totalLeads * 5 + uniqueConversationIds.size * 2);
+      
       setStats({
         totalLeads,
-        activeConversations: Math.min(12, Math.floor(totalLeads * 0.4)),
-        websiteVisitors: Math.floor(Math.random() * 300) + 200,
+        activeConversations: uniqueConversationIds.size,
+        websiteVisitors: weeklyVisitorEstimate,
         totalProperties,
         featuredProperties
       });
@@ -104,7 +183,7 @@ const Dashboard = () => {
   
   const fetchActivities = async (userId) => {
     try {
-      const { data } = await getRecentActivities(5);
+      const { data } = await getRecentActivities(10);
       if (data) {
         setActivities(data);
       }
@@ -155,6 +234,7 @@ const Dashboard = () => {
               <TabsTrigger value="leads">Leads</TabsTrigger>
               <TabsTrigger value="marketing">Marketing</TabsTrigger>
               <TabsTrigger value="chatbot">Chatbot</TabsTrigger>
+              <TabsTrigger value="training">Training</TabsTrigger>
               <TabsTrigger value="integrations">Integrations</TabsTrigger>
               <TabsTrigger value="settings">Settings</TabsTrigger>
             </TabsList>
@@ -219,13 +299,13 @@ const Dashboard = () => {
                       </Button>
                       
                       <Button 
-                        onClick={() => setActiveTab('marketing')} 
+                        onClick={() => setActiveTab('training')} 
                         className="flex justify-start items-center"
                         variant={isPremiumFeature('professional') ? "outline" : "outline"}
                         size="lg">
                         {isPremiumFeature('professional') && <Lock className="mr-2 h-4 w-4 text-muted-foreground" />}
                         {!isPremiumFeature('professional') && <Bell className="mr-2 h-4 w-4" />}
-                        {isPremiumFeature('professional') ? 'AI Follow-ups (Pro)' : 'Setup AI Follow-ups'}
+                        {isPremiumFeature('professional') ? 'Train Chatbot (Pro)' : 'Train Chatbot'}
                       </Button>
                       
                       <Button 
@@ -276,6 +356,14 @@ const Dashboard = () => {
                 userId={user.id} 
                 userPlan={userPlan} 
                 isPremiumFeature={isPremiumFeature} 
+              />
+            </TabsContent>
+            
+            <TabsContent value="training">
+              <ChatbotTrainingManager 
+                userId={user.id}
+                userPlan={userPlan}
+                isPremiumFeature={isPremiumFeature}
               />
             </TabsContent>
             

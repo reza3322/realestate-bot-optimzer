@@ -1,261 +1,205 @@
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
-import { Avatar } from "@/components/ui/avatar";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search, MessageSquare, Calendar, User } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
-import { format } from 'date-fns';
+import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { MessageSquare, User, Calendar, ChevronRight } from "lucide-react";
+import { supabase, getChatbotConversations } from '@/lib/supabase';
+import { Skeleton } from "@/components/ui/skeleton";
 
-interface ChatConversation {
+interface Conversation {
   id: string;
-  conversation_id: string;
   user_id: string;
-  visitor_id?: string;
+  conversation_id: string;
   message: string;
   response: string;
   created_at: string;
-}
-
-interface GroupedConversation {
-  conversation_id: string;
-  messages: ChatConversation[];
-  first_message: string;
-  last_message_date: string;
   visitor_id?: string;
+  lead_id?: string;
 }
 
 const ChatConversations = () => {
-  const [conversations, setConversations] = useState<GroupedConversation[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
-  const [selectedMessages, setSelectedMessages] = useState<ChatConversation[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [conversationCount, setConversationCount] = useState<{[key: string]: number}>({});
 
   useEffect(() => {
-    fetchConversations();
+    fetchRecentConversations();
+    
+    // Set up a subscription to refresh when new conversations are added
+    const channel = supabase
+      .channel('chatbot_conversation_changes')
+      .on('postgres_changes', 
+        { event: 'INSERT', schema: 'public', table: 'chatbot_conversations' }, 
+        () => fetchRecentConversations()
+      )
+      .subscribe();
+      
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
-  const fetchConversations = async () => {
+  const fetchRecentConversations = async () => {
     try {
       setLoading(true);
       
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data, error } = await getChatbotConversations(100);
       
-      if (!session) {
-        console.error("No authenticated session");
-        return;
+      if (error) throw error;
+      
+      // Group conversations by conversation_id and count them
+      const counts: {[key: string]: number} = {};
+      const conversationIds = new Set<string>();
+      
+      if (data) {
+        data.forEach(conv => {
+          if (conv.conversation_id) {
+            counts[conv.conversation_id] = (counts[conv.conversation_id] || 0) + 1;
+            conversationIds.add(conv.conversation_id);
+          }
+        });
       }
       
-      const { data, error } = await supabase
-        .from('chatbot_conversations')
-        .select('*')
-        .eq('user_id', session.user.id)
-        .order('created_at', { ascending: false });
+      setConversationCount(counts);
       
-      if (error) {
-        console.error("Error fetching conversations:", error);
-        return;
-      }
+      // Get most recent message from each conversation
+      const latestMessages: Conversation[] = [];
       
-      // Group conversations by conversation_id
-      const groupedConversations: Record<string, ChatConversation[]> = {};
-      
-      data.forEach((message: ChatConversation) => {
-        if (!groupedConversations[message.conversation_id]) {
-          groupedConversations[message.conversation_id] = [];
+      conversationIds.forEach(convId => {
+        const conversationMessages = data?.filter(m => m.conversation_id === convId) || [];
+        if (conversationMessages.length > 0) {
+          // Sort by date (newest first) and take the first one
+          const sorted = [...conversationMessages].sort((a, b) => 
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          );
+          latestMessages.push(sorted[0]);
         }
-        groupedConversations[message.conversation_id].push(message);
       });
       
-      // Sort each conversation group by created_at and format for display
-      const formattedConversations = Object.entries(groupedConversations).map(([id, messages]) => {
-        // Sort messages by date (oldest first)
-        const sortedMessages = [...messages].sort((a, b) => 
-          new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-        );
-        
-        return {
-          conversation_id: id,
-          messages: sortedMessages,
-          first_message: sortedMessages[0].message,
-          last_message_date: sortedMessages[sortedMessages.length - 1].created_at,
-          visitor_id: sortedMessages[0].visitor_id
-        };
-      });
-      
-      // Sort conversations by last message date (newest first)
-      formattedConversations.sort((a, b) => 
-        new Date(b.last_message_date).getTime() - new Date(a.last_message_date).getTime()
+      // Sort by created_at (newest first) and take top 5
+      const sorted = latestMessages.sort((a, b) => 
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       );
       
-      setConversations(formattedConversations);
-    } catch (error) {
-      console.error("Error in fetchConversations:", error);
+      setConversations(sorted.slice(0, 5));
+      setError(null);
+    } catch (err: any) {
+      console.error('Error fetching conversations:', err);
+      setError(err.message || 'Failed to load conversations');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSelectConversation = (conversation: GroupedConversation) => {
-    setSelectedConversation(conversation.conversation_id);
-    setSelectedMessages(conversation.messages);
+  const formatRelativeTime = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffSecs = Math.floor(diffMs / 1000);
+    const diffMins = Math.floor(diffSecs / 60);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+    
+    if (diffSecs < 60) return `${diffSecs} seconds ago`;
+    if (diffMins < 60) return `${diffMins} minutes ago`;
+    if (diffHours < 24) return `${diffHours} hours ago`;
+    if (diffDays < 7) return `${diffDays} days ago`;
+    
+    return `${date.toLocaleDateString()}`;
   };
 
-  const filteredConversations = conversations.filter(conversation => 
-    conversation.messages.some(msg => 
-      msg.message.toLowerCase().includes(searchQuery.toLowerCase()) || 
-      msg.response.toLowerCase().includes(searchQuery.toLowerCase())
-    )
-  );
+  const truncateText = (text: string, maxLength: number = 70) => {
+    if (text.length <= maxLength) return text;
+    return text.substring(0, maxLength) + '...';
+  };
 
   return (
-    <Card className="col-span-1 lg:col-span-2">
+    <Card>
       <CardHeader>
-        <CardTitle>Chat Conversations</CardTitle>
-        <CardDescription>View and analyze visitor conversations with your chatbot</CardDescription>
+        <CardTitle className="flex items-center gap-2">
+          <MessageSquare className="h-5 w-5" /> 
+          Recent Conversations
+        </CardTitle>
+        <CardDescription>
+          Latest visitor interactions with your chatbot
+        </CardDescription>
       </CardHeader>
-      
       <CardContent>
-        <Tabs defaultValue="conversations" className="w-full">
-          <TabsList className="mb-4">
-            <TabsTrigger value="conversations">All Conversations</TabsTrigger>
-            <TabsTrigger value="analytics">Analytics (Coming Soon)</TabsTrigger>
-          </TabsList>
-          
-          <TabsContent value="conversations" className="space-y-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search conversations..."
-                className="pl-10"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="md:col-span-1 border rounded-md">
-                <div className="p-3 border-b bg-muted/40">
-                  <h3 className="font-medium">Conversations</h3>
+        {loading ? (
+          <div className="space-y-4">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="flex items-start gap-3">
+                <Skeleton className="h-10 w-10 rounded-full" />
+                <div className="space-y-2 flex-1">
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-3 w-4/5" />
                 </div>
-                
-                <ScrollArea className="h-[500px]">
-                  {loading ? (
-                    <div className="flex justify-center items-center h-40">
-                      <div className="animate-spin h-6 w-6 border-t-2 border-primary rounded-full"></div>
-                    </div>
-                  ) : filteredConversations.length === 0 ? (
-                    <div className="p-4 text-center text-muted-foreground">
-                      {searchQuery ? "No matching conversations found" : "No conversations yet"}
-                    </div>
-                  ) : (
-                    <div className="divide-y">
-                      {filteredConversations.map((conversation) => (
-                        <div 
-                          key={conversation.conversation_id}
-                          className={`p-3 hover:bg-muted/50 cursor-pointer ${
-                            selectedConversation === conversation.conversation_id ? 'bg-muted/70' : ''
-                          }`}
-                          onClick={() => handleSelectConversation(conversation)}
-                        >
-                          <div className="flex items-start justify-between mb-1">
-                            <div className="flex items-center">
-                              <MessageSquare className="h-4 w-4 mr-2 text-muted-foreground" />
-                              <span className="text-sm font-medium truncate max-w-[150px]">
-                                {conversation.first_message.slice(0, 30)}
-                                {conversation.first_message.length > 30 ? '...' : ''}
-                              </span>
-                            </div>
-                            <Badge variant="outline" className="text-xs">
-                              {conversation.messages.length} msgs
-                            </Badge>
-                          </div>
-                          <div className="flex items-center justify-between text-xs text-muted-foreground">
-                            <div className="flex items-center">
-                              <Calendar className="h-3 w-3 mr-1" />
-                              {format(new Date(conversation.last_message_date), 'MMM d, h:mm a')}
-                            </div>
-                            {conversation.visitor_id && (
-                              <div className="flex items-center">
-                                <User className="h-3 w-3 mr-1" />
-                                {conversation.visitor_id.slice(0, 8)}...
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </ScrollArea>
               </div>
-              
-              <div className="md:col-span-2 border rounded-md">
-                <div className="p-3 border-b bg-muted/40">
-                  <h3 className="font-medium">
-                    {selectedConversation ? 'Conversation Details' : 'Select a conversation'}
-                  </h3>
-                </div>
+            ))}
+          </div>
+        ) : error ? (
+          <div className="text-center py-4 text-red-500">
+            {error}
+          </div>
+        ) : conversations.length === 0 ? (
+          <div className="text-center py-6 text-muted-foreground">
+            <MessageSquare className="h-10 w-10 mx-auto mb-2 opacity-20" />
+            <p>No conversations yet</p>
+            <p className="text-sm mt-1">When visitors use your chatbot, conversations will appear here</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {conversations.map((conversation) => (
+              <div key={conversation.id} className="flex items-start space-x-3 pb-4 border-b last:border-0 last:pb-0">
+                <Avatar className="h-10 w-10">
+                  <AvatarImage src="" />
+                  <AvatarFallback>
+                    <User className="h-6 w-6 text-muted-foreground" />
+                  </AvatarFallback>
+                </Avatar>
                 
-                {selectedConversation ? (
-                  <ScrollArea className="h-[500px] p-4">
-                    <div className="space-y-4">
-                      {selectedMessages.map((message) => (
-                        <div key={message.id} className="space-y-2">
-                          <div className="flex items-start gap-2">
-                            <Avatar className="h-8 w-8 bg-muted">
-                              <User className="h-4 w-4" />
-                            </Avatar>
-                            <div className="bg-muted rounded-lg p-3 max-w-[80%]">
-                              <p>{message.message}</p>
-                              <p className="text-xs text-muted-foreground mt-1">
-                                {format(new Date(message.created_at), 'MMM d, h:mm a')}
-                              </p>
-                            </div>
-                          </div>
-                          
-                          <div className="flex items-start gap-2 justify-end">
-                            <div className="bg-primary/10 rounded-lg p-3 max-w-[80%]">
-                              <p>{message.response}</p>
-                              <p className="text-xs text-muted-foreground mt-1">
-                                {format(new Date(message.created_at), 'MMM d, h:mm a')}
-                              </p>
-                            </div>
-                            <Avatar className="h-8 w-8 bg-primary/20">
-                              <MessageSquare className="h-4 w-4 text-primary" />
-                            </Avatar>
-                          </div>
-                        </div>
-                      ))}
+                <div className="flex-1 space-y-1">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="font-medium leading-none">
+                        {conversation.visitor_id ? 'Visitor ' + conversation.visitor_id.substring(0, 6) : 'Anonymous Visitor'}
+                      </p>
+                      <div className="flex items-center mt-1 text-xs text-muted-foreground">
+                        <Calendar className="h-3 w-3 mr-1" />
+                        {formatRelativeTime(conversation.created_at)}
+                        <Badge className="ml-2 text-[10px] px-1 py-0" variant="outline">
+                          {conversationCount[conversation.conversation_id] || 1} messages
+                        </Badge>
+                      </div>
                     </div>
-                  </ScrollArea>
-                ) : (
-                  <div className="flex flex-col items-center justify-center h-[500px] text-center p-4">
-                    <MessageSquare className="h-12 w-12 text-muted-foreground/50 mb-4" />
-                    <h3 className="text-lg font-medium mb-2">No Conversation Selected</h3>
-                    <p className="text-muted-foreground max-w-md">
-                      Select a conversation from the list to view the full chat history and details.
-                    </p>
                   </div>
-                )}
+                  
+                  <p className="text-sm">
+                    <span className="font-medium">Visitor:</span> {truncateText(conversation.message)}
+                  </p>
+                  
+                  <p className="text-sm text-muted-foreground">
+                    <span className="font-medium">Bot:</span> {truncateText(conversation.response)}
+                  </p>
+                </div>
+                
+                <Button variant="ghost" className="h-8 w-8 p-0" title="View Conversation">
+                  <ChevronRight className="h-4 w-4" />
+                  <span className="sr-only">View</span>
+                </Button>
               </div>
+            ))}
+            
+            <div className="text-center pt-2">
+              <Button variant="outline" size="sm" className="text-xs">
+                View All Conversations
+              </Button>
             </div>
-          </TabsContent>
-          
-          <TabsContent value="analytics">
-            <div className="flex flex-col items-center justify-center h-60 text-center">
-              <h3 className="text-lg font-medium mb-2">Analytics Coming Soon</h3>
-              <p className="text-muted-foreground max-w-md">
-                Soon you'll be able to see detailed analytics about your chatbot conversations, 
-                popular topics, and lead conversion rates.
-              </p>
-            </div>
-          </TabsContent>
-        </Tabs>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

@@ -1,0 +1,14 @@
+
+project_id = "ckgaqkbsnrvccctqxsqv"
+
+[[edge_functions]]
+name = "ai-chatbot"
+
+[[edge_functions]]
+name = "chatbot-response"
+
+[[edge_functions]]
+name = "import-properties"
+
+[[edge_functions]]
+name = "process-whatsapp-message"
