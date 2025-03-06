@@ -12,27 +12,27 @@ import { testChatbotResponse } from './responseHandlers';
 // Default translations for various languages
 const DEFAULT_TRANSLATIONS = {
   en: {
-    welcomeMessage: "Hi there! I'm your RealHomeAI assistant. How can I help you today?",
+    welcomeMessage: "Hi there! I'm your {botName} assistant. How can I help you today?",
     placeholderText: "Type your message...",
     errorMessage: "Sorry, there was an error processing your request."
   },
   es: {
-    welcomeMessage: "¡Hola! Soy tu asistente RealHomeAI. ¿Cómo puedo ayudarte hoy?",
+    welcomeMessage: "¡Hola! Soy tu asistente {botName}. ¿Cómo puedo ayudarte hoy?",
     placeholderText: "Escribe tu mensaje...",
     errorMessage: "Lo siento, hubo un error al procesar tu solicitud."
   },
   fr: {
-    welcomeMessage: "Bonjour! Je suis votre assistant RealHomeAI. Comment puis-je vous aider aujourd'hui?",
+    welcomeMessage: "Bonjour! Je suis votre assistant {botName}. Comment puis-je vous aider aujourd'hui?",
     placeholderText: "Tapez votre message...",
     errorMessage: "Désolé, une erreur s'est produite lors du traitement de votre demande."
   },
   de: {
-    welcomeMessage: "Hallo! Ich bin Ihr RealHomeAI-Assistent. Wie kann ich Ihnen heute helfen?",
+    welcomeMessage: "Hallo! Ich bin Ihr {botName}-Assistent. Wie kann ich Ihnen heute helfen?",
     placeholderText: "Geben Sie Ihre Nachricht ein...",
     errorMessage: "Entschuldigung, bei der Verarbeitung Ihrer Anfrage ist ein Fehler aufgetreten."
   },
   pt: {
-    welcomeMessage: "Olá! Sou seu assistente RealHomeAI. Como posso ajudá-lo hoje?",
+    welcomeMessage: "Olá! Sou seu assistente {botName}. Como posso ajudá-lo hoje?",
     placeholderText: "Digite sua mensagem...",
     errorMessage: "Desculpe, ocorreu um erro ao processar sua solicitação."
   }
@@ -78,7 +78,7 @@ const Chatbot = ({
   const translations = DEFAULT_TRANSLATIONS[language] || DEFAULT_TRANSLATIONS.en;
   
   // Set default welcome message and placeholder if not provided
-  const defaultWelcomeMessage = welcomeMessage || translations.welcomeMessage.replace("RealHomeAI", botName);
+  const defaultWelcomeMessage = welcomeMessage || translations.welcomeMessage.replace("{botName}", botName);
   const defaultPlaceholderText = placeholderText || translations.placeholderText;
   
   const [messages, setMessages] = useState<Message[]>([
