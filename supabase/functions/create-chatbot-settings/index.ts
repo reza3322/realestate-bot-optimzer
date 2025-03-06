@@ -18,14 +18,14 @@ serve(async (req) => {
     if (!supabaseUrl || !supabaseServiceRole) {
       throw new Error('Missing environment variables for Supabase connection')
     }
-
-    console.log('Creating Supabase client with service role key')
     
     // Create a Supabase client with the service role key
     const supabase = createClient(supabaseUrl, supabaseServiceRole)
 
-    // Get user_id from the query string if available
+    // Get the URL for parsing parameters
     const url = new URL(req.url);
+    
+    // Get user_id from the query string if available
     const userId = url.searchParams.get('user_id');
     
     console.log('Calling database function to create/check the chatbot_settings table')
@@ -43,7 +43,7 @@ serve(async (req) => {
     if (userId) {
       console.log(`Fetching settings for user: ${userId}`);
       
-      // Only use the necessary parameters: user_id and select settings
+      // Use a proper query with only the necessary parameters
       const { data: settingsData, error: settingsError } = await supabase
         .from('chatbot_settings')
         .select('settings')
@@ -52,7 +52,7 @@ serve(async (req) => {
         .limit(1)
         .maybeSingle();
       
-      if (settingsError && settingsError.code !== 'PGRST116') {
+      if (settingsError) {
         console.error('Error fetching user settings:', settingsError);
       } else if (settingsData) {
         userSettings = settingsData.settings;
