@@ -1,180 +1,421 @@
+import { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Slider } from "@/components/ui/slider";
+import { toast } from "sonner";
+import { supabase } from "@/lib/supabase";
+import { Loader2, Check } from "lucide-react";
+import { ColorPicker } from "@/components/ui/color-picker";
+import { Chatbot } from "@/components/ui/chatbot/Chatbot";
+import { getChatStyles, applyFontStyle } from "@/components/ui/chatbot/chatStyles";
 
-import React, { useState } from 'react';
-import Chatbot from '@/components/ui/chatbot/Chatbot';
-import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { getChatStyles } from '@/components/ui/chatbot/chatStyles';
-import type { ChatStylesType, ChatTheme } from '@/components/ui/chatbot/types';
+// Define the supported language codes
+type LanguageCode = 'en' | 'es' | 'fr' | 'de' | 'it' | 'pt' | 'nl' | 'ja' | 'zh' | 'ko';
 
-// Type for the theme options
-type ThemeOption = "default" | "modern" | "minimal";
-type VariationOption = "default" | "blue" | "green" | "purple";
+export interface ChatbotSettings {
+  primaryColor: string;
+  theme: string;
+  variation: string;
+  botIcon: string;
+  fontFamily: string;
+  fontSize: number;
+  botName: string;
+  welcomeMessage: string;
+  placeholderText: string;
+  enabled: boolean;
+  position: string;
+  buttonText: string;
+  buttonIcon: string;
+  buttonSize: string;
+  buttonColor: string;
+  buttonTextColor: string;
+  buttonStyle: string;
+  buttonPosition: string;
+  language: LanguageCode;
+}
 
-const ChatbotDemo = () => {
-  const [theme, setTheme] = useState<ThemeOption>('default');
-  const [variation, setVariation] = useState<VariationOption>('default');
-  const [fontStyle, setFontStyle] = useState('default');
-  const [showCode, setShowCode] = useState(false);
+export interface ChatbotSettingsProps {
+  userId: string;
+  userPlan: string;
+  isPremiumFeature: (plan: string) => boolean;
+}
+
+const ChatbotDemo = ({ userId, userPlan, isPremiumFeature }: ChatbotSettingsProps) => {
+  const [settings, setSettings] = useState<ChatbotSettings>({
+    primaryColor: "#3b82f6",
+    theme: "default",
+    variation: "default",
+    botIcon: "message-circle",
+    fontFamily: "sans",
+    fontSize: 16,
+    botName: "RealHome Assistant",
+    welcomeMessage: "Hi there! How can I help you find your dream property today?",
+    placeholderText: "Type your message...",
+    enabled: true,
+    position: "right",
+    buttonText: "Chat with us",
+    buttonIcon: "message-circle",
+    buttonSize: "medium",
+    buttonColor: "#3b82f6",
+    buttonTextColor: "#ffffff",
+    buttonStyle: "pill",
+    buttonPosition: "bottom-right",
+    language: "en"
+  });
   
-  // Generate embed code for the selected theme/variation
-  const generateEmbedCode = () => {
-    return `<script src="https://realhome.ai/chatbot.js?theme=${theme}&variation=${variation}&font=${fontStyle}"></script>`;
-  };
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [embedCode, setEmbedCode] = useState("");
+  const [activeTab, setActiveTab] = useState("preview");
   
-  // Convert the theme options to the actual chat styles
-  const styles: ChatTheme = getChatStyles(theme, variation);
+  useEffect(() => {
+    if (userId) {
+      fetchSettings();
+    }
+  }, [userId]);
   
-  // Convert the styles to the type expected by ChatMessage
-  const chatStyles: ChatStylesType = {
-    botBubble: styles.botBubble,
-    userBubble: styles.userBubble,
-    botIcon: styles.botIcon,
-    userIcon: styles.userIcon,
-    font: styles.font
-  };
-
-  return (
-    <div className="space-y-4">
-      <div className="grid md:grid-cols-2 gap-4">
-        <div className="space-y-4">
-          <Tabs defaultValue="theme" className="w-full">
-            <TabsList className="w-full">
-              <TabsTrigger value="theme" className="flex-1">Theme</TabsTrigger>
-              <TabsTrigger value="font" className="flex-1">Font</TabsTrigger>
-              <TabsTrigger value="code" className="flex-1">Embed</TabsTrigger>
-            </TabsList>
-            
-            <TabsContent value="theme" className="space-y-4 py-4">
-              <div>
-                <h3 className="text-lg font-medium mb-2">Chat Theme</h3>
-                <div className="grid grid-cols-3 gap-2">
-                  <Button 
-                    variant={theme === 'default' ? 'default' : 'outline'} 
-                    onClick={() => setTheme('default')}
-                    className="justify-start"
-                  >
-                    Default
-                  </Button>
-                  <Button 
-                    variant={theme === 'modern' ? 'default' : 'outline'} 
-                    onClick={() => setTheme('modern')}
-                    className="justify-start"
-                  >
-                    Modern
-                  </Button>
-                  <Button 
-                    variant={theme === 'minimal' ? 'default' : 'outline'} 
-                    onClick={() => setTheme('minimal')}
-                    className="justify-start"
-                  >
-                    Minimal
-                  </Button>
-                </div>
-              </div>
-              
-              <div>
-                <h3 className="text-lg font-medium mb-2">Color Scheme</h3>
-                <div className="grid grid-cols-4 gap-2">
-                  <Button 
-                    variant={variation === 'default' ? 'default' : 'outline'} 
-                    onClick={() => setVariation('default')}
-                    className="justify-start"
-                  >
-                    Default
-                  </Button>
-                  <Button 
-                    variant={variation === 'blue' ? 'default' : 'outline'} 
-                    onClick={() => setVariation('blue')}
-                    className="justify-start"
-                    className="bg-blue-500 text-white hover:bg-blue-600"
-                  >
-                    Blue
-                  </Button>
-                  <Button 
-                    variant={variation === 'green' ? 'default' : 'outline'} 
-                    onClick={() => setVariation('green')}
-                    className="justify-start"
-                    className="bg-green-500 text-white hover:bg-green-600"
-                  >
-                    Green
-                  </Button>
-                  <Button 
-                    variant={variation === 'purple' ? 'default' : 'outline'} 
-                    onClick={() => setVariation('purple')}
-                    className="justify-start"
-                    className="bg-purple-500 text-white hover:bg-purple-600"
-                  >
-                    Purple
-                  </Button>
-                </div>
-              </div>
-            </TabsContent>
-            
-            <TabsContent value="font" className="space-y-4 py-4">
-              <div>
-                <h3 className="text-lg font-medium mb-2">Font Style</h3>
-                <div className="grid grid-cols-3 gap-2">
-                  <Button 
-                    variant={fontStyle === 'default' ? 'default' : 'outline'} 
-                    onClick={() => setFontStyle('default')}
-                    className="justify-start font-sans"
-                  >
-                    Sans Serif
-                  </Button>
-                  <Button 
-                    variant={fontStyle === 'serif' ? 'default' : 'outline'} 
-                    onClick={() => setFontStyle('serif')}
-                    className="justify-start font-serif"
-                  >
-                    Serif
-                  </Button>
-                  <Button 
-                    variant={fontStyle === 'mono' ? 'default' : 'outline'} 
-                    onClick={() => setFontStyle('mono')}
-                    className="justify-start font-mono"
-                  >
-                    Monospace
-                  </Button>
-                </div>
-              </div>
-            </TabsContent>
-            
-            <TabsContent value="code" className="py-4">
-              <div>
-                <h3 className="text-lg font-medium mb-2">Embed Code</h3>
-                <p className="text-sm text-gray-500 mb-2">
-                  Copy this code and place it in your website's HTML to add the chatbot.
-                </p>
-                <div className="relative">
-                  <pre className="bg-gray-100 dark:bg-gray-800 p-4 rounded-md overflow-x-auto">
-                    <code>{generateEmbedCode()}</code>
-                  </pre>
-                  <Button 
-                    size="sm" 
-                    className="absolute top-2 right-2"
-                    onClick={() => {
-                      navigator.clipboard.writeText(generateEmbedCode());
-                      alert('Copied to clipboard!');
-                    }}
-                  >
-                    Copy
-                  </Button>
-                </div>
-              </div>
-            </TabsContent>
-          </Tabs>
-        </div>
+  const fetchSettings = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('chatbot_settings')
+        .select('settings')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(1);
         
-        <div className="flex justify-center items-start">
-          <Chatbot 
-            theme={theme} 
-            variation={variation} 
-            fontStyle={fontStyle as any}
-            maxHeight="500px"
-            botName="RealHome Assistant"
-            useRealAPI={false}
+      if (error) {
+        throw error;
+      }
+      
+      if (data && data.length > 0) {
+        setSettings({ ...settings, ...data[0].settings });
+      }
+      
+    } catch (error) {
+      console.error('Error fetching chatbot settings:', error);
+      toast.error('Failed to load chatbot settings');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  const handleSettingChange = (key: keyof ChatbotSettings, value: any) => {
+    setSettings((prev) => ({
+      ...prev,
+      [key]: value
+    }));
+  };
+  
+  const saveSettings = async () => {
+    if (!userId) return;
+    
+    setIsSaving(true);
+    
+    try {
+      const { data, error } = await supabase
+        .from('chatbot_settings')
+        .upsert({
+          user_id: userId,
+          settings: settings
+        })
+        .select();
+      
+      if (error) {
+        throw error;
+      }
+      
+      toast.success('Chatbot settings saved successfully');
+      
+    } catch (error) {
+      console.error('Error saving chatbot settings:', error);
+      toast.error('Failed to save chatbot settings');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+  
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-10">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+  
+  const chatStyles = getChatStyles(settings.theme, settings.variation, settings.primaryColor);
+  const fontStyleClass = applyFontStyle(settings.fontFamily);
+  
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h2 className="text-3xl font-bold tracking-tight">Chatbot Demo</h2>
+        
+        <div className="flex items-center gap-2">
+          <Label htmlFor="enabled" className="mr-2">
+            {settings.enabled ? "Enabled" : "Disabled"}
+          </Label>
+          <Switch
+            id="enabled"
+            checked={settings.enabled}
+            onCheckedChange={(checked) => handleSettingChange('enabled', checked)}
           />
         </div>
+      </div>
+      
+      <div className="flex items-center pt-2">
+        <button
+          type="button"
+          className={`text-gray-400 hover:text-gray-600 focus:outline-none ${activeTab === 'preview' ? 'text-blue-500 border-b-2 border-blue-500' : ''}`}
+          onClick={() => setActiveTab('preview')}
+        >
+          Preview
+        </button>
+        <button
+          type="button"
+          className={`ml-6 text-gray-400 hover:text-gray-600 focus:outline-none ${activeTab === 'code' ? 'text-blue-500 border-b-2 border-blue-500' : ''}`}
+          onClick={() => setActiveTab('code')}
+        >
+          Code
+        </button>
+        <button
+          type="button"
+          className={`ml-6 text-gray-400 hover:text-gray-600 focus:outline-none ${activeTab === 'customize' ? 'text-blue-500 border-b-2 border-blue-500' : ''}`}
+          onClick={() => setActiveTab('customize')}
+        >
+          Customize
+        </button>
+      </div>
+      
+      {activeTab === 'preview' && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Chatbot Preview</CardTitle>
+            <CardDescription>See how your chatbot will look</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className={fontStyleClass} style={{ fontSize: `${settings.fontSize}px` }}>
+              <Chatbot 
+                botName={settings.botName}
+                welcomeMessage={settings.welcomeMessage}
+                placeholderText={settings.placeholderText}
+                theme={settings.theme}
+                variation={settings.variation}
+                primaryColor={settings.primaryColor}
+              />
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      
+      {activeTab === 'code' && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Embed Code</CardTitle>
+            <CardDescription>
+              Copy this code and paste it in your website's HTML
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="bg-slate-100 dark:bg-slate-800 p-4 rounded-md">
+                <pre className="text-sm overflow-x-auto whitespace-pre-wrap">
+                  {`<script>
+  window.realHomeChatbotSettings = {
+    userId: "${userId}",
+    botName: "${settings.botName}",
+    welcomeMessage: "${settings.welcomeMessage}",
+    placeholderText: "${settings.placeholderText}",
+    theme: "${settings.theme}",
+    variation: "${settings.variation}",
+    primaryColor: "${settings.primaryColor}",
+    enabled: ${settings.enabled},
+    position: "${settings.position}",
+    buttonText: "${settings.buttonText}",
+    buttonIcon: "${settings.buttonIcon}",
+    buttonSize: "${settings.buttonSize}",
+    buttonColor: "${settings.buttonColor}",
+    buttonTextColor: "${settings.buttonTextColor}",
+    buttonStyle: "${settings.buttonStyle}",
+    buttonPosition: "${settings.buttonPosition}",
+    language: "${settings.language}"
+  };
+</script>
+<script src="https://yourdomain.com/chatbot.js"></script>`}
+                </pre>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      
+      {activeTab === 'customize' && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Customize Chatbot</CardTitle>
+            <CardDescription>
+              Adjust the settings to match your brand
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <Label>Theme Style</Label>
+                <Select 
+                  value={settings.theme} 
+                  onValueChange={(value) => handleSettingChange('theme', value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a theme" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="default">Default</SelectItem>
+                    <SelectItem value="modern">Modern</SelectItem>
+                    <SelectItem value="minimal">Minimal</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="space-y-2">
+                <Label>Color Variation</Label>
+                <Select 
+                  value={settings.variation} 
+                  onValueChange={(value) => handleSettingChange('variation', value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a color variation" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="default">Default</SelectItem>
+                    <SelectItem value="blue">Blue</SelectItem>
+                    <SelectItem value="green">Green</SelectItem>
+                    <SelectItem value="purple">Purple</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="space-y-2">
+                <Label>Primary Color</Label>
+                <ColorPicker 
+                  color={settings.primaryColor}
+                  onChange={(color) => handleSettingChange('primaryColor', color)}
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label>Font Family</Label>
+                <Select 
+                  value={settings.fontFamily} 
+                  onValueChange={(value) => handleSettingChange('fontFamily', value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a font" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="sans">Sans-serif</SelectItem>
+                    <SelectItem value="serif">Serif</SelectItem>
+                    <SelectItem value="mono">Monospace</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="space-y-2">
+                <Label>Font Size: {settings.fontSize}px</Label>
+                <Slider 
+                  min={12} 
+                  max={20} 
+                  step={1}
+                  value={[settings.fontSize]}
+                  onValueChange={(values) => handleSettingChange('fontSize', values[0])}
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label>Chat Position</Label>
+                <Select 
+                  value={settings.position} 
+                  onValueChange={(value) => handleSettingChange('position', value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select position" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="left">Left</SelectItem>
+                    <SelectItem value="right">Right</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="botName">Bot Name</Label>
+                <Input 
+                  id="botName" 
+                  value={settings.botName} 
+                  onChange={(e) => handleSettingChange('botName', e.target.value)}
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="welcomeMessage">Welcome Message</Label>
+                <Textarea 
+                  id="welcomeMessage" 
+                  value={settings.welcomeMessage}
+                  onChange={(e) => handleSettingChange('welcomeMessage', e.target.value)}
+                  rows={3}
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="placeholderText">Input Placeholder</Label>
+                <Input 
+                  id="placeholderText" 
+                  value={settings.placeholderText}
+                  onChange={(e) => handleSettingChange('placeholderText', e.target.value)}
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label>Language</Label>
+                <Select 
+                  value={settings.language} 
+                  onValueChange={(value: LanguageCode) => handleSettingChange('language', value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select language" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="en">English</SelectItem>
+                    <SelectItem value="es">Spanish</SelectItem>
+                    <SelectItem value="fr">French</SelectItem>
+                    <SelectItem value="de">German</SelectItem>
+                    <SelectItem value="it">Italian</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      
+      <div className="flex justify-end">
+        <Button onClick={saveSettings} disabled={isSaving}>
+          {isSaving ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Saving...
+            </>
+          ) : (
+            <>
+              <Check className="mr-2 h-4 w-4" />
+              Save Settings
+            </>
+          )}
+        </Button>
       </div>
     </div>
   );

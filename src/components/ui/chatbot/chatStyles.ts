@@ -1,3 +1,4 @@
+
 import { ChatTheme, ChatStylesType } from './types';
 
 export const getChatStyles = (

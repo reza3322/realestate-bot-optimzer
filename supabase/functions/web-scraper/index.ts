@@ -32,6 +32,31 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     const supabase = createClient(supabaseUrl, supabaseKey)
     
+    // Check if required tables exist
+    const tables = ['listings', 'property_imports'];
+    let missingTables = [];
+    
+    for (const table of tables) {
+      const { error } = await supabase
+        .from(table)
+        .select('id')
+        .limit(1);
+        
+      if (error) {
+        console.error(`Table ${table} may not exist:`, error);
+        missingTables.push(table);
+      }
+    }
+    
+    if (missingTables.length > 0) {
+      return new Response(
+        JSON.stringify({ 
+          error: `Required tables not found: ${missingTables.join(', ')}. Please run the database setup SQL.` 
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      )
+    }
+    
     // Create a new import record
     console.log('Creating import record in database')
     const { data: importRecord, error: importError } = await supabase
@@ -47,26 +72,10 @@ serve(async (req) => {
     
     if (importError) {
       console.error('Error creating import record:', importError)
-      
-      // Try using scrape_history table if property_imports doesn't exist
-      console.log('Attempting to use scrape_history table instead')
-      const { data: scrapeRecord, error: scrapeError } = await supabase
-        .from('scrape_history')
-        .insert({
-          user_id: userId,
-          website_id: null, // No website ID available
-          status: 'processing'
-        })
-        .select()
-        .single()
-        
-      if (scrapeError) {
-        console.error('Error creating scrape history record:', scrapeError)
-        return new Response(
-          JSON.stringify({ error: 'Failed to initialize import process. Database tables may not be configured correctly.' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
-        )
-      }
+      return new Response(
+        JSON.stringify({ error: 'Failed to initialize import process. Database tables may not be configured correctly.' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      )
     }
     
     // Scrape properties from the URL
@@ -113,28 +122,9 @@ serve(async (req) => {
     let failCount = 0
     const errors = []
     
-    // Determine the correct table to use (listings or properties)
-    const targetTable = 'listings'
-    
-    // First, check if the table exists by doing a small query
-    const { error: tableCheckError } = await supabase
-      .from(targetTable)
-      .select('id')
-      .limit(1)
-    
-    if (tableCheckError) {
-      console.error(`Error: Table '${targetTable}' may not exist:`, tableCheckError)
-      return new Response(
-        JSON.stringify({ 
-          error: `Target table '${targetTable}' doesn't exist or isn't accessible. Please create the table first.` 
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
-      )
-    }
-    
     for (const property of scrapedProperties) {
       const { error: insertError } = await supabase
-        .from(targetTable)
+        .from('listings')
         .insert({
           ...property,
           user_id: userId
