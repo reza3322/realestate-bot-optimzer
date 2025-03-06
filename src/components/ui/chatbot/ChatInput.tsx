@@ -7,12 +7,14 @@ interface ChatInputProps {
   inputContainerStyle?: string;
   onSendMessage: (message: string) => void;
   placeholderText?: string;
+  buttonStyle?: React.CSSProperties;
 }
 
 const ChatInput = ({ 
   inputContainerStyle, 
   onSendMessage,
-  placeholderText = "Type a message..." 
+  placeholderText = "Type a message...",
+  buttonStyle = {}
 }: ChatInputProps) => {
   const [message, setMessage] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -64,6 +66,7 @@ const ChatInput = ({
             ? "text-primary-foreground bg-primary hover:bg-primary/90" 
             : "text-muted-foreground bg-secondary hover:bg-secondary/80"
         )}
+        style={buttonStyle}
       >
         <Send className="h-5 w-5" />
       </button>

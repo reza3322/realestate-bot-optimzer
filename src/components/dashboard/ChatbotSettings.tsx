@@ -56,6 +56,14 @@ const BUTTON_SIZES = [
   { value: "large", label: "Large" },
 ];
 
+const LANGUAGES = [
+  { value: "en", label: "English" },
+  { value: "es", label: "Spanish" },
+  { value: "fr", label: "French" },
+  { value: "de", label: "German" },
+  { value: "pt", label: "Portuguese" },
+];
+
 const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettingsProps) => {
   const [activeTab, setActiveTab] = useState<"customize" | "training">("customize");
   const [settings, setSettings] = useState({
@@ -77,6 +85,7 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
     buttonTextColor: "#ffffff",
     buttonStyle: "pill",
     buttonPosition: "bottom-right",
+    language: "en",
   });
 
   const [loading, setLoading] = useState(true);
@@ -332,7 +341,8 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
       buttonColor: encodeURIComponent(settings.buttonColor.replace('#', '')),
       buttonTextColor: encodeURIComponent(settings.buttonTextColor.replace('#', '')),
       buttonStyle: settings.buttonStyle,
-      buttonPosition: settings.buttonPosition
+      buttonPosition: settings.buttonPosition,
+      language: settings.language || 'en'
     });
     
     const baseUrl = window.location.hostname.includes('localhost') 
@@ -557,6 +567,66 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
               
               <Card>
                 <CardHeader>
+                  <CardTitle>Language & Content</CardTitle>
+                  <CardDescription>Customize what your chatbot says and the language</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="botName">Chatbot Name</Label>
+                      <Input 
+                        id="botName" 
+                        value={settings.botName}
+                        onChange={(e) => setSettings({...settings, botName: e.target.value})}
+                        placeholder="e.g. Property Assistant"
+                      />
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label htmlFor="language">Language</Label>
+                      <Select 
+                        value={settings.language || 'en'} 
+                        onValueChange={(value) => setSettings({...settings, language: value})}
+                      >
+                        <SelectTrigger id="language">
+                          <SelectValue placeholder="Select language" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {LANGUAGES.map((lang) => (
+                            <SelectItem key={lang.value} value={lang.value}>
+                              {lang.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="welcomeMessage">Welcome Message</Label>
+                    <Textarea 
+                      id="welcomeMessage" 
+                      value={settings.welcomeMessage}
+                      onChange={(e) => setSettings({...settings, welcomeMessage: e.target.value})}
+                      placeholder="Hi there! How can I help you today?"
+                      rows={3}
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="placeholderText">Input Placeholder</Label>
+                    <Input 
+                      id="placeholderText" 
+                      value={settings.placeholderText}
+                      onChange={(e) => setSettings({...settings, placeholderText: e.target.value})}
+                      placeholder="Type your message..."
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+              
+              <Card>
+                <CardHeader>
                   <CardTitle>Chat Button</CardTitle>
                   <CardDescription>Customize the button that opens your chatbot</CardDescription>
                 </CardHeader>
@@ -717,45 +787,6 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
               
               <Card>
                 <CardHeader>
-                  <CardTitle>Content</CardTitle>
-                  <CardDescription>Customize what your chatbot says</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="botName">Chatbot Name</Label>
-                    <Input 
-                      id="botName" 
-                      value={settings.botName}
-                      onChange={(e) => setSettings({...settings, botName: e.target.value})}
-                      placeholder="e.g. Property Assistant"
-                    />
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="welcomeMessage">Welcome Message</Label>
-                    <Textarea 
-                      id="welcomeMessage" 
-                      value={settings.welcomeMessage}
-                      onChange={(e) => setSettings({...settings, welcomeMessage: e.target.value})}
-                      placeholder="Hi there! How can I help you today?"
-                      rows={3}
-                    />
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="placeholderText">Input Placeholder</Label>
-                    <Input 
-                      id="placeholderText" 
-                      value={settings.placeholderText}
-                      onChange={(e) => setSettings({...settings, placeholderText: e.target.value})}
-                      placeholder="Type your message..."
-                    />
-                  </div>
-                </CardContent>
-              </Card>
-              
-              <Card>
-                <CardHeader>
                   <CardTitle>Test Chatbot</CardTitle>
                   <CardDescription>Send a test message to verify the OpenAI API integration</CardDescription>
                 </CardHeader>
@@ -849,6 +880,13 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
                         placeholderText={settings.placeholderText}
                         botIconName={settings.botIcon}
                         primaryColor={settings.primaryColor}
+                        language={settings.language as any}
+                        buttonStyle={{
+                          backgroundColor: settings.buttonColor,
+                          color: settings.buttonTextColor,
+                          borderRadius: settings.buttonStyle === 'pill' ? '9999px' : 
+                                        settings.buttonStyle === 'rounded' ? '0.375rem' : '0'
+                        }}
                       />
                     </div>
                   </CardContent>

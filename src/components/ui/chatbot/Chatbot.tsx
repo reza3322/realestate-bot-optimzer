@@ -6,8 +6,37 @@ import ChatMessage from './ChatMessage';
 import ChatInput from './ChatInput';
 import TypingIndicator from './TypingIndicator';
 import { getChatStyles, applyFontStyle } from './chatStyles';
-import { Message } from './types';
+import { Message, ChatTheme } from './types';
 import { testChatbotResponse } from './responseHandlers';
+
+// Default translations for various languages
+const DEFAULT_TRANSLATIONS = {
+  en: {
+    welcomeMessage: "Hi there! I'm your RealHomeAI assistant. How can I help you today?",
+    placeholderText: "Type your message...",
+    errorMessage: "Sorry, there was an error processing your request."
+  },
+  es: {
+    welcomeMessage: "¡Hola! Soy tu asistente RealHomeAI. ¿Cómo puedo ayudarte hoy?",
+    placeholderText: "Escribe tu mensaje...",
+    errorMessage: "Lo siento, hubo un error al procesar tu solicitud."
+  },
+  fr: {
+    welcomeMessage: "Bonjour! Je suis votre assistant RealHomeAI. Comment puis-je vous aider aujourd'hui?",
+    placeholderText: "Tapez votre message...",
+    errorMessage: "Désolé, une erreur s'est produite lors du traitement de votre demande."
+  },
+  de: {
+    welcomeMessage: "Hallo! Ich bin Ihr RealHomeAI-Assistent. Wie kann ich Ihnen heute helfen?",
+    placeholderText: "Geben Sie Ihre Nachricht ein...",
+    errorMessage: "Entschuldigung, bei der Verarbeitung Ihrer Anfrage ist ein Fehler aufgetreten."
+  },
+  pt: {
+    welcomeMessage: "Olá! Sou seu assistente RealHomeAI. Como posso ajudá-lo hoje?",
+    placeholderText: "Digite sua mensagem...",
+    errorMessage: "Desculpe, ocorreu um erro ao processar sua solicitação."
+  }
+};
 
 interface ChatbotProps {
   apiKey?: string;
@@ -24,6 +53,8 @@ interface ChatbotProps {
   useRealAPI?: boolean;
   botIconName?: string;
   primaryColor?: string;
+  language?: 'en' | 'es' | 'fr' | 'de' | 'pt';
+  buttonStyle?: React.CSSProperties;
 }
 
 const Chatbot = ({
@@ -32,17 +63,26 @@ const Chatbot = ({
   variation = 'default',
   fontStyle = 'default',
   botName = "RealHomeAI Assistant",
-  welcomeMessage = "Hi there! I'm your RealHomeAI assistant. How can I help you today?",
-  placeholderText = "Type your message...",
+  welcomeMessage,
+  placeholderText,
   maxHeight = "400px",
   onSendMessage,
   userId = 'demo-user',
   useRealAPI = false,
   botIconName = 'bot',
-  primaryColor
+  primaryColor,
+  language = 'en',
+  buttonStyle
 }: ChatbotProps) => {
+  // Get translations based on language
+  const translations = DEFAULT_TRANSLATIONS[language] || DEFAULT_TRANSLATIONS.en;
+  
+  // Set default welcome message and placeholder if not provided
+  const defaultWelcomeMessage = welcomeMessage || translations.welcomeMessage;
+  const defaultPlaceholderText = placeholderText || translations.placeholderText;
+  
   const [messages, setMessages] = useState<Message[]>([
-    { role: 'bot', content: welcomeMessage }
+    { role: 'bot', content: defaultWelcomeMessage }
   ]);
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -55,9 +95,9 @@ const Chatbot = ({
   // Update messages if welcome message changes
   useEffect(() => {
     if (messages.length === 1 && messages[0].role === 'bot') {
-      setMessages([{ role: 'bot', content: welcomeMessage }]);
+      setMessages([{ role: 'bot', content: defaultWelcomeMessage }]);
     }
-  }, [welcomeMessage]);
+  }, [defaultWelcomeMessage]);
 
   // Scroll chat messages to bottom without affecting page scroll
   useEffect(() => {
@@ -194,7 +234,7 @@ const Chatbot = ({
         
         {error && (
           <div className="p-2 rounded-md bg-red-50 text-red-500 text-sm">
-            {error}
+            {translations.errorMessage || DEFAULT_TRANSLATIONS.en.errorMessage}
           </div>
         )}
         
@@ -205,7 +245,8 @@ const Chatbot = ({
       <ChatInput 
         inputContainerStyle={styles.inputContainer}
         onSendMessage={handleSendMessage}
-        placeholderText={placeholderText}
+        placeholderText={defaultPlaceholderText}
+        buttonStyle={buttonStyle}
       />
     </div>
   );
