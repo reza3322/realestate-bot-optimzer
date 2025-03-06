@@ -3,13 +3,15 @@ import { corsHeaders } from "../_shared/cors.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.26.0";
 
 serve(async (req) => {
+  console.log("🚀 Function process-pdf-content started");
+
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    // Get request body and parse JSON
+    // Parse request body
     const requestBody = await req.text();
     let parsedBody;
 
@@ -17,23 +19,23 @@ serve(async (req) => {
       parsedBody = JSON.parse(requestBody);
     } catch (parseError) {
       console.error("❌ Error parsing request body:", parseError, "Raw body:", requestBody);
-      return new Response(JSON.stringify({ error: "Invalid JSON format" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 400,
-      });
+      return new Response(
+        JSON.stringify({ error: "Invalid JSON format in request body" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 }
+      );
     }
 
-    const { filePath, userId, contentType } = parsedBody;
+    const { filePath, userId } = parsedBody;
 
-    if (!filePath || !userId || !contentType) {
-      console.error("❌ Missing required parameters:", { filePath, userId, contentType });
-      return new Response(JSON.stringify({ error: "Missing filePath, userId, or contentType" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 400,
-      });
+    console.log(`📂 Received request to process file: ${filePath} for user: ${userId}`);
+
+    if (!filePath || !userId) {
+      console.error("❌ Missing required parameters:", { filePath, userId });
+      return new Response(
+        JSON.stringify({ error: "Missing filePath or userId" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 }
+      );
     }
-
-    console.log(`✅ Processing file at path: ${filePath}, user: ${userId}, type: ${contentType}`);
 
     // Initialize Supabase client
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
@@ -41,82 +43,69 @@ serve(async (req) => {
 
     if (!supabaseUrl || !supabaseKey) {
       console.error("❌ Missing Supabase credentials");
-      return new Response(JSON.stringify({ error: "Server configuration error: Missing Supabase credentials" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 500,
-      });
+      return new Response(
+        JSON.stringify({ error: "Server configuration error: Missing Supabase credentials" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
+      );
     }
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    console.log(`📥 Downloading file from: ${filePath}`);
+    console.log(`📥 Downloading PDF from: ${filePath}`);
 
-    // Download the file from storage
+    // Download the file from Supabase storage
     const { data: fileData, error: downloadError } = await supabase.storage
       .from("chatbot_training_files")
       .download(filePath);
 
-    if (downloadError || !fileData) {
-      console.error("❌ Error downloading file:", downloadError || "No file data found");
-      return new Response(JSON.stringify({ error: "Failed to download file" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 500,
-      });
+    if (downloadError) {
+      console.error("❌ Error downloading file:", downloadError);
+      return new Response(
+        JSON.stringify({ error: "Failed to download file" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
+      );
     }
 
     console.log("✅ File downloaded successfully!");
 
-    // Extract file name and extension
+    // Extract file name
     const fileName = filePath.split("/").pop() || "Unknown File";
-    const fileExt = fileName.split(".").pop()?.toLowerCase() || "";
 
-    let fileContent = "";
+    console.log(`🔍 Extracting text from ${fileName}`);
+
+    let extractedText = "";
 
     try {
-      fileContent = await fileData.text();
+      extractedText = await fileData.text();
     } catch (textError) {
-      console.error("❌ Error extracting text from file:", textError);
-      fileContent = `Unable to extract full content from ${fileName}.`;
+      console.error("❌ Could not extract text from PDF:", textError);
+      extractedText = `Unable to extract content from ${fileName}.`;
     }
 
-    console.log(`📜 Extracted ${fileContent.length} characters from ${fileName}`);
+    console.log(`📜 Extracted ${extractedText.length} characters from ${fileName}`);
 
-    // Generate training entries
-    const entries = [
-      {
-        user_id: userId,
-        content_type: contentType,
-        question: `What information do you have about ${fileName}?`,
-        answer: `The file "${fileName}" contains: ${fileContent.substring(0, 500)}${fileContent.length > 500 ? "..." : ""}`,
-        category: "Imported Content",
-        priority: 5,
-      },
-      {
-        user_id: userId,
-        content_type: contentType,
-        question: `Tell me about ${fileName}`,
-        answer: `Here's a summary: ${fileContent.substring(0, 500)}${fileContent.length > 500 ? "..." : ""}`,
-        category: "Imported Content",
-        priority: 4,
-      },
-    ];
+    // Create chatbot training data entry
+    const chatbotEntry = {
+      user_id: userId,
+      question: `What information is in ${fileName}?`,
+      answer: extractedText.substring(0, 1000), // Limit to 1000 characters
+      category: "PDF Import",
+      priority: 5,
+    };
 
-    console.log(`✅ Preparing to insert ${entries.length} records into chatbot_training_data`);
+    console.log(`📥 Inserting training data into Supabase:`, chatbotEntry);
 
-    // Insert entries into the chatbot_training_data table
+    // Insert into chatbot training database
     const { data: insertData, error: insertError } = await supabase
       .from("chatbot_training_data")
-      .insert(entries)
+      .insert(chatbotEntry)
       .select();
 
     if (insertError) {
       console.error("❌ ERROR INSERTING INTO DATABASE:", insertError);
       return new Response(
         JSON.stringify({ error: "Failed to store training data", details: insertError }),
-        {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-          status: 500,
-        }
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
       );
     }
 
@@ -125,9 +114,8 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
-        message: "File processed successfully",
+        message: "PDF processed successfully",
         data: insertData,
-        entriesCount: entries.length,
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -135,13 +123,10 @@ serve(async (req) => {
       }
     );
   } catch (error) {
-    console.error("❌ Error processing file:", error);
+    console.error("❌ Unexpected error:", error);
 
     return new Response(
-      JSON.stringify({
-        success: false,
-        error: error.message,
-      }),
+      JSON.stringify({ error: "Internal server error", details: error.message }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 500,
