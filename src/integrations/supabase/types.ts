@@ -297,6 +297,7 @@ export type Database = {
           state: string | null
           status: string | null
           title: string
+          type: string | null
           updated_at: string
           user_id: string
           zip: string | null
@@ -316,6 +317,7 @@ export type Database = {
           state?: string | null
           status?: string | null
           title: string
+          type?: string | null
           updated_at?: string
           user_id: string
           zip?: string | null
@@ -335,6 +337,7 @@ export type Database = {
           state?: string | null
           status?: string | null
           title?: string
+          type?: string | null
           updated_at?: string
           user_id?: string
           zip?: string | null
@@ -348,6 +351,48 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      property_imports: {
+        Row: {
+          created_at: string | null
+          id: string
+          log: Json | null
+          records_failed: number | null
+          records_imported: number | null
+          records_total: number
+          source: string
+          source_name: string | null
+          status: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          log?: Json | null
+          records_failed?: number | null
+          records_imported?: number | null
+          records_total?: number
+          source: string
+          source_name?: string | null
+          status: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          log?: Json | null
+          records_failed?: number | null
+          records_imported?: number | null
+          records_total?: number
+          source?: string
+          source_name?: string | null
+          status?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
       }
       scrape_history: {
         Row: {

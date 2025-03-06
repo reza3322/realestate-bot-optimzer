@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '@/components/layout/Navbar';
@@ -17,6 +16,7 @@ import MarketingAutomation from '@/components/dashboard/MarketingAutomation';
 import Integrations from '@/components/dashboard/Integrations';
 import AccountSettings from '@/components/dashboard/AccountSettings';
 import ChatbotSettings from '@/components/dashboard/ChatbotSettings';
+import ChatConversations from "@/components/dashboard/ChatConversations";
 import { PlusCircle, Upload, FileSpreadsheet, Users, Bell, Lock } from 'lucide-react';
 
 const Dashboard = () => {
@@ -170,8 +170,8 @@ const Dashboard = () => {
             </TabsList>
             
             <TabsContent value="overview" className="space-y-6">
-              <QuickStats stats={stats} />
-              <div className="grid md:grid-cols-2 gap-6">
+              <QuickStats userPlan={userPlan} isPremiumFeature={isPremiumFeature} />
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <Card>
                   <CardHeader>
                     <CardTitle>Recent Activity</CardTitle>
@@ -263,6 +263,8 @@ const Dashboard = () => {
                     )}
                   </CardContent>
                 </Card>
+                
+                <ChatConversations />
               </div>
             </TabsContent>
             

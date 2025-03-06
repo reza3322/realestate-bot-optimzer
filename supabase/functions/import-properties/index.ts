@@ -59,7 +59,7 @@ serve(async (req) => {
     for (const property of properties) {
       try {
         // Validate required fields
-        if (!property.title || !property.price || !property.location) {
+        if (!property.title || !property.price || !property.city) {
           failCount++
           errorLog.push(`Property missing required fields: ${JSON.stringify(property)}`)
           continue
@@ -73,7 +73,7 @@ serve(async (req) => {
         
         // Insert the property
         const { error: insertError } = await supabase
-          .from('listings')
+          .from('properties')
           .insert(propertyWithUser)
         
         if (insertError) {
@@ -97,11 +97,11 @@ serve(async (req) => {
         status: 'completed',
         records_imported: successCount,
         records_failed: failCount,
-        log: JSON.stringify({
+        log: {
           message: `Import completed. ${successCount} properties imported, ${failCount} failed.`,
           errors: errorLog,
           timestamp: new Date().toISOString()
-        })
+        }
       })
       .eq('id', importRecord.id)
     
