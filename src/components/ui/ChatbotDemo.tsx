@@ -47,6 +47,7 @@ const ChatbotDemo = ({
         botName={botName}
         botIconName="bot"
         apiKeyStatus="not-set"
+        headerStyle={styles.botBubble}
       />
       
       <div className="flex-1 p-4 overflow-y-auto space-y-4">
