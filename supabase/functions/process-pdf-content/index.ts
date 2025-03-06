@@ -72,7 +72,6 @@ serve(async (req) => {
 
     let fileContent = "";
 
-    // Extract text content from the file based on its type
     try {
       fileContent = await fileData.text();
     } catch (textError) {
@@ -102,58 +101,7 @@ serve(async (req) => {
       },
     ];
 
-    // Parse CSV files into Q&A format
-    if (fileExt === "csv") {
-      try {
-        const lines = fileContent.split("\n");
-        for (let line of lines) {
-          const parts = line.split(",");
-          if (parts.length >= 2) {
-            const question = parts[0].trim();
-            const answer = parts.slice(1).join(",").trim();
-
-            if (question && answer) {
-              entries.push({
-                user_id: userId,
-                content_type: contentType,
-                question,
-                answer,
-                category: "CSV Import",
-                priority: 3,
-              });
-            }
-          }
-        }
-      } catch (csvError) {
-        console.error("❌ Error parsing CSV content:", csvError);
-      }
-    }
-
-    // Parse TXT files into alternating Q&A format
-    if (fileExt === "txt") {
-      try {
-        const lines = fileContent.split("\n").filter((line) => line.trim().length > 0);
-        for (let i = 0; i < lines.length - 1; i += 2) {
-          const question = lines[i].trim();
-          const answer = lines[i + 1]?.trim() || "";
-
-          if (question && answer) {
-            entries.push({
-              user_id: userId,
-              content_type: contentType,
-              question,
-              answer,
-              category: "TXT Import",
-              priority: 3,
-            });
-          }
-        }
-      } catch (txtError) {
-        console.error("❌ Error parsing TXT content:", txtError);
-      }
-    }
-
-    console.log(`✅ Inserting ${entries.length} training entries`);
+    console.log(`✅ Preparing to insert ${entries.length} records into chatbot_training_data`);
 
     // Insert entries into the chatbot_training_data table
     const { data: insertData, error: insertError } = await supabase
@@ -162,11 +110,14 @@ serve(async (req) => {
       .select();
 
     if (insertError) {
-      console.error("❌ Error inserting training data:", insertError);
-      return new Response(JSON.stringify({ error: "Failed to store training data" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 500,
-      });
+      console.error("❌ ERROR INSERTING INTO DATABASE:", insertError);
+      return new Response(
+        JSON.stringify({ error: "Failed to store training data", details: insertError }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 500,
+        }
+      );
     }
 
     console.log("✅ Training data stored successfully!");
