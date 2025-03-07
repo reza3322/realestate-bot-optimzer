@@ -50,6 +50,7 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
   const fetchTrainingData = async () => {
     setLoading(true);
     try {
+      console.log('Fetching training data for userId:', userId, 'contentType:', activeTab);
       const { data, error } = await supabase
         .from('chatbot_training_data')
         .select('*')
@@ -58,9 +59,11 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
         .order('priority', { ascending: false });
       
       if (error) {
+        console.error('Error fetching training data:', error);
         throw error;
       }
       
+      console.log('Fetched training data:', data?.length || 0, 'items');
       setItems(data || []);
     } catch (error) {
       console.error('Error fetching training data:', error);

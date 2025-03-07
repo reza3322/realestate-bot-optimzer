@@ -3,6 +3,8 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { corsHeaders } from "../_shared/cors.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.26.0";
 
+console.log("⚡ Starting process-pdf-content function");
+
 serve(async (req) => {
   console.log("🚀 Function process-pdf-content started");
 
@@ -28,7 +30,7 @@ serve(async (req) => {
 
     const { filePath, userId, contentType = "faqs" } = parsedBody;
 
-    console.log(`📂 Received request to process file: ${filePath} for user: ${userId} with contentType: ${contentType}`);
+    console.log(`📂 PROCESSING REQUEST - filePath: "${filePath}", userId: "${userId}", contentType: "${contentType}"`);
 
     if (!filePath || !userId) {
       console.error("❌ Missing required parameters:", { filePath, userId });
@@ -50,9 +52,10 @@ serve(async (req) => {
       );
     }
 
+    console.log(`✅ Supabase credentials found, initializing client`);
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    console.log(`📥 Downloading file from storage: ${filePath}`);
+    console.log(`📥 Attempting to download file from storage: ${filePath}`);
 
     // Download the file from Supabase storage
     const { data: fileData, error: downloadError } = await supabase.storage
@@ -62,7 +65,7 @@ serve(async (req) => {
     if (downloadError) {
       console.error("❌ Error downloading file:", downloadError);
       return new Response(
-        JSON.stringify({ error: "Failed to download file" }),
+        JSON.stringify({ error: "Failed to download file", details: downloadError }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
       );
     }
@@ -80,15 +83,21 @@ serve(async (req) => {
       // Get file type from fileName
       const fileType = fileName.split('.').pop()?.toLowerCase();
       
+      console.log(`🔍 Processing file of type: ${fileType}`);
+      
       // For different file types, process differently
       if (fileType === 'pdf') {
+        console.log(`🔍 Extracting text from PDF file`);
         // For PDFs, use text() as a simple extraction method
-        // In a production environment, you might want to use a more robust PDF parsing library
         extractedText = await fileData.text();
-      } else if (fileType === 'txt' || fileType === 'csv') {
-        // For text and CSV files, simply get the text content
+      } else if (fileType === 'txt') {
+        console.log(`🔍 Extracting text from TXT file`);
+        extractedText = await fileData.text();
+      } else if (fileType === 'csv') {
+        console.log(`🔍 Extracting text from CSV file`);
         extractedText = await fileData.text();
       } else {
+        console.error(`❌ Unsupported file type: ${fileType}`);
         throw new Error(`Unsupported file type: ${fileType}`);
       }
     } catch (textError) {
@@ -97,6 +106,7 @@ serve(async (req) => {
     }
 
     console.log(`📜 Extracted ${extractedText.length} characters from ${fileName}`);
+    console.log(`📜 First 100 characters: "${extractedText.substring(0, 100)}..."`);
 
     if (extractedText.length === 0) {
       console.error("❌ No text extracted from file");
@@ -116,15 +126,14 @@ serve(async (req) => {
       priority: 5,
     };
 
-    console.log(`📥 Inserting training data into Supabase:`, 
-      JSON.stringify({
-        user_id: chatbotEntry.user_id, 
-        content_type: chatbotEntry.content_type,
-        question: chatbotEntry.question,
-        category: chatbotEntry.category,
-        text_length: chatbotEntry.answer.length
-      })
-    );
+    console.log(`📥 Attempting to insert training data into database table 'chatbot_training_data'`); 
+    console.log(`📥 Data to insert:`, JSON.stringify({
+      user_id: chatbotEntry.user_id,
+      content_type: chatbotEntry.content_type,
+      question: chatbotEntry.question,
+      category: chatbotEntry.category,
+      answer_length: chatbotEntry.answer.length
+    }));
 
     // Insert into chatbot training database
     const { data: insertData, error: insertError } = await supabase
@@ -140,7 +149,7 @@ serve(async (req) => {
       );
     }
 
-    console.log("✅ Training data stored successfully!", insertData);
+    console.log("✅ Training data stored successfully with ID:", insertData?.[0]?.id || "unknown");
 
     return new Response(
       JSON.stringify({
@@ -155,7 +164,7 @@ serve(async (req) => {
       }
     );
   } catch (error) {
-    console.error("❌ Unexpected error:", error);
+    console.error("❌ Unexpected error in process-pdf-content function:", error);
 
     return new Response(
       JSON.stringify({ error: "Internal server error", details: error.message }),
