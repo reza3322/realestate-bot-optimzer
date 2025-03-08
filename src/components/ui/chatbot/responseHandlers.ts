@@ -1,6 +1,5 @@
 
 import { Message, ChatbotResponse } from './types';
-import { supabase } from '@/lib/supabase';
 
 // Demo responses for testing the chatbot
 export const demoResponses = [
@@ -47,9 +46,9 @@ export const testChatbotResponse = async (
   try {
     console.log(`Sending message to chatbot API: "${message}" for user: ${userId}`);
     
-    // Get Supabase URL and key from environment or configuration
-    const supabaseUrl = process.env.SUPABASE_URL || 'https://ckgaqkbsnrvccctqxsqv.supabase.co';
-    const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNrZ2Fxa2JzbnJ2Y2NjdHF4c3F2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDEwMTEyODksImV4cCI6MjA1NjU4NzI4OX0.z62BR5psK8FBR5lfqbnpbFMfQLKgzFCisqDiuWg4MKM';
+    // Hardcoded values instead of using process.env which isn't available in browser
+    const supabaseUrl = 'https://ckgaqkbsnrvccctqxsqv.supabase.co';
+    const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNrZ2Fxa2JzbnJ2Y2NjdHF4c3F2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDEwMTEyODksImV4cCI6MjA1NjU4NzI4OX0.z62BR5psK8FBR5lfqbnpbFMfQLKgzFCisqDiuWg4MKM';
 
     if (!supabaseUrl) {
       console.error('Supabase URL is undefined');
