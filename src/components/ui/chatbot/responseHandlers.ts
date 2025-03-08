@@ -70,11 +70,75 @@ async function findRelevantTrainingData(
   question: string
 ): Promise<{ answer: string; source: 'training' } | null> {
   try {
-    // Fetch matching training data using basic text search
-    // In a production system, you'd use vector embeddings or a more sophisticated matching system
-    const searchableQuestion = question.toLowerCase();
+    // Improved text search algorithm to better match uploaded file content
+    console.log(`Searching for training data matches for: "${question}"`);
     
-    // First, try to find an exact match in the training data
+    // Normalize the search query
+    const searchableQuestion = question.toLowerCase().trim();
+    
+    // First, try to find direct matches in file uploads or other high-priority content
+    const { data: fileMatches, error: fileMatchError } = await supabase
+      .from('chatbot_training_data')
+      .select('question, answer, priority, category')
+      .eq('user_id', userId)
+      .eq('category', 'File Import')  // Focus on file imports first
+      .order('priority', { ascending: false })
+      .limit(3);
+    
+    if (fileMatchError) {
+      console.error('Error searching file training data:', fileMatchError);
+    } else if (fileMatches && fileMatches.length > 0) {
+      console.log(`Found ${fileMatches.length} file-based training items to check`);
+      
+      // Since files often have generic questions like "What information is in filename.pdf?",
+      // we'll search within the answer text rather than just the question
+      for (const item of fileMatches) {
+        // Check if the question is asking about what's in a file or document
+        const isFileQuery = searchableQuestion.includes('file') || 
+                           searchableQuestion.includes('document') || 
+                           searchableQuestion.includes('pdf') ||
+                           searchableQuestion.includes('txt') ||
+                           searchableQuestion.includes('what') && (
+                             searchableQuestion.includes('contain') || 
+                             searchableQuestion.includes('say') || 
+                             searchableQuestion.includes('in')
+                           );
+                           
+        if (isFileQuery) {
+          console.log('Query appears to be asking about file contents, returning file data');
+          return {
+            answer: item.answer,
+            source: 'training'
+          };
+        }
+        
+        // Extract meaningful keywords from the question (excluding common words)
+        const keywords = searchableQuestion
+          .split(/\s+/)
+          .filter(word => 
+            word.length > 3 && 
+            !['what', 'where', 'when', 'how', 'why', 'who', 'is', 'are', 'the', 'a', 'an', 'in', 'on', 'at', 'to', 'for', 'with'].includes(word)
+          );
+        
+        // Search for these keywords in the answer text
+        if (keywords.length > 0) {
+          const keywordMatches = keywords.filter(keyword => 
+            item.answer.toLowerCase().includes(keyword)
+          );
+          
+          // If multiple keywords match or a significant portion match, return this answer
+          if (keywordMatches.length >= 2 || (keywords.length === 1 && keywordMatches.length === 1)) {
+            console.log(`Found keyword matches in file data: ${keywordMatches.join(', ')}`);
+            return {
+              answer: item.answer,
+              source: 'training'
+            };
+          }
+        }
+      }
+    }
+    
+    // If no file matches, try exact/fuzzy matching with all training data
     const { data: exactMatches, error: exactMatchError } = await supabase
       .from('chatbot_training_data')
       .select('question, answer, priority')
@@ -90,6 +154,7 @@ async function findRelevantTrainingData(
     
     // If we found matches, return the highest priority one
     if (exactMatches && exactMatches.length > 0) {
+      console.log(`Found ${exactMatches.length} training matches`);
       return {
         answer: exactMatches[0].answer,
         source: 'training'
@@ -119,6 +184,7 @@ async function findRelevantTrainingData(
     
     // If we found word-based matches, return the highest priority one
     if (wordMatches && wordMatches.length > 0) {
+      console.log(`Found ${wordMatches.length} word-based matches`);
       return {
         answer: wordMatches[0].answer,
         source: 'training'
@@ -126,6 +192,7 @@ async function findRelevantTrainingData(
     }
     
     // No matches found in training data
+    console.log('No relevant training data found');
     return null;
     
   } catch (error) {
@@ -243,6 +310,7 @@ export async function testChatbotResponse(
     };
     
     // First, check if we have relevant training data for this question
+    console.log('Searching for relevant training data...');
     const trainingDataMatch = await findRelevantTrainingData(userId, message);
     
     if (trainingDataMatch) {
