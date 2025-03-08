@@ -28,81 +28,134 @@ const QuickStats = ({ stats, userPlan, isPremiumFeature, userId }: QuickStatsPro
     featuredProperties: stats?.featuredProperties || 0
   });
   const [loading, setLoading] = useState<boolean>(true);
+  const [lastUpdateTime, setLastUpdateTime] = useState<Date>(new Date());
 
+  // Set up real-time subscription to relevant tables
   useEffect(() => {
-    const fetchStats = async () => {
-      if (!userId) return;
-      
-      setLoading(true);
-      try {
-        // Get total leads
-        const { data: leads, error: leadsError } = await supabase
-          .from('leads')
-          .select('count')
-          .eq('user_id', userId)
-          .single();
-        
-        if (leadsError && leadsError.code !== 'PGRST116') {
-          console.error('Error fetching leads count:', leadsError);
-        }
-        
-        // Get chatbot interactions
-        const { data: interactions, error: interactionsError } = await supabase
-          .from('chatbot_conversations')
-          .select('count')
-          .eq('user_id', userId)
-          .single();
-        
-        if (interactionsError && interactionsError.code !== 'PGRST116') {
-          console.error('Error fetching chatbot interactions count:', interactionsError);
-        }
-        
-        // Get active conversations (grouped by conversation_id)
-        const { data: conversations, error: conversationsError } = await supabase
-          .from('chatbot_conversations')
-          .select('conversation_id')
-          .eq('user_id', userId);
-        
-        if (conversationsError) {
-          console.error('Error fetching active conversations:', conversationsError);
-        }
-        
-        // Get unique conversation IDs
-        const uniqueConversations = conversations 
-          ? [...new Set(conversations.map(conv => conv.conversation_id))]
-          : [];
-        
-        // Get total properties
-        const { data: properties, error: propertiesError } = await supabase
-          .from('properties')
-          .select('featured')
-          .eq('user_id', userId);
-        
-        if (propertiesError) {
-          console.error('Error fetching properties:', propertiesError);
-        }
-        
-        // Calculate featured properties
-        const featuredProperties = properties 
-          ? properties.filter(prop => prop.featured).length
-          : 0;
-        
-        setRealStats({
-          totalLeads: leads?.count || 0,
-          activeConversations: uniqueConversations?.length || 0,
-          chatbotInteractions: interactions?.count || 0,
-          totalProperties: properties?.length || 0,
-          featuredProperties
-        });
-      } catch (error) {
-        console.error('Error fetching stats:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
+    if (!userId) return;
     
-    fetchStats();
+    const leadsChannel = supabase
+      .channel('realtime-leads')
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'leads', filter: `user_id=eq.${userId}` },
+        () => fetchData()
+      )
+      .subscribe();
+      
+    const chatbotChannel = supabase
+      .channel('realtime-chatbot')
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'chatbot_conversations', filter: `user_id=eq.${userId}` },
+        () => fetchData()
+      )
+      .subscribe();
+      
+    const propertiesChannel = supabase
+      .channel('realtime-properties')
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'properties', filter: `user_id=eq.${userId}` },
+        () => fetchData()
+      )
+      .subscribe();
+    
+    // Initial data fetch
+    fetchData();
+    
+    // Cleanup subscriptions
+    return () => {
+      supabase.removeChannel(leadsChannel);
+      supabase.removeChannel(chatbotChannel);
+      supabase.removeChannel(propertiesChannel);
+    };
   }, [userId]);
+
+  // Also update when stats change externally
+  useEffect(() => {
+    if (stats) {
+      setRealStats(stats);
+    }
+  }, [stats]);
+
+  const fetchData = async () => {
+    if (!userId) return;
+    
+    setLoading(true);
+    try {
+      console.log("QuickStats: Fetching fresh data...");
+      
+      // Get total leads
+      const { count: leadsCount, error: leadsError } = await supabase
+        .from('leads')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId);
+      
+      if (leadsError && leadsError.code !== 'PGRST116') {
+        console.error('Error fetching leads count:', leadsError);
+      }
+      
+      // Get chatbot interactions
+      const { count: interactionsCount, error: interactionsError } = await supabase
+        .from('chatbot_conversations')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId);
+      
+      if (interactionsError && interactionsError.code !== 'PGRST116') {
+        console.error('Error fetching chatbot interactions count:', interactionsError);
+      }
+      
+      // Get active conversations (grouped by conversation_id)
+      const { data: conversations, error: conversationsError } = await supabase
+        .from('chatbot_conversations')
+        .select('conversation_id')
+        .eq('user_id', userId);
+      
+      if (conversationsError) {
+        console.error('Error fetching active conversations:', conversationsError);
+      }
+      
+      // Get unique conversation IDs
+      const uniqueConversations = conversations 
+        ? [...new Set(conversations.map(conv => conv.conversation_id))].length
+        : 0;
+      
+      // Get total properties
+      const { data: properties, error: propertiesError } = await supabase
+        .from('properties')
+        .select('featured')
+        .eq('user_id', userId);
+      
+      if (propertiesError) {
+        console.error('Error fetching properties:', propertiesError);
+      }
+      
+      // Calculate featured properties
+      const featuredProperties = properties 
+        ? properties.filter(prop => prop.featured).length
+        : 0;
+        
+      console.log("Stats fetched successfully:", {
+        totalLeads: leadsCount || 0,
+        activeConversations: uniqueConversations,
+        chatbotInteractions: interactionsCount || 0,
+        totalProperties: properties?.length || 0,
+        featuredProperties
+      });
+      
+      setRealStats({
+        totalLeads: leadsCount || 0,
+        activeConversations: uniqueConversations,
+        chatbotInteractions: interactionsCount || 0,
+        totalProperties: properties?.length || 0,
+        featuredProperties
+      });
+      
+      setLastUpdateTime(new Date());
+    } catch (error) {
+      console.error('Error fetching stats:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const calculatePercentageChange = (value: number): string => {
     // In a real application, you would compare with previous period data
@@ -113,7 +166,7 @@ const QuickStats = ({ stats, userPlan, isPremiumFeature, userId }: QuickStatsPro
   };
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+    <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-sm font-medium">Total Leads</CardTitle>

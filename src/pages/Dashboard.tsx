@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '@/components/layout/Navbar';
@@ -35,6 +36,58 @@ const Dashboard = () => {
   const [activities, setActivities] = useState([]);
   const navigate = useNavigate();
 
+  // Set up real-time subscriptions
+  useEffect(() => {
+    let leadsSubscription;
+    let conversationsSubscription;
+    let propertiesSubscription;
+
+    const setupRealtimeSubscriptions = async () => {
+      if (!user) return;
+
+      // Subscribe to leads changes
+      leadsSubscription = supabase
+        .channel('leads-changes')
+        .on('postgres_changes', 
+          { event: '*', schema: 'public', table: 'leads', filter: `user_id=eq.${user.id}` },
+          () => fetchStats(user.id)
+        )
+        .subscribe();
+
+      // Subscribe to chatbot_conversations changes  
+      conversationsSubscription = supabase
+        .channel('conversations-changes')
+        .on('postgres_changes', 
+          { event: '*', schema: 'public', table: 'chatbot_conversations', filter: `user_id=eq.${user.id}` },
+          () => {
+            fetchStats(user.id);
+            fetchActivities(user.id);
+          }
+        )
+        .subscribe();
+
+      // Subscribe to properties changes
+      propertiesSubscription = supabase
+        .channel('properties-changes')
+        .on('postgres_changes', 
+          { event: '*', schema: 'public', table: 'properties', filter: `user_id=eq.${user.id}` },
+          () => fetchStats(user.id)
+        )
+        .subscribe();
+    };
+
+    if (user) {
+      setupRealtimeSubscriptions();
+    }
+
+    // Clean up subscriptions on unmount
+    return () => {
+      if (leadsSubscription) supabase.removeChannel(leadsSubscription);
+      if (conversationsSubscription) supabase.removeChannel(conversationsSubscription);
+      if (propertiesSubscription) supabase.removeChannel(propertiesSubscription);
+    };
+  }, [user]);
+
   useEffect(() => {
     const getUser = async () => {
       try {
@@ -66,7 +119,6 @@ const Dashboard = () => {
           }
           
           await fetchStats(session.user.id);
-          
           await fetchActivities(session.user.id);
         }
       } catch (error) {
@@ -82,46 +134,54 @@ const Dashboard = () => {
   
   const fetchStats = async (userId) => {
     try {
+      console.log("Fetching updated stats...");
+      
       // Get leads
       const { data: leadsData } = await getLeads();
       
       // Get properties
       const { data: propertiesData } = await getProperties();
       
-      // Get chatbot interactions - fix the count issue
-      const { count: chatCount, error: chatError } = await supabase
-        .from('chatbot_conversations')
-        .select('conversation_id', { count: 'exact', head: true })
-        .eq('user_id', userId);
-        
-      if (chatError) {
-        console.error('Error fetching chatbot interactions:', chatError);
-      }
-      
-      // Count unique conversation IDs
+      // Get chatbot interactions - count unique conversations
       const { data: conversationsData, error: conversationsError } = await supabase
         .from('chatbot_conversations')
         .select('conversation_id')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false });
+        .eq('user_id', userId);
         
       if (conversationsError) {
         console.error('Error fetching conversations:', conversationsError);
       }
       
-      // Count unique conversation IDs
+      // Count total messages for interaction count
+      const { count: totalInteractions, error: countError } = await supabase
+        .from('chatbot_conversations')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId);
+        
+      if (countError) {
+        console.error('Error counting interactions:', countError);
+      }
+      
+      // Count unique conversation IDs for active conversations
       const uniqueConversations = conversationsData ? 
         [...new Set(conversationsData.map(c => c.conversation_id))].length : 0;
       
       const totalLeads = leadsData?.length || 0;
       const totalProperties = propertiesData?.length || 0;
       const featuredProperties = propertiesData?.filter(p => p.featured)?.length || 0;
-      const totalInteractions = chatCount || 0;
       
       setStats({
         totalLeads,
         activeConversations: uniqueConversations,
-        chatbotInteractions: totalInteractions,
+        chatbotInteractions: totalInteractions || 0,
+        totalProperties,
+        featuredProperties
+      });
+      
+      console.log("Stats updated:", {
+        totalLeads,
+        activeConversations: uniqueConversations,
+        chatbotInteractions: totalInteractions || 0,
         totalProperties,
         featuredProperties
       });
@@ -205,18 +265,18 @@ const Dashboard = () => {
     <div className="min-h-screen flex flex-col bg-background text-foreground">
       <Navbar />
       
-      <div className="flex flex-1">
+      <div className="flex flex-1 flex-col md:flex-row">
         <DashboardSidebar activeTab={activeTab} setActiveTab={setActiveTab} />
         
-        <main className="flex-1 p-6 overflow-auto">
-          <header className="pb-6 mb-6">
-            <h1 className="text-3xl font-bold">Dashboard</h1>
+        <main className="flex-1 p-4 md:p-6 overflow-auto">
+          <header className="pb-4 md:pb-6 mb-4 md:mb-6">
+            <h1 className="text-2xl md:text-3xl font-bold">Dashboard</h1>
             <p className="text-muted-foreground">
               Welcome back, {firstName}!
             </p>
           </header>
           
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4 md:space-y-6">
             <TabsList className="hidden">
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="properties">Properties</TabsTrigger>
@@ -227,11 +287,11 @@ const Dashboard = () => {
               <TabsTrigger value="settings">Settings</TabsTrigger>
             </TabsList>
             
-            <TabsContent value="overview" className="space-y-6">
-              <QuickStats stats={stats} userPlan={userPlan} isPremiumFeature={isPremiumFeature} />
+            <TabsContent value="overview" className="space-y-4 md:space-y-6">
+              <QuickStats stats={stats} userPlan={userPlan} isPremiumFeature={isPremiumFeature} userId={user.id} />
               
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <Card>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                <Card className="col-span-1">
                   <CardHeader>
                     <CardTitle>Recent Activity</CardTitle>
                     <CardDescription>Latest updates on your platform</CardDescription>
@@ -241,89 +301,95 @@ const Dashboard = () => {
                   </CardContent>
                 </Card>
                 
-                <Card>
+                <Card className="col-span-1">
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <div>
                       <CardTitle>Quick Actions</CardTitle>
                       <CardDescription>Common tasks you might want to perform</CardDescription>
                     </div>
                   </CardHeader>
-                  <CardContent className="grid gap-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <Button 
-                        onClick={() => setActiveTab('properties')} 
-                        className="flex justify-start items-center"
-                        variant="outline" 
-                        size="lg">
-                        <PlusCircle className="mr-2 h-4 w-4" />
-                        Add New Property
-                      </Button>
+                  <CardContent>
+                    <div className="grid gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <Button 
+                          onClick={() => setActiveTab('properties')} 
+                          className="flex justify-start items-center h-auto py-2"
+                          variant="outline" 
+                          size="sm">
+                          <PlusCircle className="mr-2 h-4 w-4 flex-shrink-0" />
+                          <span className="truncate">Add Property</span>
+                        </Button>
+                        
+                        <Button 
+                          onClick={() => setActiveTab('properties')} 
+                          className="flex justify-start items-center h-auto py-2"
+                          variant="outline" 
+                          size="sm">
+                          <Upload className="mr-2 h-4 w-4 flex-shrink-0" />
+                          <span className="truncate">Upload Images</span>
+                        </Button>
+                        
+                        <Button 
+                          onClick={() => setActiveTab('properties')} 
+                          className="flex justify-start items-center h-auto py-2"
+                          variant="outline" 
+                          size="sm">
+                          <FileSpreadsheet className="mr-2 h-4 w-4 flex-shrink-0" />
+                          <span className="truncate">Import Properties</span>
+                        </Button>
+                        
+                        <Button 
+                          onClick={() => setActiveTab('leads')} 
+                          className="flex justify-start items-center h-auto py-2"
+                          variant="outline" 
+                          size="sm">
+                          <Users className="mr-2 h-4 w-4 flex-shrink-0" />
+                          <span className="truncate">View Leads</span>
+                        </Button>
+                        
+                        <Button 
+                          onClick={() => setActiveTab('marketing')} 
+                          className="flex justify-start items-center h-auto py-2"
+                          variant={isPremiumFeature('professional') ? "outline" : "outline"}
+                          size="sm">
+                          {isPremiumFeature('professional') && <Lock className="mr-2 h-4 w-4 text-muted-foreground flex-shrink-0" />}
+                          {!isPremiumFeature('professional') && <Bell className="mr-2 h-4 w-4 flex-shrink-0" />}
+                          <span className="truncate">
+                            {isPremiumFeature('professional') ? 'AI Follow-ups (Pro)' : 'AI Follow-ups'}
+                          </span>
+                        </Button>
+                        
+                        <Button 
+                          onClick={() => setActiveTab('settings')} 
+                          className="flex justify-start items-center h-auto py-2"
+                          variant="outline" 
+                          size="sm">
+                          {isPremiumFeature('professional') ? (
+                            <>
+                              <Lock className="mr-2 h-4 w-4 text-muted-foreground flex-shrink-0" />
+                              <span className="truncate">Team (Pro)</span>
+                            </>
+                          ) : (
+                            <>
+                              <Users className="mr-2 h-4 w-4 flex-shrink-0" />
+                              <span className="truncate">Manage Team</span>
+                            </>
+                          )}
+                        </Button>
+                      </div>
                       
-                      <Button 
-                        onClick={() => setActiveTab('properties')} 
-                        className="flex justify-start items-center"
-                        variant="outline" 
-                        size="lg">
-                        <Upload className="mr-2 h-4 w-4" />
-                        Upload Images
-                      </Button>
-                      
-                      <Button 
-                        onClick={() => setActiveTab('properties')} 
-                        className="flex justify-start items-center"
-                        variant="outline" 
-                        size="lg">
-                        <FileSpreadsheet className="mr-2 h-4 w-4" />
-                        Import Properties
-                      </Button>
-                      
-                      <Button 
-                        onClick={() => setActiveTab('leads')} 
-                        className="flex justify-start items-center"
-                        variant="outline" 
-                        size="lg">
-                        <Users className="mr-2 h-4 w-4" />
-                        View All Leads
-                      </Button>
-                      
-                      <Button 
-                        onClick={() => setActiveTab('marketing')} 
-                        className="flex justify-start items-center"
-                        variant={isPremiumFeature('professional') ? "outline" : "outline"}
-                        size="lg">
-                        {isPremiumFeature('professional') && <Lock className="mr-2 h-4 w-4 text-muted-foreground" />}
-                        {!isPremiumFeature('professional') && <Bell className="mr-2 h-4 w-4" />}
-                        {isPremiumFeature('professional') ? 'AI Follow-ups (Pro)' : 'Setup AI Follow-ups'}
-                      </Button>
-                      
-                      <Button 
-                        onClick={() => setActiveTab('settings')} 
-                        className="flex justify-start items-center"
-                        variant="outline" 
-                        size="lg">
-                        {isPremiumFeature('professional') ? (
-                          <>
-                            <Lock className="mr-2 h-4 w-4 text-muted-foreground" />
-                            Invite Team (Pro)
-                          </>
-                        ) : (
-                          <>
-                            <Users className="mr-2 h-4 w-4" />
-                            Manage Team
-                          </>
-                        )}
-                      </Button>
+                      {userPlan === 'starter' && (
+                        <Button onClick={() => setActiveTab('settings')} variant="default" size="sm" className="mt-2">
+                          Upgrade to Professional
+                        </Button>
+                      )}
                     </div>
-                    
-                    {userPlan === 'starter' && (
-                      <Button onClick={() => setActiveTab('settings')} variant="default">
-                        Upgrade to Professional
-                      </Button>
-                    )}
                   </CardContent>
                 </Card>
                 
-                <ChatConversations />
+                <Card className="col-span-1 lg:col-span-1">
+                  <ChatConversations />
+                </Card>
               </div>
             </TabsContent>
             

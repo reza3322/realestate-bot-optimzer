@@ -1,22 +1,16 @@
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.36.0';
+import { OpenAI } from 'https://esm.sh/openai@4.11.1';
+import { corsHeaders } from "../_shared/cors.ts";
 
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1'
-import { OpenAI } from 'https://esm.sh/openai@4.11.1'
+Deno.serve(async (req) => {
+  console.log("📥 Chatbot function received request");
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
-
-serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders })
+    return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    console.log('📥 Chatbot function received request');
-    
     // Get environment variables
     const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
@@ -51,15 +45,17 @@ serve(async (req) => {
     // Initialize Supabase client
     const supabase = createClient(supabaseUrl, supabaseKey);
     
-    // First, check if there's a matching training data response
+    // Variables for response tracking
     let response = null;
     let responseSource = null;
     let leadInfo = visitorInfo || {};
     let shouldCollectLeadInfo = false;
     let isQualifyingConversation = false;
+    let relevantTrainingData = [];
     
+    // Step 1: Find relevant training data for this user
     if (userId) {
-      console.log('🔍 Checking for matching training data...');
+      console.log('🔍 Searching for relevant training data...');
       try {
         const { data: trainingMatches, error: trainingError } = await supabase
           .from('chatbot_training_data')
@@ -72,40 +68,83 @@ serve(async (req) => {
         } else if (trainingMatches && trainingMatches.length > 0) {
           console.log(`✅ Found ${trainingMatches.length} training entries to check`);
           
-          // Find the closest match based on the question content
-          const messageWords = message.toLowerCase().split(' ');
-          let bestMatch = null;
-          let highestMatchScore = 0;
-
-          for (const training of trainingMatches) {
-            const questionWords = training.question.toLowerCase().split(' ');
-            let matchScore = 0;
+          // Enhanced NLP matching: Convert message to vector of terms
+          const messageTerms = message.toLowerCase()
+            .replace(/[^\w\s]/g, '') // Remove punctuation
+            .split(/\s+/) // Split on whitespace
+            .filter(word => word.length > 2); // Filter out short words
+          
+          // Calculate relevance scores for each training item
+          const scoredMatches = trainingMatches.map(item => {
+            // Split question into terms for comparison
+            const questionTerms = item.question.toLowerCase()
+              .replace(/[^\w\s]/g, '')
+              .split(/\s+/)
+              .filter(word => word.length > 2);
             
-            // Count how many words from the message appear in the training question
-            for (const word of messageWords) {
-              if (word.length > 3 && questionWords.includes(word)) {
-                matchScore++;
+            // Calculate term frequency overlap
+            let matchScore = 0;
+            let exactPhraseBonus = 0;
+            
+            // Check for term matches
+            for (const term of messageTerms) {
+              if (questionTerms.includes(term)) {
+                matchScore += 1;
+              }
+              // Extra points for key real estate terms
+              if (['property', 'house', 'price', 'buy', 'sell', 'rent', 'mortgage', 'bedroom', 'bathroom'].includes(term)) {
+                matchScore += 0.5;
               }
             }
             
-            // Also check if the whole message is contained in the question
-            if (training.question.toLowerCase().includes(message.toLowerCase())) {
-              matchScore += 3; // Give extra weight to full matches
+            // Check for exact phrase matches (stronger signal)
+            if (item.question.toLowerCase().includes(message.toLowerCase())) {
+              exactPhraseBonus = 3;
+            } else {
+              // Check for partial phrase matches
+              const messagePhrases = splitIntoPhrases(message.toLowerCase());
+              for (const phrase of messagePhrases) {
+                if (phrase.length > 5 && item.question.toLowerCase().includes(phrase)) {
+                  exactPhraseBonus += 1;
+                }
+              }
             }
             
-            if (matchScore > highestMatchScore) {
-              highestMatchScore = matchScore;
-              bestMatch = training;
-            }
-          }
+            // Apply the priority multiplier from the training data
+            const priorityMultiplier = 1 + (item.priority || 0) / 10;
+            
+            // Final score calculation
+            const finalScore = (matchScore + exactPhraseBonus) * priorityMultiplier;
+            
+            return {
+              ...item,
+              relevanceScore: finalScore
+            };
+          });
           
-          // If we found a good match, use it
-          if (bestMatch && (highestMatchScore > 2 || bestMatch.question.toLowerCase().includes(message.toLowerCase()))) {
-            console.log(`🎯 Using training data match: "${bestMatch.question}" with score ${highestMatchScore}`);
-            response = bestMatch.answer;
-            responseSource = 'training';
-          } else {
-            console.log('❌ No good match found in training data. Highest score:', highestMatchScore);
+          // Sort by relevance score and take top matches
+          const relevantMatches = scoredMatches
+            .filter(item => item.relevanceScore > 1) // Only consider reasonably relevant items
+            .sort((a, b) => b.relevanceScore - a.relevanceScore)
+            .slice(0, 3); // Take top 3 most relevant items
+          
+          console.log(`🔍 Found ${relevantMatches.length} relevant training items`);
+          
+          if (relevantMatches.length > 0) {
+            // If we have a highly relevant match, use it directly
+            const bestMatch = relevantMatches[0];
+            if (bestMatch.relevanceScore > 5) {
+              console.log(`🎯 Using training data match: "${bestMatch.question}" with score ${bestMatch.relevanceScore}`);
+              response = bestMatch.answer;
+              responseSource = 'training';
+            } else {
+              // Otherwise, collect relevant training data to enhance the AI response
+              relevantTrainingData = relevantMatches.map(item => ({
+                question: item.question,
+                answer: item.answer
+              }));
+              console.log(`📚 Using ${relevantTrainingData.length} training items to enhance AI response`);
+            }
           }
         } else {
           console.log('❌ No training data found for user');
@@ -115,9 +154,9 @@ serve(async (req) => {
       }
     }
 
-    // Check if we should collect lead info based on previous messages
+    // Check if this is a qualifying conversation to collect lead info
     if (previousMessages && Array.isArray(previousMessages)) {
-      // Check if this is a qualifying conversation
+      // Check for qualifying keywords in the conversation
       const qualifyingKeywords = ['buy', 'purchase', 'looking for', 'interested in', 'property', 'house', 'apartment', 'home'];
       
       // Check user messages for qualifying keywords
@@ -147,7 +186,7 @@ serve(async (req) => {
 
     // Extract lead info from the current message
     if (isQualifyingConversation) {
-      // Try to extract an email address
+      // Extract email
       const emailRegex = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/;
       const emailMatch = message.match(emailRegex);
       if (emailMatch && !leadInfo.email) {
@@ -155,7 +194,7 @@ serve(async (req) => {
         console.log('📧 Extracted email from message:', leadInfo.email);
       }
       
-      // Try to extract a budget figure
+      // Extract budget
       const budgetRegex = /\b(\$|€|£)?(\d{1,3}(,\d{3})*(\.\d+)?|\d+)(k|K|thousand|million|M)?\b/;
       const budgetMatch = message.match(budgetRegex);
       if (budgetMatch && !leadInfo.budget) {
@@ -169,15 +208,14 @@ serve(async (req) => {
                         previousMessages[previousMessages.length - 1].content.includes('name');
       
       if (nameCheck && !leadInfo.name && message.length < 50) {
-        // If the bot just asked for a name and the reply is short, it's likely a name
         leadInfo.name = message;
         console.log('👤 Extracted name from message:', leadInfo.name);
       }
     }
 
-    // If no match in training data, use OpenAI
+    // If no direct match in training data, use enhanced OpenAI
     if (!response) {
-      console.log('🤖 Generating response with OpenAI');
+      console.log('🤖 Generating enhanced response with OpenAI');
       
       try {
         // Create system message with lead qualification instructions if needed
@@ -189,11 +227,21 @@ serve(async (req) => {
           systemPrompt += "Also evaluate their interest level and urgency to buy or sell on a scale from 1-10 based on their responses. ";
           systemPrompt += "Be natural and friendly, not robotic or formulaic. ";
         } else {
-          systemPrompt += "Provide helpful, concise, and friendly responses. If asked about properties, ";
-          systemPrompt += "provide specific details when available. If unsure, suggest checking with a real estate agent.";
+          systemPrompt += "Provide helpful, concise, and friendly responses about real estate. ";
+          
+          // Add relevant training data to the system prompt
+          if (relevantTrainingData.length > 0) {
+            systemPrompt += "\n\nHere is some specific information provided by the real estate agent that you should prioritize in your answers:\n\n";
+            
+            for (const item of relevantTrainingData) {
+              systemPrompt += `Question: ${item.question}\nAnswer: ${item.answer}\n\n`;
+            }
+            
+            systemPrompt += "When the user's question relates to the information above, make sure to incorporate those details into your response. If their question isn't related to the above information, you can provide general real estate knowledge.";
+          }
         }
         
-        console.log('📋 System prompt:', systemPrompt);
+        console.log('📋 System prompt length:', systemPrompt.length);
 
         // Create messages array with system prompt and user message
         const messages = [
@@ -203,10 +251,16 @@ serve(async (req) => {
         
         // Add previous messages for context if available
         if (previousMessages && Array.isArray(previousMessages) && previousMessages.length > 0) {
-          for (const prevMsg of previousMessages.slice(-4)) { // Add up to 4 previous messages
-            const role = prevMsg.role === 'user' ? 'user' : 'assistant';
-            messages.splice(1, 0, { role, content: prevMsg.content });
-          }
+          // Format previous messages for the ChatGPT API
+          const contextMessages = previousMessages
+            .slice(-6) // Use last 6 messages for context
+            .map(msg => ({
+              role: msg.role === 'user' ? 'user' : 'assistant',
+              content: msg.content
+            }));
+          
+          // Insert contextMessages before the current user message
+          messages.splice(1, 0, ...contextMessages);
         }
 
         console.log('🔄 Sending request to OpenAI...');
@@ -382,3 +436,13 @@ serve(async (req) => {
     );
   }
 });
+
+// Helper function to split text into meaningful phrases
+function splitIntoPhrases(text) {
+  // Simple splitting on punctuation and conjunctions
+  return text
+    .replace(/[,;:.!?]/g, '#')
+    .split('#')
+    .map(phrase => phrase.trim())
+    .filter(phrase => phrase.length > 0);
+}
