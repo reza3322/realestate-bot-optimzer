@@ -1,15 +1,8 @@
-
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.36.0";
-import { corsHeaders } from "../_shared/cors.ts";
-
-// ✅ Use Deno-compatible PDF.js module
-import { getDocument } from "https://deno.land/x/pdfjs@0.1.1/mod.ts";
-
-interface RequestBody {
-  filePath: string;
-  userId: string;
-  contentType: string;
-  fileName: string;
+export default async function handler(req: Request) {
+  return new Response(JSON.stringify({ success: true, message: "Function overwritten!" }), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
 }
 
 // ✅ Handle CORS Preflight Requests
@@ -196,3 +189,5 @@ async function extractPdfText(pdfArrayBuffer: ArrayBuffer): Promise<string> {
     throw new Error(`Failed to extract text from PDF: ${error.message}`);
   }
 }
+
+>>>>>>> 0fefcb1151c7cac032409aea26c21b31242a0416
