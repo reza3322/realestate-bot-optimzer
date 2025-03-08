@@ -63,39 +63,52 @@ Deno.serve(async (req) => {
     const bucketExists = buckets.some(bucket => bucket.name === "chatbot_training_files");
     if (!bucketExists) {
       console.log("🔧 Creating 'chatbot_training_files' bucket...");
-      const { error: createBucketError } = await supabase
-        .storage
-        .createBucket("chatbot_training_files", {
-          public: false,
-          fileSizeLimit: 5242880, // 5MB limit
-        });
-      
-      if (createBucketError) {
-        console.error("❌ Error creating bucket:", createBucketError);
-        return new Response(
-          JSON.stringify({ success: false, error: "Failed to create storage bucket", details: createBucketError }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+      try {
+        const { error: createBucketError } = await supabase
+          .storage
+          .createBucket("chatbot_training_files", {
+            public: false,
+            fileSizeLimit: 5242880, // 5MB limit
+          });
+        
+        if (createBucketError && createBucketError.message !== "The resource already exists") {
+          console.error("❌ Error creating bucket:", createBucketError);
+          return new Response(
+            JSON.stringify({ success: false, error: "Failed to create storage bucket", details: createBucketError }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        
+        // If bucket was created successfully, add policies
+        // This step is only needed for newly created buckets
+        if (!createBucketError) {
+          // Add bucket policies to allow authenticated users to upload files
+          const { error: policyError } = await supabase
+            .storage
+            .from("chatbot_training_files")
+            .createPolicy("authenticated users can upload files", {
+              name: "authenticated users can upload files",
+              definition: {
+                role: "authenticated",
+                permission: "INSERT",
+              },
+            });
+          
+          if (policyError) {
+            console.error("❌ Error creating bucket policy:", policyError);
+            // We'll continue even if the policy creation fails
+          }
+        }
+        
+        console.log("✅ Bucket setup completed");
+      } catch (error) {
+        // If the error is because the bucket already exists, we can continue
+        if (error.message && error.message.includes("already exists")) {
+          console.log("🟢 Bucket already exists, continuing...");
+        } else {
+          throw error;
+        }
       }
-      
-      // Add bucket policies to allow authenticated users to upload, read and delete their files
-      const { error: policyError } = await supabase
-        .storage
-        .from("chatbot_training_files")
-        .createPolicy("authenticated users can upload files", {
-          name: "authenticated users can upload files",
-          definition: {
-            role: "authenticated",
-            permission: "INSERT",
-          },
-        });
-      
-      if (policyError) {
-        console.error("❌ Error creating bucket policy:", policyError);
-        // We'll continue even if the policy creation fails
-      }
-      
-      console.log("✅ Bucket created successfully");
     }
 
     // Download File from Supabase Storage
