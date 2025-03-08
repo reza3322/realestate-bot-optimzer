@@ -105,20 +105,75 @@ async function processTextContent(text: string, userId: string, contentType: str
 }
 
 Deno.serve(async (req) => {
+  console.log(`🔄 Request received: ${req.method}`);
+  
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    console.log("🟢 Handling CORS preflight request");
+    return new Response(null, { 
+      headers: {
+        ...corsHeaders,
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Max-Age": "86400"
+      },
+      status: 204 
+    });
   }
   
   try {
-    const { filePath, userId, contentType, fileName } = await req.json() as RequestBody;
+    console.log("🚀 Processing request body");
+    
+    if (req.method !== 'POST') {
+      console.error(`❌ Unsupported method: ${req.method}`);
+      return new Response(
+        JSON.stringify({ error: `Unsupported method: ${req.method}` }),
+        { 
+          status: 405, 
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+    }
+    
+    const body = await req.json().catch(e => {
+      console.error("❌ Failed to parse request body:", e);
+      throw new Error("Invalid request body: " + e.message);
+    });
+    
+    const { filePath, userId, contentType, fileName } = body as RequestBody;
+    
+    if (!filePath || !userId || !contentType || !fileName) {
+      console.error("❌ Missing required fields in request");
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: "Missing required fields", 
+          received: { filePath, userId, contentType, fileName } 
+        }),
+        {
+          status: 400,
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+    }
+    
+    console.log(`📄 Processing file: ${filePath} for user: ${userId}, content type: ${contentType}`);
     
     // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
     
-    console.log(`Processing file: ${filePath} for user: ${userId}, content type: ${contentType}`);
+    if (!supabaseUrl || !supabaseServiceKey) {
+      console.error("❌ Missing Supabase credentials");
+      throw new Error("Server configuration error: Missing Supabase credentials");
+    }
+    
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
     
     // Download file from storage
     const { data: fileData, error: downloadError } = await supabase
@@ -127,30 +182,43 @@ Deno.serve(async (req) => {
       .download(filePath);
     
     if (downloadError) {
+      console.error("❌ Failed to download file:", downloadError);
       throw new Error(`Failed to download file: ${downloadError.message}`);
     }
+    
+    if (!fileData) {
+      console.error("❌ No file data returned");
+      throw new Error("No file data returned from storage");
+    }
+    
+    console.log(`✅ File downloaded successfully: ${fileName}`);
     
     let extractedText = '';
     
     // Extract text based on file type
     if (fileName.toLowerCase().endsWith('.pdf')) {
+      console.log("📄 Processing PDF file");
       const arrayBuffer = await fileData.arrayBuffer();
       extractedText = await extractPdfText(arrayBuffer);
     } else if (fileName.toLowerCase().endsWith('.txt')) {
+      console.log("📄 Processing text file");
       extractedText = await fileData.text();
     } else {
+      console.error(`❌ Unsupported file type: ${fileName}`);
       throw new Error(`Unsupported file type: ${fileName}`);
     }
     
     if (!extractedText || extractedText.trim().length === 0) {
+      console.error("❌ No text content extracted from file");
       throw new Error("No text content extracted from file");
     }
+    
+    console.log(`📝 Extracted ${extractedText.length} characters of text`);
     
     // Process the extracted text into Q&A pairs
     const entriesCreated = await processTextContent(extractedText, userId, contentType, supabase);
     
-    // Update file processing status in the database or storage metadata
-    // This could be done by creating a 'file_uploads' table or using storage object metadata
+    console.log(`✅ Created ${entriesCreated} training entries`);
     
     return new Response(
       JSON.stringify({
@@ -167,7 +235,8 @@ Deno.serve(async (req) => {
     );
     
   } catch (error) {
-    console.error("Error processing file:", error);
+    console.error("❌ Error processing file:", error);
+    
     return new Response(
       JSON.stringify({
         success: false,
