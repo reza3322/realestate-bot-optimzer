@@ -1,12 +1,11 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.36.0";
 import { corsHeaders } from "../_shared/cors.ts";
-
-// ✅ Import pdfreader for Deno-compatible PDF extraction
 import { PdfReader } from "https://deno.land/x/pdfreader@v1.1.1/mod.ts";
 
 Deno.serve(async (req) => {
   console.log(`🔄 Request received: ${req.method}`);
 
+  // ✅ Handle CORS Preflight Requests
   if (req.method === "OPTIONS") {
     console.log("🟢 Handling CORS preflight request...");
     return new Response(null, {
@@ -41,9 +40,9 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log(`📄 Processing file: ${filePath} for user: ${userId}, content type: ${contentType}, priority: ${priority}`);
+    console.log(`📄 Processing file: ${filePath} for user: ${userId}, content type: ${contentType}`);
 
-    // Initialize Supabase Client
+    // ✅ Initialize Supabase Client
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") || "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || ""
@@ -83,8 +82,6 @@ Deno.serve(async (req) => {
     } else if (fileName.toLowerCase().endsWith(".txt")) {
       console.log("📄 Processing text file");
       extractedText = await fileData.text();
-      console.log(`📝 Extracted ${extractedText.length} characters from text file`);
-      console.log(`📝 Preview: ${extractedText.substring(0, 100)}...`);
     } else {
       console.error(`❌ Unsupported file type: ${fileName}`);
       return new Response(
@@ -96,22 +93,27 @@ Deno.serve(async (req) => {
     if (!extractedText || extractedText.trim().length === 0) {
       console.error("❌ No text was extracted from the file");
       return new Response(
-        JSON.stringify({ success: false, error: "Failed to extract text from file" }),
+        JSON.stringify({ success: false, error: "No text was extracted from the file" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     console.log(`📝 Extracted ${extractedText.length} characters of text`);
+
+    // ✅ Fix: Remove null characters (`\u0000`) before storing in PostgreSQL
+    extractedText = extractedText.replace(/\u0000/g, "").trim();
+
     console.log(`🔢 Using priority level: ${priority}`);
 
     // ✅ Insert Extracted Content into Supabase
+    console.log("💾 Inserting extracted text into database...");
     const { data: insertData, error: insertError } = await supabase
       .from("chatbot_training_data")
       .insert({
         user_id: userId,
         content_type: contentType,
-        question: `What information is in ${fileName}?`,
-        answer: extractedText.substring(0, 5000),
+        question: `What information is in ${fileName}?`, // ✅ Meaningful question
+        answer: extractedText.substring(0, 5000), // ✅ Prevents long text issues
         category: "File Import",
         priority: parseInt(priority, 10) || 5
       })
@@ -167,9 +169,15 @@ async function extractPdfText(pdfArrayBuffer: ArrayBuffer): Promise<string> {
     });
 
     console.log("✅ PDF text extraction successful!");
-    return extractedText.replace(/\u0000/g, "").trim();
+
+    // 🔥 Fix: Remove any null characters (`\u0000`) before storing in PostgreSQL
+    extractedText = extractedText.replace(/\u0000/g, "").trim();
+
+    return extractedText;
+
   } catch (error) {
     console.error("❌ Error extracting PDF text:", error);
     throw new Error(`Failed to extract text from PDF: ${error.message}`);
   }
 }
+
