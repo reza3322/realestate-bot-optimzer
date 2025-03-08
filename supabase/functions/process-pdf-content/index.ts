@@ -135,11 +135,42 @@ Deno.serve(async (req) => {
     if (fileName.toLowerCase().endsWith(".pdf")) {
       console.log("📄 Processing PDF file");
       try {
-        // For PDFs, we'll use a simplified approach since pdf-parse has compatibility issues
-        // with Deno. We'll extract text using a simpler method and provide a message to the user.
-        extractedText = `Content extracted from ${fileName}.\n\nNote: Full PDF text extraction is not available in this environment. Please consider uploading a text version of this document or check the logs for more details.`;
+        // For PDFs, we'll use a Deno-compatible approach
+        // We'll extract the first few pages or provide a placeholder
+        // depending on the PDF structure
         
-        console.log(`📝 Using placeholder text for PDF extraction: ${extractedText.substring(0, 100)}...`);
+        // Try to extract text using a Deno-compatible approach
+        try {
+          // Attempt to load PDF.js or a similar library
+          // This is a placeholder - in the current version, 
+          // we can't reliably extract text from PDFs in Deno
+          
+          // In a production environment, consider:
+          // 1. Using a PDF-to-text microservice
+          // 2. Using a pre-processing step before uploading
+          // 3. Using a different file format altogether
+          
+          console.log("⚠️ Using fallback PDF extraction method");
+          const arrayBuffer = await fileData.arrayBuffer();
+          const firstBytes = new Uint8Array(arrayBuffer.slice(0, 1000));
+          // Log first few bytes to help debug PDF structure
+          console.log("📊 PDF first bytes:", Array.from(firstBytes).map(b => b.toString(16)).join(' '));
+          
+          // Extract metadata or a sample
+          extractedText = `Content extracted from ${fileName}.\n\n` +
+                          `PDF processing in this environment is limited.\n\n` +
+                          `This file contains approximately ${Math.floor(arrayBuffer.byteLength / 1024)} KB of data.\n\n` +
+                          `For best results, please consider:\n` +
+                          `- Converting this PDF to a text file before uploading\n` +
+                          `- Using a text/markdown file instead\n` +
+                          `- Contact support if you need help processing this file`;
+          
+        } catch (innerError) {
+          console.error("❌ Inner PDF extraction error:", innerError);
+          extractedText = `Content from ${fileName} (PDF format).\n\nPDF text extraction is limited in this environment. For best results, please upload a text version of this document.`;
+        }
+        
+        console.log(`📝 Using structured text for PDF: ${extractedText.substring(0, 100)}...`);
       } catch (pdfError) {
         console.error("❌ Error extracting PDF text:", pdfError);
         return new Response(
