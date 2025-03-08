@@ -1,3 +1,4 @@
+
 import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -21,11 +22,10 @@ interface UploadedFile {
   path: string;
   size: number;
   type: string;
-  status: 'uploading' | 'processing' | 'completed' | 'error';
+  status: 'uploading' | 'completed' | 'error';
   error?: string;
   contentType: string;
   createdAt: Date;
-  entriesCreated?: number;
 }
 
 const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
@@ -111,48 +111,18 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
       setUploadedFiles(prev => 
         prev.map(file => 
           file.id === newFile.id 
-            ? { ...file, status: 'processing' } 
+            ? { ...file, status: 'completed' } 
             : file
         )
       );
       
-      toast.success('File uploaded successfully. Processing content...');
-      
-      const { data: processData, error: processError } = await supabase.functions.invoke(
-        'process-pdf-content',
-        {
-          body: {
-            filePath: newFile.path,
-            userId,
-            contentType,
-            fileName: selectedFile.name
-          }
-        }
-      );
-      
-      if (processError) {
-        throw processError;
-      }
-      
-      setUploadedFiles(prev => 
-        prev.map(file => 
-          file.id === newFile.id 
-            ? { 
-                ...file, 
-                status: 'completed',
-                entriesCreated: processData.entriesCreated
-              } 
-            : file
-        )
-      );
-      
-      toast.success(`File processed successfully. Created ${processData.entriesCreated} training entries.`);
+      toast.success('File uploaded successfully.');
       
       setSelectedFile(null);
       if (onUploadComplete) onUploadComplete(true);
       
     } catch (error) {
-      console.error('Error uploading or processing file:', error);
+      console.error('Error uploading file:', error);
       
       setUploadedFiles(prev => 
         prev.map(file => 
@@ -162,7 +132,7 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
         )
       );
       
-      toast.error('Failed to process file: ' + error.message);
+      toast.error('Failed to upload file: ' + error.message);
       if (onUploadComplete) onUploadComplete(false);
     } finally {
       setIsUploading(false);
@@ -185,8 +155,6 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
     switch (status) {
       case 'uploading':
         return <Loader2 className="h-4 w-4 animate-spin text-yellow-500" />;
-      case 'processing':
-        return <Loader2 className="h-4 w-4 animate-spin text-blue-500" />;
       case 'completed':
         return <CheckCircle2 className="h-4 w-4 text-green-500" />;
       case 'error':
@@ -200,8 +168,6 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
     switch (file.status) {
       case 'uploading':
         return <Badge variant="outline" className="bg-yellow-100 text-yellow-800">Uploading</Badge>;
-      case 'processing':
-        return <Badge variant="outline" className="bg-blue-100 text-blue-800">Processing</Badge>;
       case 'completed':
         return <Badge variant="outline" className="bg-green-100 text-green-800">Completed</Badge>;
       case 'error':
@@ -216,7 +182,7 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
       <CardHeader>
         <CardTitle className="text-lg">Upload Training Files</CardTitle>
         <CardDescription>
-          Upload PDF or text files to train your chatbot with property information or FAQs
+          Upload PDF or text files to be stored for reference. Note: Automatic content processing has been disabled.
         </CardDescription>
       </CardHeader>
       
@@ -270,7 +236,7 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
           </div>
           
           <p className="text-xs text-muted-foreground">
-            Only PDF and text files are supported. Files will be processed to extract content for chatbot training.
+            Files will be stored but not automatically processed. You'll need to manually add content to train your chatbot.
           </p>
         </div>
         
@@ -302,7 +268,7 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
             <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground">
               <FileText size={40} className="mb-2 opacity-20" />
               <p>No files uploaded yet</p>
-              <p className="text-sm mt-1">Upload files to train your chatbot</p>
+              <p className="text-sm mt-1">Upload files for reference</p>
             </div>
           ) : (
             <ScrollArea className="h-[200px]">
@@ -317,11 +283,6 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
                           <p className="text-xs text-muted-foreground">
                             {formatFileSize(file.size)} • {new Date(file.createdAt).toLocaleString()}
                           </p>
-                          {file.entriesCreated && (
-                            <p className="text-xs text-green-600 mt-1">
-                              Created {file.entriesCreated} training entries
-                            </p>
-                          )}
                           {file.error && (
                             <p className="text-xs text-red-600 mt-1 flex items-center">
                               <AlertCircle className="h-3 w-3 mr-1" />
@@ -348,8 +309,8 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
       <CardFooter className="bg-muted/50 px-6 py-4 border-t flex items-center gap-2 text-sm text-muted-foreground">
         <AlertCircle size={16} />
         <p>
-          Uploaded files will be processed to extract content that will be used to train your chatbot.
-          The more quality content you provide, the better your chatbot will perform.
+          Files uploaded here are stored for reference only. To train your chatbot, use the manual entry feature
+          to add specific questions and answers.
         </p>
       </CardFooter>
     </Card>
