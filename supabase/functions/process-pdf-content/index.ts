@@ -1,7 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.36.0";
 import { corsHeaders } from "../_shared/cors.ts";
 
-// ✅ Fix PDF.js Import: Use Deno-compatible module
+// ✅ Use Deno-compatible PDF.js module
 import { getDocument } from "https://deno.land/x/pdfjs@0.1.1/mod.ts";
 
 interface RequestBody {
@@ -19,7 +19,7 @@ Deno.serve(async (req) => {
     console.log("🟢 Handling CORS preflight request...");
     return new Response(null, {
       headers: {
-        "Access-Control-Allow-Origin": "*", // Change "*" to your frontend URL if needed
+        "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "POST, OPTIONS",
         "Access-Control-Allow-Headers": "Content-Type, Authorization",
         "Access-Control-Max-Age": "86400",
@@ -98,7 +98,7 @@ Deno.serve(async (req) => {
         user_id: userId,
         content_type: contentType,
         question: `What information is in ${fileName}?`,
-        answer: extractedText.substring(0, 5000), // ✅ Limit to 5000 characters
+        answer: extractedText.substring(0, 5000),
         category: "File Import",
         priority: 5
       })
