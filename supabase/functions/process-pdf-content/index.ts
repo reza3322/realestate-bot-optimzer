@@ -8,10 +8,11 @@ async function extractPdfText(pdfArrayBuffer: ArrayBuffer): Promise<string> {
   try {
     console.log("🔍 Extracting text from PDF...");
 
-    // Initialize the PDF.js library
+    // Initialize the PDF.js library with the web worker
+    // Using a more compatible approach for Deno/Edge environments
     pdfjs.GlobalWorkerOptions.workerSrc = `npm:pdfjs-dist@3.11.174/build/pdf.worker.mjs`;
     
-    // Load PDF document
+    // Load PDF document with a more explicit approach
     const loadingTask = pdfjs.getDocument({ data: pdfArrayBuffer });
     const pdf = await loadingTask.promise;
 
