@@ -1,3 +1,5 @@
+
+// Updating the FileUpload component to better handle edge function errors
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -113,10 +115,15 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
       console.log('Process PDF content response:', response);
 
       if (response.error) {
+        console.error('Edge function error:', response.error);
         throw new Error(response.error.message || 'Failed to process file');
       }
 
-      if (!response.data || !response.data.success) {
+      if (!response.data) {
+        throw new Error('No response data received from edge function');
+      }
+
+      if (!response.data.success) {
         throw new Error((response.data && response.data.error) || 'Failed to process file');
       }
 

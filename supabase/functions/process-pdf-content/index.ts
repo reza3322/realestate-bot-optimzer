@@ -7,8 +7,11 @@ async function extractPdfText(pdfArrayBuffer: ArrayBuffer): Promise<string> {
   try {
     console.log("🔍 Extracting text from PDF...");
     
-    // Import pdfjs dynamically to avoid the GlobalWorkerOptions issue
-    const pdfjs = await import("npm:pdfjs-dist@3.11.174/build/pdf.js");
+    // Import the PDF.js library with the correct module path and namespace
+    const pdfJsModule = await import("npm:pdfjs-dist@3.11.174/build/pdf.mjs");
+    const pdfjs = pdfJsModule.default;
+    
+    console.log("📚 PDF.js library loaded");
     
     // Load PDF document with explicit parameters for Deno/Edge environment
     const loadingTask = pdfjs.getDocument({
@@ -16,12 +19,12 @@ async function extractPdfText(pdfArrayBuffer: ArrayBuffer): Promise<string> {
       useWorkerFetch: false,
       isEvalSupported: false,
       disableFontFace: true,
-      // Disable workers to avoid needing worker scripts
+      // Disable workers to avoid needing worker scripts in Deno environment
       disableWorker: true,
     });
     
     const pdf = await loadingTask.promise;
-    console.log(`PDF loaded successfully with ${pdf.numPages} pages`);
+    console.log(`📄 PDF loaded successfully with ${pdf.numPages} pages`);
 
     let extractedText = "";
 
