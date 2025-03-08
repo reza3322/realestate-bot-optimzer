@@ -118,8 +118,8 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
         throw new Error(response.error.message || 'Failed to process file');
       }
 
-      if (!response.data.success) {
-        throw new Error(response.data.error || 'Failed to process file');
+      if (!response.data || !response.data.success) {
+        throw new Error((response.data && response.data.error) || 'Failed to process file');
       }
 
       // Update file status to completed

@@ -8,13 +8,20 @@ async function extractPdfText(pdfArrayBuffer: ArrayBuffer): Promise<string> {
   try {
     console.log("🔍 Extracting text from PDF...");
 
-    // Initialize the PDF.js library with the web worker
-    // Using a more compatible approach for Deno/Edge environments
-    pdfjs.GlobalWorkerOptions.workerSrc = `npm:pdfjs-dist@3.11.174/build/pdf.worker.mjs`;
+    // Initialize PDF.js for Deno/Edge environment
+    const workerSrc = "npm:pdfjs-dist@3.11.174/build/pdf.worker.mjs";
+    pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
     
-    // Load PDF document with a more explicit approach
-    const loadingTask = pdfjs.getDocument({ data: pdfArrayBuffer });
+    // Load PDF document with explicit parameters
+    const loadingTask = pdfjs.getDocument({
+      data: pdfArrayBuffer,
+      useWorkerFetch: false,
+      isEvalSupported: false,
+      disableFontFace: true
+    });
+    
     const pdf = await loadingTask.promise;
+    console.log(`PDF loaded successfully with ${pdf.numPages} pages`);
 
     let extractedText = "";
 
@@ -37,11 +44,17 @@ async function extractPdfText(pdfArrayBuffer: ArrayBuffer): Promise<string> {
 Deno.serve(async (req) => {
   console.log(`🔄 Request received: ${req.method}`);
 
+  // Add CORS headers to all responses
+  const headers = {
+    ...corsHeaders,
+    "Content-Type": "application/json"
+  };
+
   if (req.method === "OPTIONS") {
     console.log("🟢 Handling CORS preflight request...");
     return new Response(null, {
       headers: {
-        ...corsHeaders,
+        ...headers,
         "Access-Control-Allow-Methods": "POST, OPTIONS",
         "Access-Control-Max-Age": "86400",
       },
@@ -53,7 +66,7 @@ Deno.serve(async (req) => {
     if (req.method !== "POST") {
       return new Response(
         JSON.stringify({ error: `Unsupported method: ${req.method}` }),
-        { status: 405, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 405, headers }
       );
     }
 
@@ -67,17 +80,25 @@ Deno.serve(async (req) => {
       console.error("❌ Missing required fields:", body);
       return new Response(
         JSON.stringify({ success: false, error: "Missing required fields", received: body }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 400, headers }
       );
     }
 
     console.log(`📄 Processing file: ${filePath} for user: ${userId}, content type: ${contentType}, priority: ${priority}`);
 
     // Initialize Supabase Client
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL") || "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || ""
-    );
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+    
+    if (!supabaseUrl || !supabaseKey) {
+      console.error("❌ Missing Supabase environment variables");
+      return new Response(
+        JSON.stringify({ success: false, error: "Server configuration error" }),
+        { status: 500, headers }
+      );
+    }
+    
+    const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Check if bucket exists and create it if it doesn't
     const { data: buckets, error: bucketsError } = await supabase
@@ -88,7 +109,7 @@ Deno.serve(async (req) => {
       console.error("❌ Error checking buckets:", bucketsError);
       return new Response(
         JSON.stringify({ success: false, error: "Failed to check storage buckets", details: bucketsError }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 500, headers }
       );
     }
 
@@ -111,12 +132,11 @@ Deno.serve(async (req) => {
             console.error("❌ Error creating bucket:", createBucketError);
             return new Response(
               JSON.stringify({ success: false, error: "Failed to create storage bucket", details: createBucketError }),
-              { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+              { status: 500, headers }
             );
           }
         } else {
           // If bucket was created successfully, add policies
-          // This step is only needed for newly created buckets
           console.log("✅ Bucket created, adding policies...");
           
           // Add bucket policies to allow authenticated users to upload files
@@ -158,7 +178,15 @@ Deno.serve(async (req) => {
       console.error("❌ Failed to download file:", downloadError);
       return new Response(
         JSON.stringify({ success: false, error: "Failed to download file", details: downloadError }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 500, headers }
+      );
+    }
+
+    if (!fileData) {
+      console.error("❌ No file data received");
+      return new Response(
+        JSON.stringify({ success: false, error: "No file data received" }),
+        { status: 500, headers }
       );
     }
 
@@ -174,7 +202,7 @@ Deno.serve(async (req) => {
         console.error("❌ Error extracting PDF text:", pdfError);
         return new Response(
           JSON.stringify({ success: false, error: `Failed to extract text from PDF: ${pdfError.message}` }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: 500, headers }
         );
       }
     } else if (fileName.toLowerCase().endsWith(".txt")) {
@@ -186,7 +214,7 @@ Deno.serve(async (req) => {
       console.error(`❌ Unsupported file type: ${fileName}`);
       return new Response(
         JSON.stringify({ success: false, error: `Unsupported file type: ${fileName}` }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 400, headers }
       );
     }
 
@@ -194,7 +222,7 @@ Deno.serve(async (req) => {
       console.error("❌ No text was extracted from the file");
       return new Response(
         JSON.stringify({ success: false, error: "Failed to extract text from file" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 500, headers }
       );
     }
 
@@ -210,7 +238,7 @@ Deno.serve(async (req) => {
         question: `What information is in ${fileName}?`,
         answer: extractedText.substring(0, 5000),
         category: "File Import",
-        priority: parseInt(priority, 10) || 5
+        priority: parseInt(priority.toString(), 10) || 5
       })
       .select();
 
@@ -218,7 +246,7 @@ Deno.serve(async (req) => {
       console.error("❌ ERROR INSERTING INTO DATABASE:", insertError);
       return new Response(
         JSON.stringify({ success: false, error: "Failed to store training data", details: insertError }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 500, headers }
       );
     }
 
@@ -231,14 +259,14 @@ Deno.serve(async (req) => {
         entriesCreated: 1,
         priority: priority
       }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { headers }
     );
 
   } catch (error) {
     console.error("❌ Error processing file:", error);
     return new Response(
       JSON.stringify({ success: false, error: error.message }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 500, headers: corsHeaders }
     );
   }
 });
