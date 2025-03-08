@@ -1,9 +1,8 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.36.0";
 import { corsHeaders } from "../_shared/cors.ts";
 
-// ✅ Fix PDF.js Worker Issue
-import * as pdfjsLib from "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.mjs";
-pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.mjs";
+// ✅ Fix PDF.js Import: Use Deno-compatible module
+import { getDocument } from "https://deno.land/x/pdfjs@0.1.1/mod.ts";
 
 interface RequestBody {
   filePath: string;
@@ -15,37 +14,39 @@ interface RequestBody {
 // ✅ Handle CORS Preflight Requests
 Deno.serve(async (req) => {
   console.log(`🔄 Request received: ${req.method}`);
-  
+
   if (req.method === "OPTIONS") {
-    console.log("🟢 Handling CORS preflight request");
+    console.log("🟢 Handling CORS preflight request...");
     return new Response(null, {
       headers: {
-        ...corsHeaders,
+        "Access-Control-Allow-Origin": "*", // Change "*" to your frontend URL if needed
         "Access-Control-Allow-Methods": "POST, OPTIONS",
-        "Access-Control-Max-Age": "86400"
+        "Access-Control-Allow-Headers": "Content-Type, Authorization",
+        "Access-Control-Max-Age": "86400",
       },
-      status: 204
+      status: 204,
     });
   }
 
   try {
     if (req.method !== "POST") {
-      console.error(`❌ Unsupported method: ${req.method}`);
       return new Response(
         JSON.stringify({ error: `Unsupported method: ${req.method}` }),
-        { status: 405, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 405, headers: { "Content-Type": "application/json" } }
       );
     }
 
-    // ✅ Parse the request body
+    console.log("🚀 Processing request...");
     const body = await req.json();
+    console.log("📥 Received Body:", body);
+
     const { filePath, userId, contentType, fileName } = body as RequestBody;
 
     if (!filePath || !userId || !contentType || !fileName) {
       console.error("❌ Missing required fields:", body);
       return new Response(
         JSON.stringify({ success: false, error: "Missing required fields", received: body }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 400, headers: { "Content-Type": "application/json" } }
       );
     }
 
@@ -67,7 +68,7 @@ Deno.serve(async (req) => {
       console.error("❌ Failed to download file:", downloadError);
       return new Response(
         JSON.stringify({ success: false, error: "Failed to download file", details: downloadError }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 500, headers: { "Content-Type": "application/json" } }
       );
     }
 
@@ -84,7 +85,7 @@ Deno.serve(async (req) => {
       console.error(`❌ Unsupported file type: ${fileName}`);
       return new Response(
         JSON.stringify({ success: false, error: `Unsupported file type: ${fileName}` }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 400, headers: { "Content-Type": "application/json" } }
       );
     }
 
@@ -107,7 +108,7 @@ Deno.serve(async (req) => {
       console.error("❌ ERROR INSERTING INTO DATABASE:", insertError);
       return new Response(
         JSON.stringify({ success: false, error: "Failed to store training data", details: insertError }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 500, headers: { "Content-Type": "application/json" } }
       );
     }
 
@@ -119,14 +120,14 @@ Deno.serve(async (req) => {
         message: "File processed successfully",
         entriesCreated: 1
       }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { headers: { "Content-Type": "application/json" } }
     );
 
   } catch (error) {
     console.error("❌ Error processing file:", error);
     return new Response(
       JSON.stringify({ success: false, error: error.message }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 500, headers: { "Content-Type": "application/json" } }
     );
   }
 });
@@ -134,11 +135,10 @@ Deno.serve(async (req) => {
 // ✅ Extract Text from PDF Function
 async function extractPdfText(pdfArrayBuffer: ArrayBuffer): Promise<string> {
   try {
-    const loadingTask = pdfjsLib.getDocument({ data: pdfArrayBuffer });
-    const pdf = await loadingTask.promise;
+    // ✅ Load the PDF document using Deno-compatible PDF.js
+    const pdf = await getDocument({ data: pdfArrayBuffer }).promise;
     
     let completeText = "";
-
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = await pdf.getPage(i);
       const content = await page.getTextContent();
