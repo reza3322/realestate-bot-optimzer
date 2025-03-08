@@ -1,11 +1,12 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.36.0";
 import { corsHeaders } from "../_shared/cors.ts";
-import { PdfReader } from "https://deno.land/x/pdfreader@v1.1.1/mod.ts"; // ✅ Use Deno-compatible PDF reader
+
+// ✅ Import pdfreader for Deno-compatible PDF extraction
+import { PdfReader } from "https://deno.land/x/pdfreader@v1.1.1/mod.ts";
 
 Deno.serve(async (req) => {
   console.log(`🔄 Request received: ${req.method}`);
 
-  // Handle CORS Preflight Requests
   if (req.method === "OPTIONS") {
     console.log("🟢 Handling CORS preflight request...");
     return new Response(null, {
@@ -48,26 +49,42 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || ""
     );
 
-    // Fetch the PDF file (supports both storage & URL PDFs)
-    const pdfBuffer = filePath.startsWith("http")
-      ? await fetchPdfFromUrl(filePath)
-      : await fetchFileFromSupabase(supabase, filePath);
+    // ✅ Download File from Supabase Storage
+    console.log(`📥 Attempting to download file: ${filePath}`);
+    const { data: fileData, error: downloadError } = await supabase
+      .storage
+      .from("chatbot_training_files")
+      .download(filePath);
 
-    if (!pdfBuffer) {
+    if (downloadError) {
+      console.error("❌ Failed to download file:", downloadError);
       return new Response(
-        JSON.stringify({ success: false, error: "Failed to retrieve the file" }),
+        JSON.stringify({ success: false, error: "Failed to download file", details: downloadError }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Extract Text from PDF or TXT File
+    console.log("✅ File downloaded successfully");
+
+    // ✅ Extract Text from File
     let extractedText = "";
     if (fileName.toLowerCase().endsWith(".pdf")) {
       console.log("📄 Processing PDF file");
-      extractedText = await extractPdfText(pdfBuffer);
+      try {
+        const arrayBuffer = await fileData.arrayBuffer();
+        extractedText = await extractPdfText(arrayBuffer);
+      } catch (pdfError) {
+        console.error("❌ Error extracting PDF text:", pdfError);
+        return new Response(
+          JSON.stringify({ success: false, error: `Failed to extract text from PDF: ${pdfError.message}` }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     } else if (fileName.toLowerCase().endsWith(".txt")) {
       console.log("📄 Processing text file");
-      extractedText = new TextDecoder().decode(pdfBuffer);
+      extractedText = await fileData.text();
+      console.log(`📝 Extracted ${extractedText.length} characters from text file`);
+      console.log(`📝 Preview: ${extractedText.substring(0, 100)}...`);
     } else {
       console.error(`❌ Unsupported file type: ${fileName}`);
       return new Response(
@@ -77,7 +94,7 @@ Deno.serve(async (req) => {
     }
 
     if (!extractedText || extractedText.trim().length === 0) {
-      console.error("❌ No text extracted from the file");
+      console.error("❌ No text was extracted from the file");
       return new Response(
         JSON.stringify({ success: false, error: "Failed to extract text from file" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -85,15 +102,16 @@ Deno.serve(async (req) => {
     }
 
     console.log(`📝 Extracted ${extractedText.length} characters of text`);
+    console.log(`🔢 Using priority level: ${priority}`);
 
-    // Insert Extracted Content into Supabase Database
+    // ✅ Insert Extracted Content into Supabase
     const { data: insertData, error: insertError } = await supabase
       .from("chatbot_training_data")
       .insert({
         user_id: userId,
         content_type: contentType,
         question: `What information is in ${fileName}?`,
-        answer: extractedText.substring(0, 5000), // Limit text length
+        answer: extractedText.substring(0, 5000),
         category: "File Import",
         priority: parseInt(priority, 10) || 5
       })
@@ -128,7 +146,7 @@ Deno.serve(async (req) => {
   }
 });
 
-// ✅ Extract Text from PDF Using pdfreader
+// ✅ Extract Text from PDF Function using `pdfreader`
 async function extractPdfText(pdfArrayBuffer: ArrayBuffer): Promise<string> {
   try {
     console.log("🔍 Extracting text from PDF...");
@@ -154,32 +172,4 @@ async function extractPdfText(pdfArrayBuffer: ArrayBuffer): Promise<string> {
     console.error("❌ Error extracting PDF text:", error);
     throw new Error(`Failed to extract text from PDF: ${error.message}`);
   }
-}
-
-// ✅ Fetch PDF from Supabase Storage
-async function fetchFileFromSupabase(supabase: any, filePath: string): Promise<ArrayBuffer> {
-  console.log(`📥 Fetching file from Supabase: ${filePath}`);
-  const { data: fileData, error } = await supabase
-    .storage
-    .from("chatbot_training_files")
-    .download(filePath);
-
-  if (error) {
-    console.error("❌ Failed to download file:", error);
-    return null;
-  }
-
-  return await fileData.arrayBuffer();
-}
-
-// ✅ Fetch PDF from a URL
-async function fetchPdfFromUrl(url: string): Promise<ArrayBuffer> {
-  console.log(`🌐 Fetching PDF from: ${url}`);
-  
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch PDF. Status: ${response.status}`);
-  }
-
-  return await response.arrayBuffer();
 }
