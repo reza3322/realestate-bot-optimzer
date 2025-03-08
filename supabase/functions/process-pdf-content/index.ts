@@ -96,11 +96,12 @@ Deno.serve(async (req) => {
 
     console.log(`📝 Extracted ${extractedText.length} characters of text`);
 
-    // ✅ Final Fix: Completely clean extracted text
+    // ✅ Extra sanitization before inserting into PostgreSQL
     extractedText = extractedText
       .replace(/\u0000/g, "") // Remove all null characters
       .replace(/[\x00-\x1F\x7F]/g, "") // Remove control characters
-      .replace(/[^\x20-\x7E]/g, "") // Remove all non-ASCII characters
+      .replace(/[^\x20-\x7EäöüßÄÖÜéèàù]/g, "") // Keep common European characters
+      .replace(/\s+/g, " ") // Normalize whitespace
       .trim();
 
     console.log(`🔢 Using priority level: ${priority}`);
@@ -173,7 +174,8 @@ async function extractPdfText(pdfArrayBuffer: ArrayBuffer): Promise<string> {
     return extractedText
       .replace(/\u0000/g, "") // Remove null characters
       .replace(/[\x00-\x1F\x7F]/g, "") // Remove control characters
-      .replace(/[^\x20-\x7E]/g, "") // Remove all non-ASCII characters
+      .replace(/[^\x20-\x7EäöüßÄÖÜéèàù]/g, "") // Keep common European characters
+      .replace(/\s+/g, " ") // Normalize whitespace
       .trim();
 
   } catch (error) {
@@ -181,4 +183,5 @@ async function extractPdfText(pdfArrayBuffer: ArrayBuffer): Promise<string> {
     throw new Error(`Failed to extract text from PDF: ${error.message}`);
   }
 }
+
 
