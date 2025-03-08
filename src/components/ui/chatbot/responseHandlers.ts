@@ -1,4 +1,3 @@
-
 import { supabase } from "@/lib/supabase";
 import { VisitorInfo } from "./types";
 
@@ -76,59 +75,70 @@ async function findRelevantTrainingData(
     // Normalize the search query
     const searchableQuestion = question.toLowerCase().trim();
     
-    // First, try to find direct matches in file uploads or other high-priority content
-    const { data: fileMatches, error: fileMatchError } = await supabase
-      .from('chatbot_training_data')
-      .select('question, answer, priority, category')
-      .eq('user_id', userId)
-      .eq('category', 'File Import')  // Focus on file imports first
-      .order('priority', { ascending: false })
-      .limit(3);
+    // First try to directly check if this is a question about file contents
+    const isAskingAboutFiles = searchableQuestion.includes('file') || 
+                              searchableQuestion.includes('document') || 
+                              searchableQuestion.includes('pdf') ||
+                              searchableQuestion.includes('txt') ||
+                              (searchableQuestion.includes('what') && 
+                                (searchableQuestion.includes('contain') || 
+                                 searchableQuestion.includes('say') || 
+                                 searchableQuestion.includes('in')));
     
-    if (fileMatchError) {
-      console.error('Error searching file training data:', fileMatchError);
-    } else if (fileMatches && fileMatches.length > 0) {
-      console.log(`Found ${fileMatches.length} file-based training items to check`);
+    if (isAskingAboutFiles) {
+      console.log('User appears to be asking about file contents');
+      // Get the most recent and highest priority file import
+      const { data: fileImports, error: fileImportError } = await supabase
+        .from('chatbot_training_data')
+        .select('question, answer, priority, category')
+        .eq('user_id', userId)
+        .eq('category', 'File Import')
+        .order('priority', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(1);
       
-      // Since files often have generic questions like "What information is in filename.pdf?",
-      // we'll search within the answer text rather than just the question
-      for (const item of fileMatches) {
-        // Check if the question is asking about what's in a file or document
-        const isFileQuery = searchableQuestion.includes('file') || 
-                           searchableQuestion.includes('document') || 
-                           searchableQuestion.includes('pdf') ||
-                           searchableQuestion.includes('txt') ||
-                           searchableQuestion.includes('what') && (
-                             searchableQuestion.includes('contain') || 
-                             searchableQuestion.includes('say') || 
-                             searchableQuestion.includes('in')
-                           );
-                           
-        if (isFileQuery) {
-          console.log('Query appears to be asking about file contents, returning file data');
-          return {
-            answer: item.answer,
-            source: 'training'
-          };
-        }
+      if (!fileImportError && fileImports && fileImports.length > 0) {
+        console.log('Found file import data, returning directly');
+        return {
+          answer: fileImports[0].answer,
+          source: 'training'
+        };
+      }
+    }
+    
+    // Extract important keywords from the question (excluding common words)
+    const keywords = searchableQuestion
+      .split(/\s+/)
+      .filter(word => 
+        word.length > 3 && 
+        !['what', 'where', 'when', 'how', 'why', 'who', 'is', 'are', 'the', 'a', 'an', 'in', 'on', 'at', 'to', 'for', 'with'].includes(word)
+      );
+    
+    if (keywords.length > 0) {
+      console.log(`Extracted keywords for search: ${keywords.join(', ')}`);
+      
+      // First, check file imports for keyword matches in the content
+      const { data: fileMatches, error: fileMatchError } = await supabase
+        .from('chatbot_training_data')
+        .select('question, answer, priority, category')
+        .eq('user_id', userId)
+        .eq('category', 'File Import')
+        .order('priority', { ascending: false })
+        .limit(5);
+      
+      if (!fileMatchError && fileMatches && fileMatches.length > 0) {
+        console.log(`Found ${fileMatches.length} file-based training items to check`);
         
-        // Extract meaningful keywords from the question (excluding common words)
-        const keywords = searchableQuestion
-          .split(/\s+/)
-          .filter(word => 
-            word.length > 3 && 
-            !['what', 'where', 'when', 'how', 'why', 'who', 'is', 'are', 'the', 'a', 'an', 'in', 'on', 'at', 'to', 'for', 'with'].includes(word)
-          );
-        
-        // Search for these keywords in the answer text
-        if (keywords.length > 0) {
-          const keywordMatches = keywords.filter(keyword => 
-            item.answer.toLowerCase().includes(keyword)
+        // For each file content, check if it contains the keywords
+        for (const item of fileMatches) {
+          const lowerCaseAnswer = item.answer.toLowerCase();
+          const matchingKeywords = keywords.filter(keyword => 
+            lowerCaseAnswer.includes(keyword)
           );
           
-          // If multiple keywords match or a significant portion match, return this answer
-          if (keywordMatches.length >= 2 || (keywords.length === 1 && keywordMatches.length === 1)) {
-            console.log(`Found keyword matches in file data: ${keywordMatches.join(', ')}`);
+          // If multiple keywords match (or single keyword for simple questions)
+          if (matchingKeywords.length >= 2 || (keywords.length === 1 && matchingKeywords.length === 1)) {
+            console.log(`Found keyword matches in file data: ${matchingKeywords.join(', ')}`);
             return {
               answer: item.answer,
               source: 'training'
@@ -138,10 +148,10 @@ async function findRelevantTrainingData(
       }
     }
     
-    // If no file matches, try exact/fuzzy matching with all training data
+    // If no direct matches in file content, try broader search including manually added training data
     const { data: exactMatches, error: exactMatchError } = await supabase
       .from('chatbot_training_data')
-      .select('question, answer, priority')
+      .select('question, answer, priority, category')
       .eq('user_id', userId)
       .or(`question.ilike.%${searchableQuestion}%,answer.ilike.%${searchableQuestion}%`)
       .order('priority', { ascending: false })
@@ -154,41 +164,64 @@ async function findRelevantTrainingData(
     
     // If we found matches, return the highest priority one
     if (exactMatches && exactMatches.length > 0) {
-      console.log(`Found ${exactMatches.length} training matches`);
+      console.log(`Found ${exactMatches.length} training matches (sorted by priority):`);
+      exactMatches.forEach((match, i) => {
+        console.log(`  Match ${i+1}: [${match.category}] Priority: ${match.priority}, Question: "${match.question.substring(0, 50)}..."`);
+      });
+      
+      // Prioritize File Import matches if possible
+      const fileImportMatch = exactMatches.find(m => m.category === 'File Import');
+      if (fileImportMatch) {
+        console.log('Using File Import match as it has higher relevance');
+        return {
+          answer: fileImportMatch.answer,
+          source: 'training'
+        };
+      }
+      
       return {
         answer: exactMatches[0].answer,
         source: 'training'
       };
     }
     
-    // If no exact matches, try a more permissive search by splitting the question into words
-    // and finding training data that contains multiple of these words
-    const words = searchableQuestion.split(/\s+/).filter(word => word.length > 3);
-    if (words.length < 2) return null; // Not enough significant words to match
-    
-    // Build a query that looks for training data containing at least 2 of the significant words
-    const wordLikeConditions = words.map(word => `question.ilike.%${word}%`).join(',');
-    
-    const { data: wordMatches, error: wordMatchError } = await supabase
-      .from('chatbot_training_data')
-      .select('question, answer, priority')
-      .eq('user_id', userId)
-      .or(wordLikeConditions)
-      .order('priority', { ascending: false })
-      .limit(3);
-    
-    if (wordMatchError) {
-      console.error('Error searching training data by words:', wordMatchError);
-      return null;
-    }
-    
-    // If we found word-based matches, return the highest priority one
-    if (wordMatches && wordMatches.length > 0) {
-      console.log(`Found ${wordMatches.length} word-based matches`);
-      return {
-        answer: wordMatches[0].answer,
-        source: 'training'
-      };
+    // If no exact matches, try word-by-word matching
+    if (keywords.length >= 2) {
+      // Build a query that looks for content containing these keywords
+      const wordLikeConditions = keywords.map(word => `answer.ilike.%${word}%`).join(',');
+      
+      const { data: wordMatches, error: wordMatchError } = await supabase
+        .from('chatbot_training_data')
+        .select('question, answer, priority, category')
+        .eq('user_id', userId)
+        .or(wordLikeConditions)
+        .order('priority', { ascending: false })
+        .limit(3);
+      
+      if (wordMatchError) {
+        console.error('Error searching training data by words:', wordMatchError);
+        return null;
+      }
+      
+      // If we found word-based matches, prioritize File Import matches
+      if (wordMatches && wordMatches.length > 0) {
+        console.log(`Found ${wordMatches.length} word-based matches`);
+        
+        // Prioritize File Import matches if possible
+        const fileImportMatch = wordMatches.find(m => m.category === 'File Import');
+        if (fileImportMatch) {
+          console.log('Using File Import match from word-based search');
+          return {
+            answer: fileImportMatch.answer,
+            source: 'training'
+          };
+        }
+        
+        return {
+          answer: wordMatches[0].answer,
+          source: 'training'
+        };
+      }
     }
     
     // No matches found in training data

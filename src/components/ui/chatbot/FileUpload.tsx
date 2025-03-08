@@ -100,6 +100,8 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
     );
 
     try {
+      console.log(`Processing file ${fileName} with path ${filePath}`);
+      
       const response = await supabase.functions.invoke('process-pdf-content', {
         body: {
           filePath,
@@ -109,6 +111,8 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
           priority
         }
       });
+
+      console.log('Process PDF content response:', response);
 
       if (response.error) {
         throw new Error(response.error.message || 'Failed to process file');
