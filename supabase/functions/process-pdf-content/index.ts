@@ -5,7 +5,6 @@ import { PdfReader } from "https://deno.land/x/pdfreader@v1.1.1/mod.ts";
 Deno.serve(async (req) => {
   console.log(`🔄 Request received: ${req.method}`);
 
-  // ✅ Handle CORS Preflight Requests
   if (req.method === "OPTIONS") {
     console.log("🟢 Handling CORS preflight request...");
     return new Response(null, {
@@ -42,13 +41,11 @@ Deno.serve(async (req) => {
 
     console.log(`📄 Processing file: ${filePath} for user: ${userId}, content type: ${contentType}`);
 
-    // ✅ Initialize Supabase Client
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") || "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || ""
     );
 
-    // ✅ Download File from Supabase Storage
     console.log(`📥 Attempting to download file: ${filePath}`);
     const { data: fileData, error: downloadError } = await supabase
       .storage
@@ -65,7 +62,6 @@ Deno.serve(async (req) => {
 
     console.log("✅ File downloaded successfully");
 
-    // ✅ Extract Text from File
     let extractedText = "";
     if (fileName.toLowerCase().endsWith(".pdf")) {
       console.log("📄 Processing PDF file");
@@ -100,19 +96,21 @@ Deno.serve(async (req) => {
 
     console.log(`📝 Extracted ${extractedText.length} characters of text`);
 
-    // ✅ Fix: Remove null characters (`\u0000`) before storing in PostgreSQL
-    extractedText = extractedText.replace(/\u0000/g, "").trim();
+    // ✅ Final Fix: Remove ALL problematic characters before inserting into PostgreSQL
+    extractedText = extractedText
+      .replace(/\u0000/g, "") // Remove all null characters
+      .replace(/[\x00-\x1F\x7F]/g, "") // Remove other non-printable ASCII characters
+      .trim();
 
     console.log(`🔢 Using priority level: ${priority}`);
 
-    // ✅ Insert Extracted Content into Supabase
     console.log("💾 Inserting extracted text into database...");
     const { data: insertData, error: insertError } = await supabase
       .from("chatbot_training_data")
       .insert({
         user_id: userId,
         content_type: contentType,
-        question: `What information is in ${fileName}?`, // ✅ Meaningful question
+        question: `What information is in ${fileName}?`,
         answer: extractedText.substring(0, 5000), // ✅ Prevents long text issues
         category: "File Import",
         priority: parseInt(priority, 10) || 5
@@ -170,10 +168,11 @@ async function extractPdfText(pdfArrayBuffer: ArrayBuffer): Promise<string> {
 
     console.log("✅ PDF text extraction successful!");
 
-    // 🔥 Fix: Remove any null characters (`\u0000`) before storing in PostgreSQL
-    extractedText = extractedText.replace(/\u0000/g, "").trim();
-
-    return extractedText;
+    // ✅ Fully sanitize extracted text before returning
+    return extractedText
+      .replace(/\u0000/g, "") // Remove null characters
+      .replace(/[\x00-\x1F\x7F]/g, "") // Remove control characters
+      .trim();
 
   } catch (error) {
     console.error("❌ Error extracting PDF text:", error);
