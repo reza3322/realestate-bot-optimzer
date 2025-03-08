@@ -96,12 +96,13 @@ Deno.serve(async (req) => {
 
     console.log(`📝 Extracted ${extractedText.length} characters of text`);
 
-    // ✅ Extra sanitization before inserting into PostgreSQL
+    // ✅ Fully sanitize extracted text before inserting into PostgreSQL
     extractedText = extractedText
-      .replace(/\u0000/g, "") // Remove all null characters
-      .replace(/[\x00-\x1F\x7F]/g, "") // Remove control characters
-      .replace(/[^\x20-\x7EäöüßÄÖÜéèàù]/g, "") // Keep common European characters
-      .replace(/\s+/g, " ") // Normalize whitespace
+      .replace(/\u0000/g, "") // Remove null characters
+      .replace(/[\x00-\x1F\x7F]/g, "") // Remove all control characters
+      .replace(/[^\x20-\x7EäöüßÄÖÜéèàù]/g, "") // Keep common characters
+      .replace(/\s+/g, " ") // Normalize spaces
+      .normalize("NFC") // Ensure proper UTF-8 encoding
       .trim();
 
     console.log(`🔢 Using priority level: ${priority}`);
@@ -170,12 +171,13 @@ async function extractPdfText(pdfArrayBuffer: ArrayBuffer): Promise<string> {
 
     console.log("✅ PDF text extraction successful!");
 
-    // ✅ Fully sanitize extracted text before returning
+    // ✅ Final sanitization
     return extractedText
       .replace(/\u0000/g, "") // Remove null characters
-      .replace(/[\x00-\x1F\x7F]/g, "") // Remove control characters
-      .replace(/[^\x20-\x7EäöüßÄÖÜéèàù]/g, "") // Keep common European characters
-      .replace(/\s+/g, " ") // Normalize whitespace
+      .replace(/[\x00-\x1F\x7F]/g, "") // Remove all control characters
+      .replace(/[^\x20-\x7EäöüßÄÖÜéèàù]/g, "") // Keep common characters
+      .replace(/\s+/g, " ") // Normalize spaces
+      .normalize("NFC") // Ensure UTF-8 encoding
       .trim();
 
   } catch (error) {
@@ -183,5 +185,4 @@ async function extractPdfText(pdfArrayBuffer: ArrayBuffer): Promise<string> {
     throw new Error(`Failed to extract text from PDF: ${error.message}`);
   }
 }
-
 
