@@ -1,6 +1,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.36.0";
 import { corsHeaders } from "../_shared/cors.ts";
+import { PDFDocument } from "https://esm.sh/pdf-parse@1.1.1";
 
 Deno.serve(async (req) => {
   console.log(`🔄 Request received: ${req.method}`);
@@ -134,10 +135,18 @@ Deno.serve(async (req) => {
     let extractedText = "";
     if (fileName.toLowerCase().endsWith(".pdf")) {
       console.log("📄 Processing PDF file");
-      // For PDF files, we'll just use a simpler approach since the PDF library isn't available
-      // Note: This is a fallback that won't extract text from PDFs properly
-      // We'll need to handle this on the client side or use a different approach
-      extractedText = `Content extracted from ${fileName}. Note: Full PDF text extraction is not available. Please consider uploading a text version of this document.`;
+      try {
+        const arrayBuffer = await fileData.arrayBuffer();
+        extractedText = await extractPdfText(arrayBuffer, fileName);
+        console.log(`📝 PDF extraction successful, extracted ${extractedText.length} characters`);
+        console.log(`📝 Preview: ${extractedText.substring(0, 100)}...`);
+      } catch (pdfError) {
+        console.error("❌ Error extracting PDF text:", pdfError);
+        return new Response(
+          JSON.stringify({ success: false, error: `Failed to extract text from PDF: ${pdfError.message}` }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     } else if (fileName.toLowerCase().endsWith(".txt")) {
       console.log("📄 Processing text file");
       extractedText = await fileData.text();
@@ -201,3 +210,31 @@ Deno.serve(async (req) => {
     );
   }
 });
+
+/**
+ * Extracts text content from a PDF file
+ */
+async function extractPdfText(pdfArrayBuffer: ArrayBuffer, fileName: string): Promise<string> {
+  try {
+    console.log(`🔍 Starting PDF text extraction for ${fileName}...`);
+    
+    // Use the pdf-parse library to extract text
+    const uint8Array = new Uint8Array(pdfArrayBuffer);
+    const pdfData = await PDFDocument(uint8Array);
+    
+    console.log(`📄 PDF loaded successfully with ${pdfData.numpages} pages`);
+    
+    // Extract text from the PDF
+    const text = pdfData.text || "";
+    
+    if (!text || text.trim().length === 0) {
+      throw new Error("PDF text extraction returned empty result");
+    }
+    
+    console.log(`📝 Extracted total of ${text.length} characters from PDF`);
+    return text;
+  } catch (error) {
+    console.error("❌ Error in PDF extraction:", error);
+    throw new Error(`Failed to extract text from PDF: ${error.message || "Unknown error"}`);
+  }
+}
