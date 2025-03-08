@@ -1,6 +1,33 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.36.0";
 import { corsHeaders } from "../_shared/cors.ts";
+import { getDocument } from "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.mjs";
+
+// Helper function to extract text from PDF using pdfjs-dist
+async function extractPdfText(pdfArrayBuffer: ArrayBuffer): Promise<string> {
+  try {
+    console.log("🔍 Extracting text from PDF...");
+
+    const loadingTask = getDocument({ data: pdfArrayBuffer });
+    const pdf = await loadingTask.promise;
+
+    let extractedText = "";
+
+    for (let i = 1; i <= pdf.numPages; i++) {
+      console.log(`Processing page ${i} of ${pdf.numPages}`);
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      const strings = content.items.map((item: any) => item.str);
+      extractedText += strings.join(" ") + "\n";
+    }
+
+    console.log(`📝 Extracted ${extractedText.length} characters of text`);
+    return extractedText;
+  } catch (error) {
+    console.error("❌ Error extracting PDF text:", error);
+    throw new Error(`Failed to extract text from PDF: ${error.message}`);
+  }
+}
 
 Deno.serve(async (req) => {
   console.log(`🔄 Request received: ${req.method}`);
@@ -133,44 +160,11 @@ Deno.serve(async (req) => {
     // Extract Text from File
     let extractedText = "";
     if (fileName.toLowerCase().endsWith(".pdf")) {
-      console.log("📄 Processing PDF file");
+      console.log("📄 Processing PDF file with PDF.js");
       try {
-        // For PDFs, we'll use a Deno-compatible approach
-        // We'll extract the first few pages or provide a placeholder
-        // depending on the PDF structure
-        
-        // Try to extract text using a Deno-compatible approach
-        try {
-          // Attempt to load PDF.js or a similar library
-          // This is a placeholder - in the current version, 
-          // we can't reliably extract text from PDFs in Deno
-          
-          // In a production environment, consider:
-          // 1. Using a PDF-to-text microservice
-          // 2. Using a pre-processing step before uploading
-          // 3. Using a different file format altogether
-          
-          console.log("⚠️ Using fallback PDF extraction method");
-          const arrayBuffer = await fileData.arrayBuffer();
-          const firstBytes = new Uint8Array(arrayBuffer.slice(0, 1000));
-          // Log first few bytes to help debug PDF structure
-          console.log("📊 PDF first bytes:", Array.from(firstBytes).map(b => b.toString(16)).join(' '));
-          
-          // Extract metadata or a sample
-          extractedText = `Content extracted from ${fileName}.\n\n` +
-                          `PDF processing in this environment is limited.\n\n` +
-                          `This file contains approximately ${Math.floor(arrayBuffer.byteLength / 1024)} KB of data.\n\n` +
-                          `For best results, please consider:\n` +
-                          `- Converting this PDF to a text file before uploading\n` +
-                          `- Using a text/markdown file instead\n` +
-                          `- Contact support if you need help processing this file`;
-          
-        } catch (innerError) {
-          console.error("❌ Inner PDF extraction error:", innerError);
-          extractedText = `Content from ${fileName} (PDF format).\n\nPDF text extraction is limited in this environment. For best results, please upload a text version of this document.`;
-        }
-        
-        console.log(`📝 Using structured text for PDF: ${extractedText.substring(0, 100)}...`);
+        // Extract text from PDF using PDF.js
+        const arrayBuffer = await fileData.arrayBuffer();
+        extractedText = await extractPdfText(arrayBuffer);
       } catch (pdfError) {
         console.error("❌ Error extracting PDF text:", pdfError);
         return new Response(
