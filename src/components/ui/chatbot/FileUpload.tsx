@@ -89,7 +89,7 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
     setUploadedFiles(prev => 
       prev.map(file => 
         file.id === fileId 
-          ? { ...file, status: 'processing' } 
+          ? { ...file, status: 'processing' as const } 
           : file
       )
     );
@@ -116,7 +116,7 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
       setUploadedFiles(prev => 
         prev.map(file => 
           file.id === fileId 
-            ? { ...file, status: 'completed' } 
+            ? { ...file, status: 'completed' as const } 
             : file
         )
       );
@@ -130,7 +130,7 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
       setUploadedFiles(prev => 
         prev.map(file => 
           file.id === fileId 
-            ? { ...file, status: 'error', error: error.message } 
+            ? { ...file, status: 'error' as const, error: error.message } 
             : file
         )
       );
@@ -173,7 +173,7 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
       // Update file status to processing if it's a PDF or text file
       const updatedFile = { 
         ...newFile, 
-        status: 'completed' 
+        status: 'completed' as const 
       };
       
       setUploadedFiles(prev => 
@@ -200,7 +200,7 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
       setUploadedFiles(prev => 
         prev.map(file => 
           file.id === newFile.id 
-            ? { ...file, status: 'error', error: error.message } 
+            ? { ...file, status: 'error' as const, error: error.message } 
             : file
         )
       );

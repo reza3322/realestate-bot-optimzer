@@ -2,8 +2,8 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.36.0";
 import { corsHeaders } from "../_shared/cors.ts";
 
-// ✅ Use Deno-compatible PDF.js module
-import { getDocument } from "https://deno.land/x/pdfjs@0.1.1/mod.ts";
+// Import a more reliable PDF library for Deno
+import { parse as parsePdf } from "https://deno.land/x/pdfparser@v1.0.5/mod.ts";
 
 Deno.serve(async (req) => {
   console.log(`🔄 Request received: ${req.method}`);
@@ -44,13 +44,13 @@ Deno.serve(async (req) => {
 
     console.log(`📄 Processing file: ${filePath} for user: ${userId}, content type: ${contentType}`);
 
-    // ✅ Initialize Supabase Client
+    // Initialize Supabase Client
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") || "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || ""
     );
 
-    // ✅ Check if bucket exists
+    // Check if bucket exists
     const { data: buckets, error: bucketsError } = await supabase
       .storage
       .listBuckets();
@@ -72,7 +72,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    // ✅ Download File from Supabase Storage
+    // Download File from Supabase Storage
     const { data: fileData, error: downloadError } = await supabase
       .storage
       .from("chatbot_training_files")
@@ -86,7 +86,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    // ✅ Extract Text from File
+    // Extract Text from File
     let extractedText = "";
     if (fileName.toLowerCase().endsWith(".pdf")) {
       console.log("📄 Processing PDF file");
@@ -113,7 +113,7 @@ Deno.serve(async (req) => {
 
     console.log(`📝 Extracted ${extractedText.length} characters of text`);
 
-    // ✅ Insert Extracted Content into Supabase
+    // Insert Extracted Content into Supabase
     const { data: insertData, error: insertError } = await supabase
       .from("chatbot_training_data")
       .insert({
@@ -154,26 +154,21 @@ Deno.serve(async (req) => {
   }
 });
 
-// ✅ Extract Text from PDF Function
+// Extract Text from PDF Function
 async function extractPdfText(pdfArrayBuffer: ArrayBuffer): Promise<string> {
   try {
     console.log("🔍 Starting PDF text extraction...");
     
-    // ✅ Load the PDF document using Deno-compatible PDF.js
-    const pdf = await getDocument({ data: pdfArrayBuffer }).promise;
-    console.log(`📄 PDF loaded successfully with ${pdf.numPages} pages`);
+    // Use the Deno PDF parser library to extract text
+    const pdfData = new Uint8Array(pdfArrayBuffer);
+    const result = await parsePdf(pdfData);
     
-    let completeText = "";
-    for (let i = 1; i <= pdf.numPages; i++) {
-      console.log(`📃 Processing page ${i} of ${pdf.numPages}...`);
-      const page = await pdf.getPage(i);
-      const content = await page.getTextContent();
-      const strings = content.items.map((item: any) => item.str);
-      completeText += strings.join(" ") + "\n";
+    if (!result || !result.text) {
+      throw new Error("Could not extract text from PDF");
     }
     
-    console.log(`📝 Extracted total of ${completeText.length} characters from PDF`);
-    return completeText;
+    console.log(`📝 Extracted total of ${result.text.length} characters from PDF`);
+    return result.text;
   } catch (error) {
     console.error("❌ Error extracting PDF text:", error);
     throw new Error(`Failed to extract text from PDF: ${error.message}`);
