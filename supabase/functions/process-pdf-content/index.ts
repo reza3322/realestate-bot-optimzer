@@ -33,7 +33,7 @@ Deno.serve(async (req) => {
     if (req.method !== "POST") {
       return new Response(
         JSON.stringify({ error: `Unsupported method: ${req.method}` }),
-        { status: 405, headers: { "Content-Type": "application/json" } }
+        { status: 405, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -47,7 +47,7 @@ Deno.serve(async (req) => {
       console.error("❌ Missing required fields:", body);
       return new Response(
         JSON.stringify({ success: false, error: "Missing required fields", received: body }),
-        { status: 400, headers: { "Content-Type": "application/json" } }
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -59,7 +59,33 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || ""
     );
 
+    // ✅ Check if bucket exists
+    console.log("🔍 Checking if storage bucket exists...");
+    const { data: buckets, error: bucketError } = await supabase
+      .storage
+      .listBuckets();
+    
+    if (bucketError) {
+      console.error("❌ Error listing buckets:", bucketError);
+      return new Response(
+        JSON.stringify({ success: false, error: "Failed to list storage buckets", details: bucketError }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
+    const bucketExists = buckets.some(bucket => bucket.name === "chatbot_training_files");
+    console.log(`📦 Bucket "chatbot_training_files" exists: ${bucketExists}`);
+    
+    if (!bucketExists) {
+      console.error("❌ Storage bucket 'chatbot_training_files' does not exist!");
+      return new Response(
+        JSON.stringify({ success: false, error: "Storage bucket 'chatbot_training_files' does not exist" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // ✅ Download File from Supabase Storage
+    console.log(`📥 Attempting to download file: ${filePath}`);
     const { data: fileData, error: downloadError } = await supabase
       .storage
       .from("chatbot_training_files")
@@ -69,9 +95,11 @@ Deno.serve(async (req) => {
       console.error("❌ Failed to download file:", downloadError);
       return new Response(
         JSON.stringify({ success: false, error: "Failed to download file", details: downloadError }),
-        { status: 500, headers: { "Content-Type": "application/json" } }
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    console.log("✅ File downloaded successfully");
 
     // ✅ Extract Text from File
     let extractedText = "";
@@ -86,13 +114,23 @@ Deno.serve(async (req) => {
       console.error(`❌ Unsupported file type: ${fileName}`);
       return new Response(
         JSON.stringify({ success: false, error: `Unsupported file type: ${fileName}` }),
-        { status: 400, headers: { "Content-Type": "application/json" } }
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     console.log(`📝 Extracted ${extractedText.length} characters of text`);
 
+    // ✅ Check if we have any text to insert
+    if (!extractedText || extractedText.trim().length === 0) {
+      console.error("❌ No text was extracted from the file");
+      return new Response(
+        JSON.stringify({ success: false, error: "No text was extracted from the file" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // ✅ Insert Extracted Content into Supabase
+    console.log("💾 Inserting extracted text into database...");
     const { data: insertData, error: insertError } = await supabase
       .from("chatbot_training_data")
       .insert({
@@ -109,7 +147,7 @@ Deno.serve(async (req) => {
       console.error("❌ ERROR INSERTING INTO DATABASE:", insertError);
       return new Response(
         JSON.stringify({ success: false, error: "Failed to store training data", details: insertError }),
-        { status: 500, headers: { "Content-Type": "application/json" } }
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -121,14 +159,14 @@ Deno.serve(async (req) => {
         message: "File processed successfully",
         entriesCreated: 1
       }),
-      { headers: { "Content-Type": "application/json" } }
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
 
   } catch (error) {
     console.error("❌ Error processing file:", error);
     return new Response(
       JSON.stringify({ success: false, error: error.message }),
-      { status: 500, headers: { "Content-Type": "application/json" } }
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });
@@ -136,17 +174,22 @@ Deno.serve(async (req) => {
 // ✅ Extract Text from PDF Function
 async function extractPdfText(pdfArrayBuffer: ArrayBuffer): Promise<string> {
   try {
+    console.log("🔍 Starting PDF text extraction...");
+    
     // ✅ Load the PDF document using Deno-compatible PDF.js
     const pdf = await getDocument({ data: pdfArrayBuffer }).promise;
+    console.log(`📄 PDF loaded successfully with ${pdf.numPages} pages`);
     
     let completeText = "";
     for (let i = 1; i <= pdf.numPages; i++) {
+      console.log(`📃 Processing page ${i} of ${pdf.numPages}...`);
       const page = await pdf.getPage(i);
       const content = await page.getTextContent();
       const strings = content.items.map((item: any) => item.str);
       completeText += strings.join(" ") + "\n";
     }
     
+    console.log(`📝 Extracted total of ${completeText.length} characters from PDF`);
     return completeText;
   } catch (error) {
     console.error("❌ Error extracting PDF text:", error);
