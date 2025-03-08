@@ -7,36 +7,55 @@ async function extractPdfText(pdfArrayBuffer: ArrayBuffer): Promise<string> {
   try {
     console.log("🔍 Extracting text from PDF...");
     
-    // Import the PDF.js library with the correct module path and namespace
-    const pdfJsModule = await import("npm:pdfjs-dist@3.11.174/build/pdf.mjs");
-    const pdfjs = pdfJsModule.default;
+    // For Deno environment, we need to use a different approach to parse PDFs
+    // We'll use a simpler method that doesn't rely on workers
     
-    console.log("📚 PDF.js library loaded");
+    // Convert the ArrayBuffer to Uint8Array for processing
+    const pdfData = new Uint8Array(pdfArrayBuffer);
     
-    // Load PDF document with explicit parameters for Deno/Edge environment
-    const loadingTask = pdfjs.getDocument({
-      data: pdfArrayBuffer,
-      useWorkerFetch: false,
-      isEvalSupported: false,
-      disableFontFace: true,
-      // Disable workers to avoid needing worker scripts in Deno environment
-      disableWorker: true,
-    });
-    
-    const pdf = await loadingTask.promise;
-    console.log(`📄 PDF loaded successfully with ${pdf.numPages} pages`);
+    console.log(`📄 PDF data loaded with ${pdfData.length} bytes`);
 
+    // Basic PDF text extraction using regex patterns
+    // This is a simplified approach for Deno environment
+    const pdfString = new TextDecoder().decode(pdfData);
+    
+    // Extract text objects from PDF structure
+    // This regex looks for text objects in the PDF format
+    const textRegex = /\(\s*([^)]+)\s*\)\s*Tj/g;
+    let match;
     let extractedText = "";
-
-    for (let i = 1; i <= pdf.numPages; i++) {
-      console.log(`Processing page ${i} of ${pdf.numPages}`);
-      const page = await pdf.getPage(i);
-      const content = await page.getTextContent();
-      const strings = content.items.map((item: any) => item.str);
-      extractedText += strings.join(" ") + "\n";
+    
+    while ((match = textRegex.exec(pdfString)) !== null) {
+      // Clean up text and add to result
+      if (match[1]) {
+        extractedText += match[1].replace(/\\(\d{3})/g, (_, octal) => 
+          String.fromCharCode(parseInt(octal, 8))
+        ) + " ";
+      }
     }
-
+    
+    // If we didn't extract any text with the first method, try fallback method
+    if (extractedText.trim().length === 0) {
+      console.log("📝 First extraction method yielded no results, trying fallback method...");
+      // Fallback: Look for text blocks with different pattern
+      const fallbackRegex = /BT\s*[^(]*\(\s*([^)]+)\s*\)/g;
+      while ((match = fallbackRegex.exec(pdfString)) !== null) {
+        if (match[1]) {
+          extractedText += match[1].replace(/\\(\d{3})/g, (_, octal) => 
+            String.fromCharCode(parseInt(octal, 8))
+          ) + " ";
+        }
+      }
+    }
+    
     console.log(`📝 Extracted ${extractedText.length} characters of text`);
+    
+    // If still no text, provide a meaningful message
+    if (extractedText.trim().length === 0) {
+      console.log("⚠️ Could not extract text with simple methods, PDF may be scanned or encoded");
+      return "This PDF appears to be scanned or has encoded text that cannot be extracted using simple methods. Consider converting to a text file for better results.";
+    }
+    
     return extractedText;
   } catch (error) {
     console.error("❌ Error extracting PDF text:", error);
@@ -196,7 +215,7 @@ Deno.serve(async (req) => {
     // Extract Text from File
     let extractedText = "";
     if (fileName.toLowerCase().endsWith(".pdf")) {
-      console.log("📄 Processing PDF file with PDF.js");
+      console.log("📄 Processing PDF file with simple text extraction");
       try {
         // Extract text from PDF using our helper function
         const arrayBuffer = await fileData.arrayBuffer();
