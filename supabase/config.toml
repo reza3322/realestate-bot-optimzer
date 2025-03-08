@@ -31,3 +31,6 @@ verify_jwt = true
 
 [functions.web-scraper]
 verify_jwt = true
+
+[functions.process-pdf-content]
+verify_jwt = false

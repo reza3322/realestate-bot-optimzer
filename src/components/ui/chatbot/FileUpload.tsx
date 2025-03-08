@@ -1,11 +1,11 @@
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
-import { FilePlus, FileText, Upload, Loader2, AlertCircle, CheckCircle2, FileX } from "lucide-react";
+import { FilePlus, FileText, Upload, Loader2, AlertCircle, CheckCircle2, FileX, FileSearch } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -22,7 +22,7 @@ interface UploadedFile {
   path: string;
   size: number;
   type: string;
-  status: 'uploading' | 'completed' | 'error';
+  status: 'uploading' | 'processing' | 'completed' | 'error';
   error?: string;
   contentType: string;
   createdAt: Date;
@@ -34,6 +34,10 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
   const [isUploading, setIsUploading] = useState<boolean>(false);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [isLoadingFiles, setIsLoadingFiles] = useState<boolean>(true);
+
+  useEffect(() => {
+    fetchUploadedFiles();
+  }, []);
 
   const fetchUploadedFiles = async () => {
     setIsLoadingFiles(true);
@@ -80,15 +84,73 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
     }
   };
 
+  const processPdfContent = async (filePath: string, fileName: string, fileId: string) => {
+    // Update file status to processing
+    setUploadedFiles(prev => 
+      prev.map(file => 
+        file.id === fileId 
+          ? { ...file, status: 'processing' } 
+          : file
+      )
+    );
+
+    try {
+      const response = await supabase.functions.invoke('process-pdf-content', {
+        body: {
+          filePath,
+          userId,
+          contentType,
+          fileName
+        }
+      });
+
+      if (response.error) {
+        throw new Error(response.error.message || 'Failed to process file');
+      }
+
+      if (!response.data.success) {
+        throw new Error(response.data.error || 'Failed to process file');
+      }
+
+      // Update file status to completed
+      setUploadedFiles(prev => 
+        prev.map(file => 
+          file.id === fileId 
+            ? { ...file, status: 'completed' } 
+            : file
+        )
+      );
+
+      toast.success('File processed and content extracted successfully');
+      
+    } catch (error) {
+      console.error('Error processing file:', error);
+      
+      // Update file status to error
+      setUploadedFiles(prev => 
+        prev.map(file => 
+          file.id === fileId 
+            ? { ...file, status: 'error', error: error.message } 
+            : file
+        )
+      );
+      
+      toast.error(`Failed to process file: ${error.message}`);
+    }
+  };
+
   const uploadFile = async () => {
     if (!selectedFile || !userId) return;
     
     setIsUploading(true);
     
+    const fileName = `${Date.now()}_${selectedFile.name}`;
+    const filePath = `${userId}/${fileName}`;
+    
     const newFile: UploadedFile = {
       id: Date.now().toString(),
       name: selectedFile.name,
-      path: `${userId}/${Date.now()}_${selectedFile.name}`,
+      path: filePath,
       size: selectedFile.size,
       type: selectedFile.type,
       status: 'uploading',
@@ -102,21 +164,32 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
       const { data, error } = await supabase
         .storage
         .from('chatbot_training_files')
-        .upload(newFile.path, selectedFile);
+        .upload(filePath, selectedFile);
       
       if (error) {
         throw error;
       }
       
+      // Update file status to processing if it's a PDF or text file
+      const updatedFile = { 
+        ...newFile, 
+        status: 'completed' 
+      };
+      
       setUploadedFiles(prev => 
         prev.map(file => 
           file.id === newFile.id 
-            ? { ...file, status: 'completed' } 
+            ? updatedFile
             : file
         )
       );
       
       toast.success('File uploaded successfully.');
+      
+      // If it's a PDF or text file, process its content
+      if (selectedFile.type === 'application/pdf' || selectedFile.type === 'text/plain') {
+        await processPdfContent(filePath, selectedFile.name, newFile.id);
+      }
       
       setSelectedFile(null);
       if (onUploadComplete) onUploadComplete(true);
@@ -155,6 +228,8 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
     switch (status) {
       case 'uploading':
         return <Loader2 className="h-4 w-4 animate-spin text-yellow-500" />;
+      case 'processing':
+        return <FileSearch className="h-4 w-4 animate-pulse text-blue-500" />;
       case 'completed':
         return <CheckCircle2 className="h-4 w-4 text-green-500" />;
       case 'error':
@@ -168,6 +243,8 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
     switch (file.status) {
       case 'uploading':
         return <Badge variant="outline" className="bg-yellow-100 text-yellow-800">Uploading</Badge>;
+      case 'processing':
+        return <Badge variant="outline" className="bg-blue-100 text-blue-800">Processing</Badge>;
       case 'completed':
         return <Badge variant="outline" className="bg-green-100 text-green-800">Completed</Badge>;
       case 'error':
@@ -177,12 +254,16 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
     }
   };
 
+  const processFile = async (file: UploadedFile) => {
+    await processPdfContent(file.path, file.name, file.id);
+  };
+
   return (
     <Card className="w-full">
       <CardHeader>
         <CardTitle className="text-lg">Upload Training Files</CardTitle>
         <CardDescription>
-          Upload PDF or text files to be stored for reference. Note: Automatic content processing has been disabled.
+          Upload PDF or text files to train your chatbot. Files will be processed and their content used for training.
         </CardDescription>
       </CardHeader>
       
@@ -236,7 +317,7 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
           </div>
           
           <p className="text-xs text-muted-foreground">
-            Files will be stored but not automatically processed. You'll need to manually add content to train your chatbot.
+            PDF and text files will be automatically processed and their content will be used to train your chatbot.
           </p>
         </div>
         
@@ -268,7 +349,7 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
             <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground">
               <FileText size={40} className="mb-2 opacity-20" />
               <p>No files uploaded yet</p>
-              <p className="text-sm mt-1">Upload files for reference</p>
+              <p className="text-sm mt-1">Upload files to train your chatbot</p>
             </div>
           ) : (
             <ScrollArea className="h-[200px]">
@@ -291,11 +372,22 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
                           )}
                         </div>
                       </div>
-                      <div className="flex items-center">
+                      <div className="flex items-center gap-2">
                         {getStatusBadge(file)}
-                        <div className="ml-2">
+                        <div>
                           {getStatusIcon(file.status)}
                         </div>
+                        {file.status === 'completed' && (file.type === 'application/pdf' || file.type === 'text/plain') && (
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            onClick={() => processFile(file)}
+                            className="h-8 w-8 p-0"
+                            title="Process file content"
+                          >
+                            <FileSearch className="h-4 w-4" />
+                          </Button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -309,8 +401,8 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
       <CardFooter className="bg-muted/50 px-6 py-4 border-t flex items-center gap-2 text-sm text-muted-foreground">
         <AlertCircle size={16} />
         <p>
-          Files uploaded here are stored for reference only. To train your chatbot, use the manual entry feature
-          to add specific questions and answers.
+          Uploaded files will be processed and their content will be used to train your chatbot.
+          This helps your chatbot provide more accurate and relevant responses.
         </p>
       </CardFooter>
     </Card>
