@@ -1,4 +1,3 @@
-
 import { createClient } from '@supabase/supabase-js';
 import { toast } from 'sonner';
 
@@ -399,5 +398,42 @@ export const getSystemLogs = async () => {
     console.error('Error fetching system logs:', error);
     toast.error('Failed to fetch system logs');
     return [];
+  }
+};
+
+// Add a new function to process files and extract content for the chatbot
+export const processPdfContent = async (filePath: string, userId: string, contentType: string, fileName: string, priority: number = 5) => {
+  try {
+    console.log(`Processing file: ${filePath}`);
+    
+    const { data, error } = await supabase.functions.invoke('process-pdf-content', {
+      body: {
+        filePath,
+        userId,
+        contentType,
+        fileName,
+        priority
+      }
+    });
+    
+    if (error) {
+      console.error('Error processing file:', error);
+      toast.error('Failed to process file. Please try again or use a different file format.');
+      return { success: false, error };
+    }
+    
+    console.log('File processing result:', data);
+    
+    if (data.success) {
+      toast.success('File processed successfully!');
+    } else {
+      toast.error(data.error || 'Failed to process file');
+    }
+    
+    return data;
+  } catch (error) {
+    console.error('Error in processPdfContent:', error);
+    toast.error('An unexpected error occurred while processing the file');
+    return { success: false, error };
   }
 };
