@@ -29,11 +29,22 @@ serve(async (req) => {
     // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    
+    if (!supabaseUrl || !supabaseKey) {
+      console.error('Supabase credentials missing: URL or key not found in environment')
+      return new Response(
+        JSON.stringify({ error: 'Server configuration error' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      )
+    }
+    
+    console.log(`Initializing Supabase client with URL: ${supabaseUrl.substring(0, 10)}...`)
     const supabase = createClient(supabaseUrl, supabaseKey)
 
     // Get user's properties if userId is provided
     let properties = []
     if (userId) {
+      console.log(`Fetching properties for user: ${userId}`)
       const { data: userProperties, error: propertiesError } = await supabase
         .from('properties')
         .select('*')
@@ -54,55 +65,62 @@ serve(async (req) => {
     
     if (userId) {
       console.log('Checking for matching training data...')
-      const { data: trainingMatches, error: trainingError } = await supabase
-        .from('chatbot_training_data')
-        .select('*')
-        .eq('user_id', userId)
-        .order('priority', { ascending: false })
+      try {
+        const { data: trainingMatches, error: trainingError } = await supabase
+          .from('chatbot_training_data')
+          .select('*')
+          .eq('user_id', userId)
+          .order('priority', { ascending: false })
 
-      if (trainingError) {
-        console.error('Error fetching training data:', trainingError)
-      } else if (trainingMatches && trainingMatches.length > 0) {
-        console.log(`Found ${trainingMatches.length} training entries to check`)
-        
-        // Find the closest match based on the question content
-        // This is a simple implementation - could be improved with more sophisticated matching
-        const messageWords = message.toLowerCase().split(' ')
-        let bestMatch = null
-        let highestMatchScore = 0
+        console.log('Training data query executed, checking results...')
 
-        for (const training of trainingMatches) {
-          const questionWords = training.question.toLowerCase().split(' ')
-          let matchScore = 0
+        if (trainingError) {
+          console.error('Error fetching training data:', trainingError)
+          console.error('Error details:', JSON.stringify(trainingError))
+        } else if (trainingMatches && trainingMatches.length > 0) {
+          console.log(`Found ${trainingMatches.length} training entries to check`)
           
-          // Count how many words from the message appear in the training question
-          for (const word of messageWords) {
-            if (word.length > 3 && questionWords.includes(word)) { // Only count significant words
-              matchScore++
+          // Find the closest match based on the question content
+          // This is a simple implementation - could be improved with more sophisticated matching
+          const messageWords = message.toLowerCase().split(' ')
+          let bestMatch = null
+          let highestMatchScore = 0
+
+          for (const training of trainingMatches) {
+            const questionWords = training.question.toLowerCase().split(' ')
+            let matchScore = 0
+            
+            // Count how many words from the message appear in the training question
+            for (const word of messageWords) {
+              if (word.length > 3 && questionWords.includes(word)) { // Only count significant words
+                matchScore++
+              }
+            }
+            
+            // Also check if the whole message is contained in the question
+            if (training.question.toLowerCase().includes(message.toLowerCase())) {
+              matchScore += 3 // Give extra weight to full matches
+            }
+            
+            if (matchScore > highestMatchScore) {
+              highestMatchScore = matchScore
+              bestMatch = training
             }
           }
           
-          // Also check if the whole message is contained in the question
-          if (training.question.toLowerCase().includes(message.toLowerCase())) {
-            matchScore += 3 // Give extra weight to full matches
+          // If we found a good match, use it
+          if (bestMatch && (highestMatchScore > 2 || bestMatch.question.toLowerCase().includes(message.toLowerCase()))) {
+            console.log(`Using training data match: "${bestMatch.question}" with score ${highestMatchScore}`)
+            response = bestMatch.answer
+            responseSource = 'training'
+          } else {
+            console.log('No good match found in training data. Highest score:', highestMatchScore)
           }
-          
-          if (matchScore > highestMatchScore) {
-            highestMatchScore = matchScore
-            bestMatch = training
-          }
-        }
-        
-        // If we found a good match, use it
-        if (bestMatch && (highestMatchScore > 2 || bestMatch.question.toLowerCase().includes(message.toLowerCase()))) {
-          console.log(`Using training data match: "${bestMatch.question}" with score ${highestMatchScore}`)
-          response = bestMatch.answer
-          responseSource = 'training'
         } else {
-          console.log('No good match found in training data')
+          console.log('No training data found for user')
         }
-      } else {
-        console.log('No training data found for user')
+      } catch (trainingQueryError) {
+        console.error('Exception during training data query:', trainingQueryError)
       }
     }
 
@@ -115,61 +133,76 @@ serve(async (req) => {
         
         if (!openAIApiKey) {
           console.error('OpenAI API key is not configured')
-          response = "I'm sorry, I'm having trouble generating a response right now."
-        } else {
-          const configuration = new Configuration({ apiKey: openAIApiKey })
-          const openai = new OpenAIApi(configuration)
+          return new Response(
+            JSON.stringify({ error: 'OpenAI API key not configured' }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+          )
+        }
+        
+        console.log('OpenAI API key found, initializing client')
+        const configuration = new Configuration({ apiKey: openAIApiKey })
+        const openai = new OpenAIApi(configuration)
 
-          // Create a system message based on the user's properties
-          let systemPrompt = "You are a helpful AI assistant for a real estate business. "
+        // Create a system message based on the user's properties
+        let systemPrompt = "You are a helpful AI assistant for a real estate business. "
+        
+        if (properties.length > 0) {
+          systemPrompt += `The user has ${properties.length} properties in their portfolio. `
+          systemPrompt += "Here's a brief summary of their properties: "
           
-          if (properties.length > 0) {
-            systemPrompt += `The user has ${properties.length} properties in their portfolio. `
-            systemPrompt += "Here's a brief summary of their properties: "
-            
-            properties.slice(0, 3).forEach((property, index) => {
-              systemPrompt += `Property ${index + 1}: ${property.type || 'Property'} in ${property.city || 'N/A'}, `
-              systemPrompt += `${property.bedrooms || 'N/A'} bedrooms, `
-              systemPrompt += `price: ${formatCurrency(property.price || 0)}. `
-            })
-            
-            if (properties.length > 3) {
-              systemPrompt += `And ${properties.length - 3} more properties.`
-            }
+          properties.slice(0, 3).forEach((property, index) => {
+            systemPrompt += `Property ${index + 1}: ${property.type || 'Property'} in ${property.city || 'N/A'}, `
+            systemPrompt += `${property.bedrooms || 'N/A'} bedrooms, `
+            systemPrompt += `price: ${formatCurrency(property.price || 0)}. `
+          })
+          
+          if (properties.length > 3) {
+            systemPrompt += `And ${properties.length - 3} more properties.`
           }
-          
-          // Add guidance for the AI
-          systemPrompt += "Provide helpful, concise, and friendly responses. If asked about properties, "
-          systemPrompt += "provide specific details when available. If unsure, suggest checking with a real estate agent."
-          
-          console.log('System prompt:', systemPrompt)
+        }
+        
+        // Add guidance for the AI
+        systemPrompt += "Provide helpful, concise, and friendly responses. If asked about properties, "
+        systemPrompt += "provide specific details when available. If unsure, suggest checking with a real estate agent."
+        
+        console.log('System prompt:', systemPrompt)
 
-          // Create messages array with system prompt and user message
-          const messages = [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: message }
-          ]
-          
-          // Add previous messages for context if available
-          if (previousMessages && Array.isArray(previousMessages) && previousMessages.length > 0) {
-            for (const prevMsg of previousMessages.slice(-4)) { // Add up to 4 previous messages
-              const role = prevMsg.role === 'user' ? 'user' : 'assistant'
-              messages.splice(1, 0, { role, content: prevMsg.content })
-            }
+        // Create messages array with system prompt and user message
+        const messages = [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: message }
+        ]
+        
+        // Add previous messages for context if available
+        if (previousMessages && Array.isArray(previousMessages) && previousMessages.length > 0) {
+          for (const prevMsg of previousMessages.slice(-4)) { // Add up to 4 previous messages
+            const role = prevMsg.role === 'user' ? 'user' : 'assistant'
+            messages.splice(1, 0, { role, content: prevMsg.content })
           }
+        }
 
-          // Generate response with OpenAI
+        console.log('Sending request to OpenAI...')
+        console.log('Messages payload:', JSON.stringify(messages.map(m => ({ role: m.role, content: m.content.substring(0, 50) + '...' }))))
+
+        // Generate response with OpenAI
+        try {
           const completion = await openai.createChatCompletion({
             model: "gpt-4o-mini", // Using a more affordable model
             messages: messages,
             max_tokens: 250,
             temperature: 0.7,
           })
-
+          
+          console.log('OpenAI response received:', JSON.stringify(completion.data.choices[0]?.message || {}))
           response = completion.data.choices[0]?.message?.content || "I'm not sure how to respond to that."
           responseSource = 'ai'
-          
-          console.log('OpenAI response generated:', response)
+        } catch (openAiRequestError) {
+          console.error('OpenAI API request error:', openAiRequestError)
+          if (openAiRequestError.response) {
+            console.error('OpenAI API response status:', openAiRequestError.response.status)
+            console.error('OpenAI API error response:', JSON.stringify(openAiRequestError.response.data || {}))
+          }
+          throw openAiRequestError
         }
       } catch (openAiError) {
         console.error('OpenAI error:', openAiError)
@@ -186,7 +219,8 @@ serve(async (req) => {
     // Store the conversation in the database
     if (userId) {
       try {
-        await supabase
+        console.log(`Storing conversation for user ${userId} with ID ${chatConversationId}`)
+        const { error: insertError } = await supabase
           .from('chatbot_conversations')
           .insert({
             user_id: userId,
@@ -195,9 +229,14 @@ serve(async (req) => {
             response: response,
             visitor_id: extractedLeadInfo.visitorId || null
           })
-        console.log('Conversation saved to database')
+          
+        if (insertError) {
+          console.error('Error storing conversation:', JSON.stringify(insertError))
+        } else {
+          console.log('Conversation saved to database')
+        }
       } catch (dbError) {
-        console.error('Error storing chat session:', dbError)
+        console.error('Exception storing chat session:', dbError)
       }
     }
     

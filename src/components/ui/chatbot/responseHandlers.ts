@@ -45,8 +45,9 @@ export const testChatbotResponse = async (
   userId: string
 ): Promise<{ response: string; error?: string; source?: 'ai' | 'training' }> => {
   try {
-    // Instead of directly accessing the protected properties, use environment variables or configuration
-    // For demo/preview purposes, we can use the window.location to determine the Supabase URL
+    console.log(`Sending message to chatbot API: "${message}" for user: ${userId}`);
+    
+    // Get Supabase URL and key from environment or configuration
     const supabaseUrl = process.env.SUPABASE_URL || 'https://ckgaqkbsnrvccctqxsqv.supabase.co';
     const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNrZ2Fxa2JzbnJ2Y2NjdHF4c3F2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDEwMTEyODksImV4cCI6MjA1NjU4NzI4OX0.z62BR5psK8FBR5lfqbnpbFMfQLKgzFCisqDiuWg4MKM';
 
@@ -57,62 +58,73 @@ export const testChatbotResponse = async (
 
     console.log(`Making request to: ${supabaseUrl}/functions/v1/chatbot-response`);
     
-    const response = await fetch(`${supabaseUrl}/functions/v1/chatbot-response`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${supabaseAnonKey}`,
-      },
-      body: JSON.stringify({
-        message,
-        userId,
-        conversationId: 'test-' + Date.now(),
-      }),
-    });
+    try {
+      const response = await fetch(`${supabaseUrl}/functions/v1/chatbot-response`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseAnonKey}`,
+        },
+        body: JSON.stringify({
+          message,
+          userId,
+          conversationId: 'test-' + Date.now(),
+        }),
+      });
 
-    // Log response details for debugging
-    console.log('Response status:', response.status);
-    console.log('Response headers:', Object.fromEntries(response.headers.entries()));
-    
-    if (!response.ok) {
-      let errorMessage = `Server error: ${response.status}`;
-      const contentType = response.headers.get('content-type');
+      // Log response details for debugging
+      console.log('Response status:', response.status);
+      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
       
-      if (contentType && contentType.includes('application/json')) {
-        try {
-          const errorData = await response.json();
-          errorMessage = errorData.error || errorMessage;
-        } catch (e) {
-          console.error('Error parsing JSON error response:', e);
+      if (!response.ok) {
+        let errorMessage = `Server error: ${response.status}`;
+        const contentType = response.headers.get('content-type');
+        
+        if (contentType && contentType.includes('application/json')) {
+          try {
+            const errorData = await response.json();
+            console.error('JSON error response:', errorData);
+            errorMessage = errorData.error || errorMessage;
+          } catch (e) {
+            console.error('Error parsing JSON error response:', e);
+          }
+        } else {
+          // If not JSON, try to get text
+          try {
+            const errorText = await response.text();
+            console.error('Non-JSON error response:', errorText);
+            errorMessage = `Server error: ${response.status} - ${errorText.substring(0, 100)}`;
+          } catch (e) {
+            console.error('Error getting response text:', e);
+          }
         }
-      } else {
-        // If not JSON, try to get text
-        try {
-          const errorText = await response.text();
-          console.error('Non-JSON error response:', errorText);
-          errorMessage = `Server error: ${response.status} - ${errorText.substring(0, 100)}`;
-        } catch (e) {
-          console.error('Error getting response text:', e);
-        }
+        
+        console.error('Test chatbot error:', errorMessage);
+        return { response: '', error: errorMessage };
       }
+
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        console.error('Non-JSON response received:', contentType);
+        const text = await response.text();
+        console.error('Response text (first 200 chars):', text.substring(0, 200));
+        return { response: '', error: 'Invalid response format from server' };
+      }
+
+      const data = await response.json();
+      console.log('Successful response from chatbot API:', data);
       
-      console.error('Test chatbot error:', errorMessage);
-      return { response: '', error: errorMessage };
+      return { 
+        response: data.response,
+        source: data.source || 'ai'
+      };
+    } catch (fetchError) {
+      console.error('Fetch error calling Edge Function:', fetchError);
+      return { 
+        response: '', 
+        error: 'Network error connecting to chatbot API: ' + fetchError.message 
+      };
     }
-
-    const contentType = response.headers.get('content-type');
-    if (!contentType || !contentType.includes('application/json')) {
-      console.error('Non-JSON response received:', contentType);
-      const text = await response.text();
-      console.error('Response text (first 200 chars):', text.substring(0, 200));
-      return { response: '', error: 'Invalid response format from server' };
-    }
-
-    const data = await response.json();
-    return { 
-      response: data.response,
-      source: data.source || 'ai'
-    };
   } catch (error) {
     console.error('Test chatbot exception:', error);
     return { 

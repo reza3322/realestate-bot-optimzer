@@ -1,6 +1,5 @@
 
-# Note: .env file is not committed to git, but this is required for local development
-# These are automatically set for you when deploying on Supabase
+# Required for local development
 project_id = "ckgaqkbsnrvccctqxsqv"
 base_path = "."
 
