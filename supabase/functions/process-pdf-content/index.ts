@@ -1,14 +1,18 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.36.0";
 import { corsHeaders } from "../_shared/cors.ts";
-import { getDocument } from "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.mjs";
+import * as pdfjs from "npm:pdfjs-dist@3.11.174";
 
 // Helper function to extract text from PDF using pdfjs-dist
 async function extractPdfText(pdfArrayBuffer: ArrayBuffer): Promise<string> {
   try {
     console.log("🔍 Extracting text from PDF...");
 
-    const loadingTask = getDocument({ data: pdfArrayBuffer });
+    // Initialize the PDF.js library
+    pdfjs.GlobalWorkerOptions.workerSrc = `npm:pdfjs-dist@3.11.174/build/pdf.worker.mjs`;
+    
+    // Load PDF document
+    const loadingTask = pdfjs.getDocument({ data: pdfArrayBuffer });
     const pdf = await loadingTask.promise;
 
     let extractedText = "";
