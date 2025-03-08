@@ -96,10 +96,11 @@ Deno.serve(async (req) => {
 
     console.log(`📝 Extracted ${extractedText.length} characters of text`);
 
-    // ✅ Final Fix: Remove ALL problematic characters before inserting into PostgreSQL
+    // ✅ Final Fix: Completely clean extracted text
     extractedText = extractedText
       .replace(/\u0000/g, "") // Remove all null characters
-      .replace(/[\x00-\x1F\x7F]/g, "") // Remove other non-printable ASCII characters
+      .replace(/[\x00-\x1F\x7F]/g, "") // Remove control characters
+      .replace(/[^\x20-\x7E]/g, "") // Remove all non-ASCII characters
       .trim();
 
     console.log(`🔢 Using priority level: ${priority}`);
@@ -155,7 +156,7 @@ async function extractPdfText(pdfArrayBuffer: ArrayBuffer): Promise<string> {
     let extractedText = "";
 
     await new Promise((resolve, reject) => {
-      reader.parseBuffer(Buffer.from(pdfArrayBuffer), (err, item) => {
+      reader.parseBuffer(new Uint8Array(pdfArrayBuffer), (err, item) => {
         if (err) {
           reject(err);
         } else if (!item) {
@@ -172,6 +173,7 @@ async function extractPdfText(pdfArrayBuffer: ArrayBuffer): Promise<string> {
     return extractedText
       .replace(/\u0000/g, "") // Remove null characters
       .replace(/[\x00-\x1F\x7F]/g, "") // Remove control characters
+      .replace(/[^\x20-\x7E]/g, "") // Remove all non-ASCII characters
       .trim();
 
   } catch (error) {
