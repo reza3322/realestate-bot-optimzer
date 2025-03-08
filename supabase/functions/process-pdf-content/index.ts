@@ -167,7 +167,7 @@ async function extractPdfText(pdfArrayBuffer: ArrayBuffer): Promise<string> {
     });
 
     console.log("✅ PDF text extraction successful!");
-    return extractedText.trim();
+    return extractedText.replace(/\u0000/g, "").trim();
   } catch (error) {
     console.error("❌ Error extracting PDF text:", error);
     throw new Error(`Failed to extract text from PDF: ${error.message}`);
