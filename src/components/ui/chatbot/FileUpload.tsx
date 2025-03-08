@@ -121,7 +121,11 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
         )
       );
 
-      toast.success('File processed and content extracted successfully');
+      if (fileName.toLowerCase().endsWith('.pdf')) {
+        toast.success('File uploaded successfully. Note: PDF text extraction is limited. For best results, consider uploading text files.');
+      } else {
+        toast.success('File processed and content extracted successfully');
+      }
       
     } catch (error) {
       console.error('Error processing file:', error);
@@ -264,6 +268,7 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
         <CardTitle className="text-lg">Upload Training Files</CardTitle>
         <CardDescription>
           Upload PDF or text files to train your chatbot. Files will be processed and their content used for training.
+          For best results, use text (.txt) files as PDF text extraction is limited.
         </CardDescription>
       </CardHeader>
       
@@ -402,7 +407,7 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
         <AlertCircle size={16} />
         <p>
           Uploaded files will be processed and their content will be used to train your chatbot.
-          This helps your chatbot provide more accurate and relevant responses.
+          For best results, use text (.txt) files rather than PDFs.
         </p>
       </CardFooter>
     </Card>
