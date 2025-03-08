@@ -2,8 +2,8 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.36.0";
 import { corsHeaders } from "../_shared/cors.ts";
 
-// Import a more reliable PDF library for Deno
-import { parse as parsePdf } from "https://deno.land/x/pdfparser@v1.0.5/mod.ts";
+// Import a reliable PDF library for Deno
+import { readPdf } from "https://deno.land/x/read_pdf@v0.0.2/mod.ts";
 
 Deno.serve(async (req) => {
   console.log(`🔄 Request received: ${req.method}`);
@@ -159,16 +159,16 @@ async function extractPdfText(pdfArrayBuffer: ArrayBuffer): Promise<string> {
   try {
     console.log("🔍 Starting PDF text extraction...");
     
-    // Use the Deno PDF parser library to extract text
+    // Use the Deno read_pdf library to extract text
     const pdfData = new Uint8Array(pdfArrayBuffer);
-    const result = await parsePdf(pdfData);
+    const text = await readPdf(pdfData);
     
-    if (!result || !result.text) {
+    if (!text) {
       throw new Error("Could not extract text from PDF");
     }
     
-    console.log(`📝 Extracted total of ${result.text.length} characters from PDF`);
-    return result.text;
+    console.log(`📝 Extracted total of ${text.length} characters from PDF`);
+    return text;
   } catch (error) {
     console.error("❌ Error extracting PDF text:", error);
     throw new Error(`Failed to extract text from PDF: ${error.message}`);
