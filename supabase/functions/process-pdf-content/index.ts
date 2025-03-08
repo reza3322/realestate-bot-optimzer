@@ -1,7 +1,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.36.0";
 import { corsHeaders } from "../_shared/cors.ts";
-import { PDFDocument } from "https://esm.sh/pdf-parse@1.1.1";
+import pdfParse from "https://esm.sh/pdf-parse@1.1.1";
 
 Deno.serve(async (req) => {
   console.log(`🔄 Request received: ${req.method}`);
@@ -220,7 +220,7 @@ async function extractPdfText(pdfArrayBuffer: ArrayBuffer, fileName: string): Pr
     
     // Use the pdf-parse library to extract text
     const uint8Array = new Uint8Array(pdfArrayBuffer);
-    const pdfData = await PDFDocument(uint8Array);
+    const pdfData = await pdfParse(uint8Array);
     
     console.log(`📄 PDF loaded successfully with ${pdfData.numpages} pages`);
     
