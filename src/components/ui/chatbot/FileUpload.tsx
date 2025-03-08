@@ -252,6 +252,9 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
       // Remove from local state
       setUploadedFiles(prev => prev.filter(file => file.id !== fileId));
       toast.success('File deleted successfully');
+      
+      // Notify parent component that files have changed
+      if (onUploadComplete) onUploadComplete(true);
     } catch (error) {
       console.error('Error in deleteFile:', error);
       toast.error('Failed to delete file');

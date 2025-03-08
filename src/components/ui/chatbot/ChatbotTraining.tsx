@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -199,6 +198,8 @@ const ChatbotTraining = ({ userId, userPlan, isPremiumFeature }: ChatbotTraining
     setNewItem({
       ...items[index]
     });
+    
+    setActiveTabSection("manual");
   };
 
   const cancelEditing = () => {
@@ -214,7 +215,6 @@ const ChatbotTraining = ({ userId, userPlan, isPremiumFeature }: ChatbotTraining
 
   const handleFileUploadComplete = (success: boolean) => {
     if (success) {
-      // Refresh the training data to show newly added items
       fetchTrainingData();
     }
   };
@@ -259,10 +259,19 @@ const ChatbotTraining = ({ userId, userPlan, isPremiumFeature }: ChatbotTraining
                   </TabsList>
                   
                   <TabsContent value="manual" className="space-y-4">
-                    <h3 className="text-lg font-medium">Add New {activeTab === 'faqs' ? 'FAQ' : 
-                                                           activeTab === 'property' ? 'Property Detail' : 
-                                                           activeTab === 'business' ? 'Business Info' : 
-                                                           'Custom Response'}</h3>
+                    <h3 className="text-lg font-medium">
+                      {editingIndex === null ? (
+                        `Add New ${activeTab === 'faqs' ? 'FAQ' : 
+                          activeTab === 'property' ? 'Property Detail' : 
+                          activeTab === 'business' ? 'Business Info' : 
+                          'Custom Response'}`
+                      ) : (
+                        `Edit ${activeTab === 'faqs' ? 'FAQ' : 
+                          activeTab === 'property' ? 'Property Detail' : 
+                          activeTab === 'business' ? 'Business Info' : 
+                          'Custom Response'}`
+                      )}
+                    </h3>
                     
                     <div className="space-y-2">
                       <Label htmlFor="question">
