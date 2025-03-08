@@ -6,7 +6,7 @@ import ChatInput from './ChatInput';
 import TypingIndicator from './TypingIndicator';
 import { getChatStyles, applyFontStyle } from './chatStyles';
 import { Message, ChatTheme, LanguageCode, ChatStylesType } from './types';
-import { getAIResponse, testChatbotResponse } from './responseHandlers';
+import { testChatbotResponse } from './responseHandlers';
 
 const DEFAULT_TRANSLATIONS = {
   en: {
@@ -83,7 +83,6 @@ const Chatbot = ({
     { role: 'bot', content: defaultWelcomeMessage }
   ]);
   const [isTyping, setIsTyping] = useState(false);
-  const [conversationId, setConversationId] = useState<string | undefined>(undefined);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -123,24 +122,14 @@ const Chatbot = ({
     
     if (useRealAPI) {
       try {
-        const previousMessages = messages.map(msg => ({
-          role: msg.role === 'bot' ? 'bot' : 'user',
-          content: msg.content
-        })) as Message[];
+        const { response, error } = await testChatbotResponse(message, userId);
         
-        const response = await getAIResponse(
-          message, 
-          userId, 
-          undefined, 
-          conversationId, 
-          previousMessages
-        );
-        
-        if (response.conversationId) {
-          setConversationId(response.conversationId);
+        if (error) {
+          console.error('Chatbot error:', error);
+          setError(`Error: ${error}`);
+        } else {
+          setMessages(prev => [...prev, { role: 'bot', content: response }]);
         }
-        
-        setMessages(prev => [...prev, { role: 'bot', content: response.response }]);
       } catch (err) {
         console.error('Chatbot exception:', err);
         setError(`Unexpected error: ${err instanceof Error ? err.message : 'Unknown error'}`);

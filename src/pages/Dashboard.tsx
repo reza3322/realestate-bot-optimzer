@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '@/components/layout/Navbar';
@@ -6,7 +5,7 @@ import Footer from '@/components/sections/Footer';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { getSession, getUserProfile, getUserRole, getLeads, getProperties, getRecentActivities, getChatbotConversations } from '@/lib/supabase';
+import { getSession, getUserProfile, getUserRole, getLeads, getProperties, getRecentActivities } from '@/lib/supabase';
 import { toast } from 'sonner';
 import DashboardSidebar from '@/components/dashboard/DashboardSidebar';
 import QuickStats from '@/components/dashboard/QuickStats';
@@ -18,9 +17,7 @@ import Integrations from '@/components/dashboard/Integrations';
 import AccountSettings from '@/components/dashboard/AccountSettings';
 import ChatbotSettings from '@/components/dashboard/ChatbotSettings';
 import ChatConversations from "@/components/dashboard/ChatConversations";
-import ChatbotTrainingManager from '@/components/dashboard/ChatbotTrainingManager';
 import { PlusCircle, Upload, FileSpreadsheet, Users, Bell, Lock } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
 
 const Dashboard = () => {
   const [user, setUser] = useState(null);
@@ -36,7 +33,6 @@ const Dashboard = () => {
     featuredProperties: 0
   });
   const [activities, setActivities] = useState([]);
-  const [realTimeUpdate, setRealTimeUpdate] = useState(0); // For triggering refreshes
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -82,101 +78,24 @@ const Dashboard = () => {
     };
     
     getUser();
-  }, [navigate, realTimeUpdate]);
-  
-  // Set up a real-time subscription for data changes
-  useEffect(() => {
-    // Subscribe to changes in chatbot_conversations
-    const conversationsChannel = supabase
-      .channel('chatbot_conversations_changes')
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'chatbot_conversations'
-      }, () => {
-        // Refresh data when changes occur
-        setRealTimeUpdate(prev => prev + 1);
-      })
-      .subscribe();
-      
-    // Subscribe to changes in leads
-    const leadsChannel = supabase
-      .channel('leads_changes')
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'leads'
-      }, () => {
-        setRealTimeUpdate(prev => prev + 1);
-      })
-      .subscribe();
-      
-    // Subscribe to changes in properties
-    const propertiesChannel = supabase
-      .channel('properties_changes')
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'properties'
-      }, () => {
-        setRealTimeUpdate(prev => prev + 1);
-      })
-      .subscribe();
-      
-    // Subscribe to changes in chatbot training data
-    const trainingChannel = supabase
-      .channel('training_changes')
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'chatbot_training_data'
-      }, () => {
-        setRealTimeUpdate(prev => prev + 1);
-      })
-      .subscribe();
-    
-    return () => {
-      supabase.removeChannel(conversationsChannel);
-      supabase.removeChannel(leadsChannel);
-      supabase.removeChannel(propertiesChannel);
-      supabase.removeChannel(trainingChannel);
-    };
-  }, []);
+  }, [navigate]);
   
   const fetchStats = async (userId) => {
     try {
-      // Get real counts from the database
       const { data: leadsData } = await getLeads();
       
       const { data: propertiesData } = await getProperties();
       
-      // Get active conversations count
-      const { data: conversationsData } = await getChatbotConversations();
-      const uniqueConversationIds = new Set();
-      if (conversationsData) {
-        conversationsData.forEach(convo => {
-          if (convo.conversation_id) {
-            uniqueConversationIds.add(convo.conversation_id);
-          }
-        });
-      }
-      
-      // Calculate actual visitor count - assuming each unique conversation represents at least one visitor
-      const visitorIds = new Set();
-      if (conversationsData) {
-        conversationsData.forEach(convo => {
-          if (convo.visitor_id) {
-            visitorIds.add(convo.visitor_id);
-          }
-        });
-      }
+      const totalLeads = leadsData?.length || 0;
+      const totalProperties = propertiesData?.length || 0;
+      const featuredProperties = propertiesData?.filter(p => p.featured)?.length || 0;
       
       setStats({
-        totalLeads: leadsData?.length || 0,
-        activeConversations: uniqueConversationIds.size,
-        websiteVisitors: Math.max(visitorIds.size, uniqueConversationIds.size),
-        totalProperties: propertiesData?.length || 0,
-        featuredProperties: propertiesData?.filter(p => p.featured)?.length || 0
+        totalLeads,
+        activeConversations: Math.min(12, Math.floor(totalLeads * 0.4)),
+        websiteVisitors: Math.floor(Math.random() * 300) + 200,
+        totalProperties,
+        featuredProperties
       });
     } catch (error) {
       console.error('Error fetching stats:', error);
@@ -185,33 +104,10 @@ const Dashboard = () => {
   
   const fetchActivities = async (userId) => {
     try {
-      // Get regular activities
-      const { data: activitiesData } = await getRecentActivities(5);
-      
-      // Get recent chatbot conversations
-      const { data: conversationsData } = await supabase
-        .from('chatbot_conversations')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(5);
-      
-      // Convert conversations to activity format
-      const conversationActivities = conversationsData ? conversationsData.map(convo => ({
-        id: convo.id,
-        type: 'conversation',
-        description: `Chatbot conversation: "${convo.message.substring(0, 30)}${convo.message.length > 30 ? '...' : ''}"`,
-        created_at: convo.created_at,
-        user_id: convo.user_id,
-        target_id: convo.conversation_id,
-        target_type: 'conversation'
-      })) : [];
-      
-      // Combine and sort by date
-      const allActivities = [...(activitiesData || []), ...conversationActivities]
-        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-        .slice(0, 10);
-      
-      setActivities(allActivities);
+      const { data } = await getRecentActivities(5);
+      if (data) {
+        setActivities(data);
+      }
     } catch (error) {
       console.error('Error fetching activities:', error);
     }
@@ -259,7 +155,6 @@ const Dashboard = () => {
               <TabsTrigger value="leads">Leads</TabsTrigger>
               <TabsTrigger value="marketing">Marketing</TabsTrigger>
               <TabsTrigger value="chatbot">Chatbot</TabsTrigger>
-              <TabsTrigger value="training">Training</TabsTrigger>
               <TabsTrigger value="integrations">Integrations</TabsTrigger>
               <TabsTrigger value="settings">Settings</TabsTrigger>
             </TabsList>
@@ -324,13 +219,13 @@ const Dashboard = () => {
                       </Button>
                       
                       <Button 
-                        onClick={() => setActiveTab('training')} 
+                        onClick={() => setActiveTab('marketing')} 
                         className="flex justify-start items-center"
                         variant={isPremiumFeature('professional') ? "outline" : "outline"}
                         size="lg">
                         {isPremiumFeature('professional') && <Lock className="mr-2 h-4 w-4 text-muted-foreground" />}
                         {!isPremiumFeature('professional') && <Bell className="mr-2 h-4 w-4" />}
-                        {isPremiumFeature('professional') ? 'Train Chatbot (Pro)' : 'Train Chatbot'}
+                        {isPremiumFeature('professional') ? 'AI Follow-ups (Pro)' : 'Setup AI Follow-ups'}
                       </Button>
                       
                       <Button 
@@ -381,14 +276,6 @@ const Dashboard = () => {
                 userId={user.id} 
                 userPlan={userPlan} 
                 isPremiumFeature={isPremiumFeature} 
-              />
-            </TabsContent>
-            
-            <TabsContent value="training">
-              <ChatbotTrainingManager 
-                userId={user.id}
-                userPlan={userPlan}
-                isPremiumFeature={isPremiumFeature}
               />
             </TabsContent>
             

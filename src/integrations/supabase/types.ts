@@ -88,63 +88,6 @@ export type Database = {
           },
         ]
       }
-      chat_sessions: {
-        Row: {
-          ai_response: string
-          created_at: string
-          id: string
-          session_id: string
-          user_id: string
-          user_message: string
-        }
-        Insert: {
-          ai_response: string
-          created_at?: string
-          id?: string
-          session_id: string
-          user_id: string
-          user_message: string
-        }
-        Update: {
-          ai_response?: string
-          created_at?: string
-          id?: string
-          session_id?: string
-          user_id?: string
-          user_message?: string
-        }
-        Relationships: []
-      }
-      chatbot_conversations: {
-        Row: {
-          conversation_id: string | null
-          created_at: string
-          id: string
-          message: string
-          response: string
-          user_id: string
-          visitor_id: string | null
-        }
-        Insert: {
-          conversation_id?: string | null
-          created_at?: string
-          id?: string
-          message: string
-          response: string
-          user_id: string
-          visitor_id?: string | null
-        }
-        Update: {
-          conversation_id?: string | null
-          created_at?: string
-          id?: string
-          message?: string
-          response?: string
-          user_id?: string
-          visitor_id?: string | null
-        }
-        Relationships: []
-      }
       chatbot_settings: {
         Row: {
           created_at: string | null
