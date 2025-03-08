@@ -1,13 +1,15 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.36.0";
 import { corsHeaders } from "../_shared/cors.ts";
-import * as pdfjs from "https://esm.sh/pdfjs-dist@3.11.174/build/pdf.js";
 
-// Initialize the PDF.js worker
-const pdfjsWorker = await import("https://esm.sh/pdfjs-dist@3.11.174/build/pdf.worker.js");
-// @ts-ignore
+// Import PDF.js with specific version from CDN
+const pdfjs = await import("https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.mjs");
+// Initialize the PDF.js worker properly
+const pdfjsWorker = await import("https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.mjs");
+// Set the worker source globally
 globalThis.pdfjsWorker = pdfjsWorker;
-pdfjs.GlobalWorkerOptions.workerSrc = "https://esm.sh/pdfjs-dist@3.11.174/build/pdf.worker.js";
+// Ensure the worker URL is properly set
+pdfjs.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.mjs";
 
 interface RequestBody {
   filePath: string;
