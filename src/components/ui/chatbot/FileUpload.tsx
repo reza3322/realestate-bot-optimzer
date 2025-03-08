@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -90,7 +89,6 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
   };
 
   const processPdfContent = async (filePath: string, fileName: string, fileId: string, priority: number = 5) => {
-    // Update file status to processing
     setUploadedFiles(prev => 
       prev.map(file => 
         file.id === fileId 
@@ -122,7 +120,6 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
         throw new Error((response.data && response.data.error) || 'Failed to process file');
       }
 
-      // Update file status to completed
       setUploadedFiles(prev => 
         prev.map(file => 
           file.id === fileId 
@@ -140,16 +137,19 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
     } catch (error) {
       console.error('Error processing file:', error);
       
-      // Update file status to error
       setUploadedFiles(prev => 
         prev.map(file => 
           file.id === fileId 
-            ? { ...file, status: 'error' as const, error: error.message } 
+            ? { 
+                ...file, 
+                status: 'error' as const, 
+                error: error.message || 'Failed to process file. Please try again with a text file.' 
+              } 
             : file
         )
       );
       
-      toast.error(`Failed to process file: ${error.message}`);
+      toast.error(`Failed to process file: ${error.message || 'Unknown error'}`);
     }
   };
 
@@ -185,7 +185,6 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
         throw error;
       }
       
-      // Update file status to processing if it's a PDF or text file
       const updatedFile = { 
         ...newFile, 
         status: 'completed' as const 
@@ -201,7 +200,6 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
       
       toast.success('File uploaded successfully.');
       
-      // If it's a PDF or text file, process its content
       if (selectedFile.type === 'application/pdf' || selectedFile.type === 'text/plain') {
         await processPdfContent(filePath, selectedFile.name, newFile.id, priority);
       }
@@ -230,7 +228,6 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
   const deleteFile = async (filePath: string, fileId: string) => {
     setIsDeletingFile(fileId);
     try {
-      // First, try to delete from storage
       const { error: storageError } = await supabase
         .storage
         .from('chatbot_training_files')
@@ -241,7 +238,6 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
         toast.error('Failed to delete file from storage');
       }
 
-      // Then, try to delete related training data
       const { error: dbError } = await supabase
         .from('chatbot_training_data')
         .delete()
@@ -250,14 +246,11 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
 
       if (dbError) {
         console.error('Error deleting associated training data:', dbError);
-        // Continue even if this fails, as the file itself was deleted
       }
 
-      // Remove from local state
       setUploadedFiles(prev => prev.filter(file => file.id !== fileId));
       toast.success('File deleted successfully');
       
-      // Notify parent component that files have changed
       if (onUploadComplete) onUploadComplete(true);
     } catch (error) {
       console.error('Error in deleteFile:', error);

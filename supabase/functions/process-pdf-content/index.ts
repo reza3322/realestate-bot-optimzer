@@ -1,23 +1,23 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.36.0";
 import { corsHeaders } from "../_shared/cors.ts";
-import * as pdfjs from "npm:pdfjs-dist@3.11.174";
 
-// Helper function to extract text from PDF using pdfjs-dist
+// Helper function to extract text from PDF using text-based parsing
 async function extractPdfText(pdfArrayBuffer: ArrayBuffer): Promise<string> {
   try {
     console.log("🔍 Extracting text from PDF...");
-
-    // Initialize PDF.js for Deno/Edge environment
-    const workerSrc = "npm:pdfjs-dist@3.11.174/build/pdf.worker.mjs";
-    pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
     
-    // Load PDF document with explicit parameters
+    // Import pdfjs dynamically to avoid the GlobalWorkerOptions issue
+    const pdfjs = await import("npm:pdfjs-dist@3.11.174/build/pdf.js");
+    
+    // Load PDF document with explicit parameters for Deno/Edge environment
     const loadingTask = pdfjs.getDocument({
       data: pdfArrayBuffer,
       useWorkerFetch: false,
       isEvalSupported: false,
-      disableFontFace: true
+      disableFontFace: true,
+      // Disable workers to avoid needing worker scripts
+      disableWorker: true,
     });
     
     const pdf = await loadingTask.promise;
@@ -195,7 +195,7 @@ Deno.serve(async (req) => {
     if (fileName.toLowerCase().endsWith(".pdf")) {
       console.log("📄 Processing PDF file with PDF.js");
       try {
-        // Extract text from PDF using PDF.js
+        // Extract text from PDF using our helper function
         const arrayBuffer = await fileData.arrayBuffer();
         extractedText = await extractPdfText(arrayBuffer);
       } catch (pdfError) {
