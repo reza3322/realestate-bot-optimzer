@@ -50,7 +50,6 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
   const fetchTrainingData = async () => {
     setLoading(true);
     try {
-      console.log('Fetching training data for userId:', userId, 'contentType:', activeTab);
       const { data, error } = await supabase
         .from('chatbot_training_data')
         .select('*')
@@ -59,11 +58,9 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
         .order('priority', { ascending: false });
       
       if (error) {
-        console.error('Error fetching training data:', error);
         throw error;
       }
       
-      console.log('Fetched training data:', data?.length || 0, 'items');
       setItems(data || []);
     } catch (error) {
       console.error('Error fetching training data:', error);
@@ -218,15 +215,14 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.type !== 'text/plain' && file.type !== 'application/pdf' && file.type !== 'text/csv') {
-      toast.error('Only text, CSV, or PDF files are accepted');
+    if (file.type !== 'text/plain' && file.type !== 'application/pdf') {
+      toast.error('Only text or PDF files are accepted');
       return;
     }
 
     setSelectedFile(file);
     setUploadSuccess(false);
     setUploadedFileName("");
-    console.log(`Selected file: ${file.name}, type: ${file.type}, size: ${file.size} bytes`);
   };
 
   const uploadFile = async () => {
@@ -237,58 +233,74 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
 
     setFileUploading(true);
     setUploadSuccess(false);
-    
     try {
-      const timestamp = Date.now();
-      const safeFileName = selectedFile.name.replace(/\s+/g, '_');
-      const filePath = `${userId}/${timestamp}_${safeFileName}`;
-      
-      console.log('Preparing to upload file to storage path:', filePath);
-      
-      const { error: uploadError, data: uploadData } = await supabase.storage
+      const filePath = `${userId}/${activeTab}/${Date.now()}_${selectedFile.name}`;
+      const { error: uploadError } = await supabase.storage
         .from('chatbot_training_files')
-        .upload(filePath, selectedFile, {
-          cacheControl: '3600',
-          upsert: false
-        });
+        .upload(filePath, selectedFile);
 
-      if (uploadError) {
-        console.error('Upload error:', uploadError);
-        throw new Error(`File upload failed: ${uploadError.message}`);
-      }
-      
-      console.log('File uploaded successfully to path:', filePath);
+      if (uploadError) throw uploadError;
 
-      try {
-        console.log('Processing file, calling edge function with:', { filePath, userId, contentType: activeTab });
+      if (selectedFile.type === 'text/plain') {
+        const text = await selectedFile.text();
+        const lines = text.split('\n');
         
-        const { data, error } = await supabase.functions.invoke('process-pdf-content', {
-          body: JSON.stringify({
-            filePath,
-            userId,
-            contentType: activeTab
-          })
-        });
+        let successCount = 0;
+        let failureCount = 0;
         
-        console.log('Edge function response:', data);
-        
-        if (error) {
-          console.error('Edge function error:', error);
-          throw new Error(`Edge function failed: ${error.message || JSON.stringify(error)}`);
-        }
-        
-        if (data && data.success) {
-          toast.success(`File processed successfully. Added ${data.entriesCount || 0} training items.`);
+        for (let i = 0; i < lines.length; i += 2) {
+          const question = lines[i]?.trim();
+          const answer = lines[i + 1]?.trim();
           
-          // Fetch updated data after processing completes
-          fetchTrainingData();
-        } else {
-          throw new Error((data && data.error) || 'Unknown error during file processing');
+          if (question && answer) {
+            try {
+              const { error } = await supabase
+                .from('chatbot_training_data')
+                .insert({
+                  user_id: userId,
+                  content_type: activeTab,
+                  question,
+                  answer,
+                  category: 'Imported',
+                  priority: 0
+                });
+              
+              if (error) throw error;
+              successCount++;
+            } catch (e) {
+              failureCount++;
+              console.error('Error inserting item:', e);
+            }
+          }
         }
-      } catch (funcError) {
-        console.error('Error invoking edge function:', funcError);
-        toast.error(`Failed to process file: ${funcError.message}`);
-        throw funcError;
+        
+        if (successCount > 0) {
+          toast.success(`Successfully imported ${successCount} items`);
+          fetchTrainingData();
+        }
+        
+        if (failureCount > 0) {
+          toast.error(`Failed to import ${failureCount} items`);
+        }
+      } else {
+        // For PDF files, process them using the edge function
+        try {
+          const { data, error } = await supabase.functions.invoke('process-pdf-content', {
+            body: {
+              filePath,
+              userId,
+              contentType: activeTab
+            }
+          });
+          
+          if (error) throw error;
+          
+          toast.success('PDF file processed successfully. Content has been added to your training data.');
+          fetchTrainingData(); // Refresh the data to show the newly added items
+        } catch (processingError) {
+          console.error('Error processing PDF:', processingError);
+          toast.error('Error processing PDF content.');
+        }
       }
       
       setUploadSuccess(true);
@@ -296,11 +308,10 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
       
       const fileInput = document.getElementById('file-upload') as HTMLInputElement;
       if (fileInput) fileInput.value = '';
-      setSelectedFile(null);
       
     } catch (error) {
-      console.error('Error in file upload process:', error);
-      toast.error(`Failed to process file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error('Error uploading file:', error);
+      toast.error('Failed to upload file');
       setUploadSuccess(false);
     } finally {
       setFileUploading(false);
@@ -468,12 +479,12 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
                       >
                         <div className="flex items-center gap-2 px-4 py-2 border border-dashed border-gray-300 rounded-md hover:bg-secondary/50 transition-colors">
                           <FileUp size={16} />
-                          <span>{selectedFile ? selectedFile.name : 'Select text, CSV or PDF file'}</span>
+                          <span>{selectedFile ? selectedFile.name : 'Select text or PDF file'}</span>
                         </div>
                         <Input 
                           id="file-upload" 
                           type="file" 
-                          accept=".txt,.pdf,.csv" 
+                          accept=".txt,.pdf" 
                           className="hidden"
                           onChange={handleFileChange}
                           disabled={fileUploading || uploadSuccess}
@@ -501,7 +512,6 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
                     </div>
                     <p className="text-xs text-muted-foreground">
                       For text files: Each question and answer should be on separate lines.
-                      For CSV files: Each row should have a question and answer in separate columns.
                       For PDF files: Content will be automatically processed and added as training data.
                     </p>
                   </div>
