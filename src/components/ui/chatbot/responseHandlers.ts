@@ -1,5 +1,5 @@
 
-import { Message, ChatbotResponse } from './types';
+import { Message, ChatbotResponse, VisitorInfo } from './types';
 
 // Demo responses for testing the chatbot
 export const demoResponses = [
@@ -41,8 +41,17 @@ export const useDemoResponse = () => {
 // Function to test chatbot with real OpenAI API
 export const testChatbotResponse = async (
   message: string,
-  userId: string
-): Promise<{ response: string; error?: string; source?: 'ai' | 'training' }> => {
+  userId: string,
+  visitorInfo?: VisitorInfo,
+  conversationId?: string,
+  previousMessages?: Message[]
+): Promise<{ 
+  response: string; 
+  error?: string; 
+  source?: 'ai' | 'training';
+  conversationId?: string;
+  leadInfo?: VisitorInfo;
+}> => {
   try {
     console.log(`Sending message to chatbot API: "${message}" for user: ${userId}`);
     
@@ -67,7 +76,9 @@ export const testChatbotResponse = async (
         body: JSON.stringify({
           message,
           userId,
-          conversationId: 'test-' + Date.now(),
+          visitorInfo,
+          conversationId: conversationId || ('test-' + Date.now()),
+          previousMessages
         }),
       });
 
@@ -115,7 +126,9 @@ export const testChatbotResponse = async (
       
       return { 
         response: data.response,
-        source: data.source || 'ai'
+        source: data.source || 'ai',
+        conversationId: data.conversationId,
+        leadInfo: data.leadInfo
       };
     } catch (fetchError) {
       console.error('Fetch error calling Edge Function:', fetchError);

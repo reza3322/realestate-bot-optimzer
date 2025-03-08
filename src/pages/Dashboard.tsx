@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '@/components/layout/Navbar';
@@ -5,7 +6,7 @@ import Footer from '@/components/sections/Footer';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { getSession, getUserProfile, getUserRole, getLeads, getProperties, getRecentActivities } from '@/lib/supabase';
+import { getSession, getUserProfile, getUserRole, getLeads, getProperties, getRecentActivities, supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import DashboardSidebar from '@/components/dashboard/DashboardSidebar';
 import QuickStats from '@/components/dashboard/QuickStats';
@@ -28,7 +29,7 @@ const Dashboard = () => {
   const [stats, setStats] = useState({
     totalLeads: 0,
     activeConversations: 0,
-    websiteVisitors: 0,
+    chatbotInteractions: 0,
     totalProperties: 0,
     featuredProperties: 0
   });
@@ -82,18 +83,46 @@ const Dashboard = () => {
   
   const fetchStats = async (userId) => {
     try {
+      // Get leads
       const { data: leadsData } = await getLeads();
       
+      // Get properties
       const { data: propertiesData } = await getProperties();
+      
+      // Get chatbot interactions
+      const { data: chatInteractions, error: chatError } = await supabase
+        .from('chatbot_conversations')
+        .select('conversation_id', { count: 'exact', head: true })
+        .eq('user_id', userId);
+        
+      if (chatError) {
+        console.error('Error fetching chatbot interactions:', chatError);
+      }
+      
+      // Count unique conversation IDs
+      const { data: conversationsData, error: conversationsError } = await supabase
+        .from('chatbot_conversations')
+        .select('conversation_id')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+        
+      if (conversationsError) {
+        console.error('Error fetching conversations:', conversationsError);
+      }
+      
+      // Count unique conversation IDs
+      const uniqueConversations = conversationsData ? 
+        [...new Set(conversationsData.map(c => c.conversation_id))].length : 0;
       
       const totalLeads = leadsData?.length || 0;
       const totalProperties = propertiesData?.length || 0;
       const featuredProperties = propertiesData?.filter(p => p.featured)?.length || 0;
+      const totalInteractions = chatInteractions?.count || 0;
       
       setStats({
         totalLeads,
-        activeConversations: Math.min(12, Math.floor(totalLeads * 0.4)),
-        websiteVisitors: Math.floor(Math.random() * 300) + 200,
+        activeConversations: uniqueConversations,
+        chatbotInteractions: totalInteractions,
         totalProperties,
         featuredProperties
       });
@@ -104,12 +133,52 @@ const Dashboard = () => {
   
   const fetchActivities = async (userId) => {
     try {
-      const { data } = await getRecentActivities(5);
-      if (data) {
-        setActivities(data);
+      // Get real activities from the database
+      const { data: activitiesData, error: activitiesError } = await supabase
+        .from('activities')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(5);
+      
+      if (activitiesError) {
+        console.error('Error fetching activities:', activitiesError);
+        return;
+      }
+      
+      // If no activities found, check for recent chatbot conversations
+      if (!activitiesData || activitiesData.length === 0) {
+        const { data: chatData, error: chatError } = await supabase
+          .from('chatbot_conversations')
+          .select('*')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false })
+          .limit(5);
+          
+        if (chatError) {
+          console.error('Error fetching chatbot conversations:', chatError);
+          setActivities([]);
+          return;
+        }
+        
+        // Convert chat data to activity format
+        const chatActivities = chatData?.map(chat => ({
+          id: chat.id,
+          type: 'message',
+          description: 'Chatbot conversation',
+          created_at: chat.created_at,
+          user_id: userId,
+          target_id: chat.conversation_id,
+          target_type: 'chat'
+        })) || [];
+        
+        setActivities(chatActivities);
+      } else {
+        setActivities(activitiesData);
       }
     } catch (error) {
       console.error('Error fetching activities:', error);
+      setActivities([]);
     }
   };
   

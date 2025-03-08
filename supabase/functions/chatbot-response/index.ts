@@ -54,6 +54,9 @@ serve(async (req) => {
     // First, check if there's a matching training data response
     let response = null;
     let responseSource = null;
+    let leadInfo = visitorInfo || {};
+    let shouldCollectLeadInfo = false;
+    let isQualifyingConversation = false;
     
     if (userId) {
       console.log('🔍 Checking for matching training data...');
@@ -112,15 +115,83 @@ serve(async (req) => {
       }
     }
 
+    // Check if we should collect lead info based on previous messages
+    if (previousMessages && Array.isArray(previousMessages)) {
+      // Check if this is a qualifying conversation
+      const qualifyingKeywords = ['buy', 'purchase', 'looking for', 'interested in', 'property', 'house', 'apartment', 'home'];
+      
+      // Check user messages for qualifying keywords
+      const containsQualifyingKeywords = previousMessages
+        .filter(msg => msg.role === 'user')
+        .some(msg => qualifyingKeywords.some(keyword => msg.content.toLowerCase().includes(keyword)));
+      
+      if (containsQualifyingKeywords) {
+        isQualifyingConversation = true;
+        
+        // Check if we have already collected contact info
+        const hasName = leadInfo.name || previousMessages.some(msg => msg.role === 'bot' && msg.content.includes('name'));
+        const hasEmail = leadInfo.email || previousMessages.some(msg => msg.role === 'bot' && msg.content.includes('email'));
+        const hasBudget = leadInfo.budget || previousMessages.some(msg => msg.role === 'bot' && msg.content.includes('budget'));
+        
+        shouldCollectLeadInfo = !hasName || !hasEmail || !hasBudget;
+        
+        console.log('📊 Lead qualification check:', { 
+          isQualifyingConversation, 
+          shouldCollectLeadInfo,
+          hasName,
+          hasEmail,
+          hasBudget
+        });
+      }
+    }
+
+    // Extract lead info from the current message
+    if (isQualifyingConversation) {
+      // Try to extract an email address
+      const emailRegex = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/;
+      const emailMatch = message.match(emailRegex);
+      if (emailMatch && !leadInfo.email) {
+        leadInfo.email = emailMatch[0];
+        console.log('📧 Extracted email from message:', leadInfo.email);
+      }
+      
+      // Try to extract a budget figure
+      const budgetRegex = /\b(\$|€|£)?(\d{1,3}(,\d{3})*(\.\d+)?|\d+)(k|K|thousand|million|M)?\b/;
+      const budgetMatch = message.match(budgetRegex);
+      if (budgetMatch && !leadInfo.budget) {
+        leadInfo.budget = budgetMatch[0];
+        console.log('💰 Extracted budget from message:', leadInfo.budget);
+      }
+      
+      // Check for name if the bot previously asked for it
+      const nameCheck = previousMessages && previousMessages.length > 0 && 
+                        previousMessages[previousMessages.length - 1].role === 'bot' && 
+                        previousMessages[previousMessages.length - 1].content.includes('name');
+      
+      if (nameCheck && !leadInfo.name && message.length < 50) {
+        // If the bot just asked for a name and the reply is short, it's likely a name
+        leadInfo.name = message;
+        console.log('👤 Extracted name from message:', leadInfo.name);
+      }
+    }
+
     // If no match in training data, use OpenAI
     if (!response) {
       console.log('🤖 Generating response with OpenAI');
       
       try {
-        // Create system message
+        // Create system message with lead qualification instructions if needed
         let systemPrompt = "You are a helpful AI assistant for a real estate business. ";
-        systemPrompt += "Provide helpful, concise, and friendly responses. If asked about properties, ";
-        systemPrompt += "provide specific details when available. If unsure, suggest checking with a real estate agent.";
+        
+        if (isQualifyingConversation && shouldCollectLeadInfo) {
+          systemPrompt += "Your primary goal is to collect the following visitor information in a conversational way: name, email, phone (if possible), property interest, and budget. ";
+          systemPrompt += "Ask for only ONE piece of missing information at a time. ";
+          systemPrompt += "Also evaluate their interest level and urgency to buy or sell on a scale from 1-10 based on their responses. ";
+          systemPrompt += "Be natural and friendly, not robotic or formulaic. ";
+        } else {
+          systemPrompt += "Provide helpful, concise, and friendly responses. If asked about properties, ";
+          systemPrompt += "provide specific details when available. If unsure, suggest checking with a real estate agent.";
+        }
         
         console.log('📋 System prompt:', systemPrompt);
 
@@ -171,13 +242,113 @@ serve(async (req) => {
             conversation_id: chatConversationId,
             message: message,
             response: response,
-            visitor_id: visitorInfo?.visitorId || null
+            visitor_id: leadInfo?.visitorId || null
           });
           
         if (insertError) {
           console.error('❌ Error storing conversation:', insertError);
         } else {
           console.log('✅ Conversation saved to database');
+        }
+        
+        // If we have collected enough lead info, create a lead
+        if (leadInfo.email && (leadInfo.name || leadInfo.phone || leadInfo.budget)) {
+          console.log('👥 Creating or updating lead with info:', leadInfo);
+          
+          // Check if lead already exists
+          const { data: existingLeads, error: findError } = await supabase
+            .from('leads')
+            .select('*')
+            .eq('user_id', userId)
+            .eq('email', leadInfo.email);
+            
+          if (findError) {
+            console.error('❌ Error checking for existing lead:', findError);
+          } else if (existingLeads && existingLeads.length > 0) {
+            // Update existing lead
+            const existingLead = existingLeads[0];
+            const updates = {};
+            
+            if (leadInfo.name && !existingLead.first_name) {
+              // Split name into first and last
+              const nameParts = leadInfo.name.split(' ');
+              updates.first_name = nameParts[0];
+              if (nameParts.length > 1) {
+                updates.last_name = nameParts.slice(1).join(' ');
+              }
+            }
+            
+            if (leadInfo.phone && !existingLead.phone) updates.phone = leadInfo.phone;
+            if (leadInfo.budget && !existingLead.budget) {
+              // Convert budget string to number if possible
+              const budgetNum = parseFloat(leadInfo.budget.replace(/[^0-9.]/g, ''));
+              if (!isNaN(budgetNum)) updates.budget = budgetNum;
+            }
+            if (leadInfo.propertyInterest && !existingLead.property_interest) updates.property_interest = leadInfo.propertyInterest;
+            
+            // Only update if we have new information
+            if (Object.keys(updates).length > 0) {
+              const { error: updateError } = await supabase
+                .from('leads')
+                .update(updates)
+                .eq('id', existingLead.id);
+                
+              if (updateError) {
+                console.error('❌ Error updating existing lead:', updateError);
+              } else {
+                console.log('✅ Lead updated successfully');
+              }
+            }
+          } else {
+            // Create new lead
+            const nameData = {};
+            // Split name into first and last if available
+            if (leadInfo.name) {
+              const nameParts = leadInfo.name.split(' ');
+              nameData.first_name = nameParts[0];
+              if (nameParts.length > 1) {
+                nameData.last_name = nameParts.slice(1).join(' ');
+              }
+            }
+            
+            // Convert budget string to number if possible
+            let budgetNum = null;
+            if (leadInfo.budget) {
+              budgetNum = parseFloat(leadInfo.budget.replace(/[^0-9.]/g, ''));
+              if (isNaN(budgetNum)) budgetNum = null;
+            }
+            
+            const { error: insertLeadError } = await supabase
+              .from('leads')
+              .insert({
+                user_id: userId,
+                ...nameData,
+                email: leadInfo.email,
+                phone: leadInfo.phone || null,
+                source: 'AI Chatbot',
+                property_interest: leadInfo.propertyInterest || null,
+                budget: budgetNum,
+                conversation_id: chatConversationId,
+                status: 'new'
+              });
+              
+            if (insertLeadError) {
+              console.error('❌ Error creating new lead:', insertLeadError);
+            } else {
+              console.log('✅ New lead created successfully');
+              
+              // Also create an activity record
+              await supabase
+                .from('activities')
+                .insert({
+                  user_id: userId,
+                  type: 'lead',
+                  description: 'New lead captured via chatbot',
+                  target_type: 'lead',
+                  target_id: chatConversationId  // Using conversation ID as reference
+                });
+            }
+          }
         }
       } catch (dbError) {
         console.error('❌ Exception storing chat session:', dbError);
@@ -187,14 +358,16 @@ serve(async (req) => {
     console.log('📤 Response prepared:', { 
       responsePreview: response?.substring(0, 50) + '...',
       source: responseSource,
-      conversationId: chatConversationId
+      conversationId: chatConversationId,
+      leadInfo
     });
     
     return new Response(
       JSON.stringify({
         response,
         source: responseSource,
-        conversationId: chatConversationId
+        conversationId: chatConversationId,
+        leadInfo
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

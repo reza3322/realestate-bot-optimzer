@@ -6,7 +6,7 @@ import ChatMessage from './ChatMessage';
 import ChatInput from './ChatInput';
 import TypingIndicator from './TypingIndicator';
 import { getChatStyles, applyFontStyle } from './chatStyles';
-import { Message, ChatTheme, LanguageCode, ChatStylesType } from './types';
+import { Message, ChatTheme, LanguageCode, ChatStylesType, VisitorInfo } from './types';
 import { testChatbotResponse } from './responseHandlers';
 
 const DEFAULT_TRANSLATIONS = {
@@ -87,6 +87,8 @@ const Chatbot = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [responseSource, setResponseSource] = useState<'ai' | 'training' | null>(null);
+  const [conversationId, setConversationId] = useState<string | undefined>(undefined);
+  const [visitorInfo, setVisitorInfo] = useState<VisitorInfo>({});
 
   const styles: ChatTheme = getChatStyles(theme, variation, primaryColor);
   
@@ -116,6 +118,16 @@ const Chatbot = ({
     }
   }, [messages]);
 
+  // Generate a visitor ID if not already set
+  useEffect(() => {
+    if (!visitorInfo.visitorId) {
+      setVisitorInfo(prev => ({
+        ...prev,
+        visitorId: 'visitor-' + Date.now()
+      }));
+    }
+  }, []);
+
   const handleSendMessage = async (message: string) => {
     setMessages(prev => [...prev, { role: 'user', content: message }]);
     onSendMessage?.(message);
@@ -125,7 +137,14 @@ const Chatbot = ({
     
     if (useRealAPI) {
       try {
-        const { response, error, source } = await testChatbotResponse(message, userId);
+        const { response, error, source, conversationId: newConversationId, leadInfo } = 
+          await testChatbotResponse(
+            message, 
+            userId, 
+            visitorInfo, 
+            conversationId,
+            messages
+          );
         
         if (error) {
           console.error('Chatbot error:', error);
@@ -133,6 +152,17 @@ const Chatbot = ({
         } else {
           setMessages(prev => [...prev, { role: 'bot', content: response }]);
           setResponseSource(source || null);
+          
+          if (newConversationId && !conversationId) {
+            setConversationId(newConversationId);
+          }
+          
+          if (leadInfo) {
+            setVisitorInfo(prev => ({
+              ...prev,
+              ...leadInfo
+            }));
+          }
         }
       } catch (err) {
         console.error('Chatbot exception:', err);
@@ -252,6 +282,7 @@ const Chatbot = ({
         onSendMessage={handleSendMessage}
         placeholderText={defaultPlaceholderText}
         buttonStyle={sendButtonStyle}
+        visitorInfo={visitorInfo}
       />
     </div>
   );

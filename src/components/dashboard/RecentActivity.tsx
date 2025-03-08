@@ -17,29 +17,8 @@ interface RecentActivityProps {
 }
 
 const RecentActivity = ({ activities }: RecentActivityProps) => {
-  // If no activities are available yet, show sample data
-  const displayActivities = activities.length > 0 
-    ? activities 
-    : [
-        {
-          id: "1",
-          type: 'lead',
-          description: 'New lead from AI chatbot',
-          created_at: new Date(Date.now() - 10 * 60 * 1000).toISOString(), // 10 minutes ago
-          user_id: "1",
-          target_type: "lead",
-          target_id: "1"
-        },
-        {
-          id: "2",
-          type: 'property',
-          description: 'Property view requested',
-          created_at: new Date(Date.now() - 45 * 60 * 1000).toISOString(), // 45 minutes ago
-          user_id: "1",
-          target_type: "property",
-          target_id: "1"
-        }
-      ];
+  // If no activities are available, show empty state
+  const displayActivities = activities.length > 0 ? activities : [];
 
   // Helper function to get the initials for the avatar
   const getInitials = (type: string) => {
