@@ -1,3 +1,4 @@
+
 import { useState, useRef, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import ChatHeader from './ChatHeader';
@@ -85,6 +86,7 @@ const Chatbot = ({
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
+  const [responseSource, setResponseSource] = useState<'ai' | 'training' | null>(null);
 
   const styles: ChatTheme = getChatStyles(theme, variation, primaryColor);
   
@@ -119,16 +121,18 @@ const Chatbot = ({
     onSendMessage?.(message);
     setIsTyping(true);
     setError(null);
+    setResponseSource(null);
     
     if (useRealAPI) {
       try {
-        const { response, error } = await testChatbotResponse(message, userId);
+        const { response, error, source } = await testChatbotResponse(message, userId);
         
         if (error) {
           console.error('Chatbot error:', error);
           setError(`Error: ${error}`);
         } else {
           setMessages(prev => [...prev, { role: 'bot', content: response }]);
+          setResponseSource(source || null);
         }
       } catch (err) {
         console.error('Chatbot exception:', err);
@@ -226,6 +230,12 @@ const Chatbot = ({
             botIconName={botIconName}
             customBotIconStyle={botIconStyle}
           />
+        )}
+        
+        {responseSource && (
+          <div className="text-xs text-right text-muted-foreground pr-2">
+            Source: {responseSource === 'training' ? 'Training Data' : 'AI'}
+          </div>
         )}
         
         {error && (

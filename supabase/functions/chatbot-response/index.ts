@@ -1,6 +1,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1'
+import { Configuration, OpenAIApi } from 'https://esm.sh/openai@3.2.1'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -23,6 +24,8 @@ serve(async (req) => {
       )
     }
 
+    console.log(`Processing message: "${message}" for user: ${userId}`)
+
     // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -37,45 +40,165 @@ serve(async (req) => {
         .eq('user_id', userId)
         .eq('status', 'active')
 
-      if (!propertiesError && userProperties) {
+      if (propertiesError) {
+        console.error('Error fetching properties:', propertiesError)
+      } else if (userProperties) {
         properties = userProperties
+        console.log(`Found ${userProperties.length} properties for user`)
       }
     }
 
-    // Get user's training data if userId is provided
-    let trainingData = []
+    // First, check if there's a matching training data response
+    let response = null
+    let responseSource = null
+    
     if (userId) {
-      const { data: userTraining, error: trainingError } = await supabase
+      console.log('Checking for matching training data...')
+      const { data: trainingMatches, error: trainingError } = await supabase
         .from('chatbot_training_data')
         .select('*')
         .eq('user_id', userId)
         .order('priority', { ascending: false })
 
-      if (!trainingError && userTraining) {
-        trainingData = userTraining
+      if (trainingError) {
+        console.error('Error fetching training data:', trainingError)
+      } else if (trainingMatches && trainingMatches.length > 0) {
+        console.log(`Found ${trainingMatches.length} training entries to check`)
+        
+        // Find the closest match based on the question content
+        // This is a simple implementation - could be improved with more sophisticated matching
+        const messageWords = message.toLowerCase().split(' ')
+        let bestMatch = null
+        let highestMatchScore = 0
+
+        for (const training of trainingMatches) {
+          const questionWords = training.question.toLowerCase().split(' ')
+          let matchScore = 0
+          
+          // Count how many words from the message appear in the training question
+          for (const word of messageWords) {
+            if (word.length > 3 && questionWords.includes(word)) { // Only count significant words
+              matchScore++
+            }
+          }
+          
+          // Also check if the whole message is contained in the question
+          if (training.question.toLowerCase().includes(message.toLowerCase())) {
+            matchScore += 3 // Give extra weight to full matches
+          }
+          
+          if (matchScore > highestMatchScore) {
+            highestMatchScore = matchScore
+            bestMatch = training
+          }
+        }
+        
+        // If we found a good match, use it
+        if (bestMatch && (highestMatchScore > 2 || bestMatch.question.toLowerCase().includes(message.toLowerCase()))) {
+          console.log(`Using training data match: "${bestMatch.question}" with score ${highestMatchScore}`)
+          response = bestMatch.answer
+          responseSource = 'training'
+        } else {
+          console.log('No good match found in training data')
+        }
+      } else {
+        console.log('No training data found for user')
+      }
+    }
+
+    // If no match in training data, use OpenAI
+    if (!response) {
+      console.log('Generating response with OpenAI')
+      
+      try {
+        const openAIApiKey = Deno.env.get('OPENAI_API_KEY')
+        
+        if (!openAIApiKey) {
+          console.error('OpenAI API key is not configured')
+          response = "I'm sorry, I'm having trouble generating a response right now."
+        } else {
+          const configuration = new Configuration({ apiKey: openAIApiKey })
+          const openai = new OpenAIApi(configuration)
+
+          // Create a system message based on the user's properties
+          let systemPrompt = "You are a helpful AI assistant for a real estate business. "
+          
+          if (properties.length > 0) {
+            systemPrompt += `The user has ${properties.length} properties in their portfolio. `
+            systemPrompt += "Here's a brief summary of their properties: "
+            
+            properties.slice(0, 3).forEach((property, index) => {
+              systemPrompt += `Property ${index + 1}: ${property.type || 'Property'} in ${property.city || 'N/A'}, `
+              systemPrompt += `${property.bedrooms || 'N/A'} bedrooms, `
+              systemPrompt += `price: ${formatCurrency(property.price || 0)}. `
+            })
+            
+            if (properties.length > 3) {
+              systemPrompt += `And ${properties.length - 3} more properties.`
+            }
+          }
+          
+          // Add guidance for the AI
+          systemPrompt += "Provide helpful, concise, and friendly responses. If asked about properties, "
+          systemPrompt += "provide specific details when available. If unsure, suggest checking with a real estate agent."
+          
+          console.log('System prompt:', systemPrompt)
+
+          // Create messages array with system prompt and user message
+          const messages = [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: message }
+          ]
+          
+          // Add previous messages for context if available
+          if (previousMessages && Array.isArray(previousMessages) && previousMessages.length > 0) {
+            for (const prevMsg of previousMessages.slice(-4)) { // Add up to 4 previous messages
+              const role = prevMsg.role === 'user' ? 'user' : 'assistant'
+              messages.splice(1, 0, { role, content: prevMsg.content })
+            }
+          }
+
+          // Generate response with OpenAI
+          const completion = await openai.createChatCompletion({
+            model: "gpt-4o-mini", // Using a more affordable model
+            messages: messages,
+            max_tokens: 250,
+            temperature: 0.7,
+          })
+
+          response = completion.data.choices[0]?.message?.content || "I'm not sure how to respond to that."
+          responseSource = 'ai'
+          
+          console.log('OpenAI response generated:', response)
+        }
+      } catch (openAiError) {
+        console.error('OpenAI error:', openAiError)
+        response = "I apologize, but I'm having trouble connecting to my knowledge base right now. Please try again later."
       }
     }
 
     // Extract potential lead information from visitor info and message
     const extractedLeadInfo = extractLeadInfo(message, visitorInfo || {}, previousMessages || [])
     
-    // Generate a basic response based on the message and available data
-    let response = generateResponse(message, properties, trainingData, previousMessages || [])
-    
     // Generate conversation ID if not provided
     const chatConversationId = conversationId || crypto.randomUUID()
     
     // Store the conversation in the database
     if (userId) {
-      await supabase
-        .from('chatbot_conversations')
-        .insert({
-          user_id: userId,
-          conversation_id: chatConversationId,
-          message: message,
-          response: response,
-          visitor_id: extractedLeadInfo.visitorId || null
-        })
+      try {
+        await supabase
+          .from('chatbot_conversations')
+          .insert({
+            user_id: userId,
+            conversation_id: chatConversationId,
+            message: message,
+            response: response,
+            visitor_id: extractedLeadInfo.visitorId || null
+          })
+        console.log('Conversation saved to database')
+      } catch (dbError) {
+        console.error('Error storing chat session:', dbError)
+      }
     }
     
     // Create or update lead if we have enough information
@@ -83,10 +206,17 @@ serve(async (req) => {
     if (userId && extractedLeadInfo && (extractedLeadInfo.email || extractedLeadInfo.name)) {
       leadInfo = await processLeadInfo(supabase, userId, extractedLeadInfo)
     }
+
+    console.log('Response prepared:', { 
+      response: response?.substring(0, 50) + '...',
+      source: responseSource,
+      conversationId: chatConversationId
+    })
     
     return new Response(
       JSON.stringify({
         response,
+        source: responseSource,
         conversationId: chatConversationId,
         leadInfo: leadInfo
       }),
@@ -95,7 +225,7 @@ serve(async (req) => {
   } catch (error) {
     console.error('Error processing chatbot response:', error)
     return new Response(
-      JSON.stringify({ error: 'Internal server error' }),
+      JSON.stringify({ error: 'Internal server error', details: error.message }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     )
   }
@@ -175,55 +305,6 @@ function extractLeadInfo(message, visitorInfo, previousMessages) {
   }
   
   return leadInfo
-}
-
-// Function to generate a response based on the message and available data
-function generateResponse(message, properties, trainingData, previousMessages) {
-  // Check if message matches any training data
-  for (const item of trainingData) {
-    if (message.toLowerCase().includes(item.question.toLowerCase())) {
-      return item.answer
-    }
-  }
-  
-  // Check if asking about properties
-  const propertyKeywords = ['property', 'house', 'home', 'apartment', 'condo', 'villa', 'flat']
-  const isAskingAboutProperties = propertyKeywords.some(keyword => 
-    message.toLowerCase().includes(keyword)
-  )
-  
-  if (isAskingAboutProperties && properties.length > 0) {
-    // Simple response with property information
-    const propertyCount = properties.length
-    let response = `I have information about ${propertyCount} properties that might interest you. `
-    
-    if (propertyCount > 0) {
-      const featuredProperty = properties[0]
-      response += `For example, we have a ${featuredProperty.type || 'property'} in ${featuredProperty.city || 'a great location'}`
-      
-      if (featuredProperty.price) {
-        response += ` priced at ${formatCurrency(featuredProperty.price)}`
-      }
-      
-      if (featuredProperty.bedrooms) {
-        response += ` with ${featuredProperty.bedrooms} bedrooms`
-      }
-      
-      response += `. Would you like more details about this or other properties?`
-    }
-    
-    return response
-  }
-  
-  // Check if asking for contact information
-  if (message.toLowerCase().includes('contact') || 
-      message.toLowerCase().includes('email') || 
-      message.toLowerCase().includes('phone')) {
-    return "I'd be happy to have someone contact you. Could you please share your name and email address?"
-  }
-  
-  // Default response
-  return "I'm here to help you find the perfect property. Feel free to ask me about available properties, pricing, or any other questions you might have."
 }
 
 // Process and store lead information

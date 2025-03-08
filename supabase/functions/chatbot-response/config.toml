@@ -1,0 +1,8 @@
+
+# Note: .env file is not committed to git, but this is required for local development
+# These are automatically set for you when deploying on Supabase
+project_id = "ckgaqkbsnrvccctqxsqv"
+base_path = "."
+
+[global.env]
+OPENAI_API_KEY = "{{OPENAI_API_KEY}}"

@@ -1,5 +1,5 @@
 
-import { Message } from './types';
+import { Message, ChatbotResponse } from './types';
 import { supabase } from '@/lib/supabase';
 
 // Demo responses for testing the chatbot
@@ -43,7 +43,7 @@ export const useDemoResponse = () => {
 export const testChatbotResponse = async (
   message: string,
   userId: string
-): Promise<{ response: string; error?: string }> => {
+): Promise<{ response: string; error?: string; source?: 'ai' | 'training' }> => {
   try {
     // Instead of directly accessing the protected properties, use environment variables or configuration
     // For demo/preview purposes, we can use the window.location to determine the Supabase URL
@@ -109,7 +109,10 @@ export const testChatbotResponse = async (
     }
 
     const data = await response.json();
-    return { response: data.response };
+    return { 
+      response: data.response,
+      source: data.source || 'ai'
+    };
   } catch (error) {
     console.error('Test chatbot exception:', error);
     return { 
