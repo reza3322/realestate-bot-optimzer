@@ -1,11 +1,10 @@
-
 import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
-import { FilePlus, FileText, Upload, Loader2, FilePdf, AlertCircle, CheckCircle2, FileX } from "lucide-react";
+import { FilePlus, FileText, Upload, Loader2, AlertCircle, CheckCircle2, FileX } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -36,7 +35,6 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [isLoadingFiles, setIsLoadingFiles] = useState<boolean>(true);
 
-  // Fetch previously uploaded files when component mounts
   const fetchUploadedFiles = async () => {
     setIsLoadingFiles(true);
     try {
@@ -49,15 +47,14 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
         console.error('Error fetching uploaded files:', error);
         toast.error('Failed to load uploaded files');
       } else if (data) {
-        // Map storage objects to our UploadedFile interface
         const files: UploadedFile[] = data.map(item => ({
           id: item.id,
           name: item.name,
           path: `${userId}/${item.name}`,
           size: item.metadata?.size || 0,
           type: item.metadata?.mimetype || 'unknown',
-          status: 'completed', // Assume completed for existing files
-          contentType: 'unknown', // We don't know from storage data alone
+          status: 'completed',
+          contentType: 'unknown',
           createdAt: new Date(item.created_at)
         }));
         
@@ -70,12 +67,10 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
     }
   };
 
-  // Handle file selection
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
       const file = files[0];
-      // Check if file is PDF or text
       if (file.type === 'application/pdf' || file.type === 'text/plain') {
         setSelectedFile(file);
       } else {
@@ -85,13 +80,11 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
     }
   };
 
-  // Upload file to Supabase storage
   const uploadFile = async () => {
     if (!selectedFile || !userId) return;
     
     setIsUploading(true);
     
-    // Create a new file object to track the upload
     const newFile: UploadedFile = {
       id: Date.now().toString(),
       name: selectedFile.name,
@@ -106,7 +99,6 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
     setUploadedFiles(prev => [newFile, ...prev]);
     
     try {
-      // Upload file to Supabase Storage
       const { data, error } = await supabase
         .storage
         .from('chatbot_training_files')
@@ -116,7 +108,6 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
         throw error;
       }
       
-      // Update file status to processing
       setUploadedFiles(prev => 
         prev.map(file => 
           file.id === newFile.id 
@@ -127,7 +118,6 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
       
       toast.success('File uploaded successfully. Processing content...');
       
-      // Call the Edge Function to process the file
       const { data: processData, error: processError } = await supabase.functions.invoke(
         'process-pdf-content',
         {
@@ -144,7 +134,6 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
         throw processError;
       }
       
-      // Update file status to completed
       setUploadedFiles(prev => 
         prev.map(file => 
           file.id === newFile.id 
@@ -159,14 +148,12 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
       
       toast.success(`File processed successfully. Created ${processData.entriesCreated} training entries.`);
       
-      // Reset selected file
       setSelectedFile(null);
       if (onUploadComplete) onUploadComplete(true);
       
     } catch (error) {
       console.error('Error uploading or processing file:', error);
       
-      // Update file status to error
       setUploadedFiles(prev => 
         prev.map(file => 
           file.id === newFile.id 
@@ -182,21 +169,18 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
     }
   };
 
-  // Format file size
   const formatFileSize = (bytes: number): string => {
     if (bytes < 1024) return bytes + ' bytes';
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
   };
 
-  // Get file icon based on type
   const getFileIcon = (file: UploadedFile) => {
-    if (file.type === 'application/pdf') return <FilePdf className="h-4 w-4" />;
+    if (file.type === 'application/pdf') return <FileText className="h-4 w-4" />;
     if (file.type === 'text/plain') return <FileText className="h-4 w-4" />;
     return <FilePlus className="h-4 w-4" />;
   };
 
-  // Get status icon based on file status
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'uploading':
@@ -212,7 +196,6 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
     }
   };
 
-  // Get status badge based on file status
   const getStatusBadge = (file: UploadedFile) => {
     switch (file.status) {
       case 'uploading':

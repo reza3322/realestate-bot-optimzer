@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '@/components/layout/Navbar';
@@ -89,8 +88,8 @@ const Dashboard = () => {
       // Get properties
       const { data: propertiesData } = await getProperties();
       
-      // Get chatbot interactions
-      const { data: chatInteractions, error: chatError } = await supabase
+      // Get chatbot interactions - fix the count issue
+      const { count: chatCount, error: chatError } = await supabase
         .from('chatbot_conversations')
         .select('conversation_id', { count: 'exact', head: true })
         .eq('user_id', userId);
@@ -117,7 +116,7 @@ const Dashboard = () => {
       const totalLeads = leadsData?.length || 0;
       const totalProperties = propertiesData?.length || 0;
       const featuredProperties = propertiesData?.filter(p => p.featured)?.length || 0;
-      const totalInteractions = chatInteractions?.count || 0;
+      const totalInteractions = chatCount || 0;
       
       setStats({
         totalLeads,
