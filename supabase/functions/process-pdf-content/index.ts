@@ -47,7 +47,7 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || ""
     );
 
-    // Check if bucket exists
+    // Check if bucket exists and create it if it doesn't
     const { data: buckets, error: bucketsError } = await supabase
       .storage
       .listBuckets();
@@ -62,11 +62,40 @@ Deno.serve(async (req) => {
 
     const bucketExists = buckets.some(bucket => bucket.name === "chatbot_training_files");
     if (!bucketExists) {
-      console.error("❌ Bucket 'chatbot_training_files' does not exist");
-      return new Response(
-        JSON.stringify({ success: false, error: "Storage bucket 'chatbot_training_files' does not exist" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      console.log("🔧 Creating 'chatbot_training_files' bucket...");
+      const { error: createBucketError } = await supabase
+        .storage
+        .createBucket("chatbot_training_files", {
+          public: false,
+          fileSizeLimit: 5242880, // 5MB limit
+        });
+      
+      if (createBucketError) {
+        console.error("❌ Error creating bucket:", createBucketError);
+        return new Response(
+          JSON.stringify({ success: false, error: "Failed to create storage bucket", details: createBucketError }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
+      // Add bucket policies to allow authenticated users to upload, read and delete their files
+      const { error: policyError } = await supabase
+        .storage
+        .from("chatbot_training_files")
+        .createPolicy("authenticated users can upload files", {
+          name: "authenticated users can upload files",
+          definition: {
+            role: "authenticated",
+            permission: "INSERT",
+          },
+        });
+      
+      if (policyError) {
+        console.error("❌ Error creating bucket policy:", policyError);
+        // We'll continue even if the policy creation fails
+      }
+      
+      console.log("✅ Bucket created successfully");
     }
 
     // Download File from Supabase Storage
