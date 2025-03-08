@@ -83,7 +83,7 @@ const QuickStats = ({ stats, userPlan, isPremiumFeature, userId }: QuickStatsPro
     try {
       console.log("QuickStats: Fetching fresh data...");
       
-      // Get total leads
+      // Get total leads - include leads generated from chatbot conversations
       const { count: leadsCount, error: leadsError } = await supabase
         .from('leads')
         .select('*', { count: 'exact', head: true })
@@ -92,6 +92,20 @@ const QuickStats = ({ stats, userPlan, isPremiumFeature, userId }: QuickStatsPro
       if (leadsError && leadsError.code !== 'PGRST116') {
         console.error('Error fetching leads count:', leadsError);
       }
+      
+      // Count property-related questions from chatbot as potential leads
+      const { count: chatLeadsCount, error: chatLeadsError } = await supabase
+        .from('chatbot_conversations')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .ilike('message', '%property%');
+        
+      if (chatLeadsError && chatLeadsError.code !== 'PGRST116') {
+        console.error('Error fetching chat leads count:', chatLeadsError);
+      }
+      
+      // Total leads should include both database leads and property-related chats
+      const totalLeads = (leadsCount || 0) + (chatLeadsCount || 0);
       
       // Get chatbot interactions
       const { count: interactionsCount, error: interactionsError } = await supabase
@@ -134,7 +148,7 @@ const QuickStats = ({ stats, userPlan, isPremiumFeature, userId }: QuickStatsPro
         : 0;
         
       console.log("Stats fetched successfully:", {
-        totalLeads: leadsCount || 0,
+        totalLeads,
         activeConversations: uniqueConversations,
         chatbotInteractions: interactionsCount || 0,
         totalProperties: properties?.length || 0,
@@ -142,7 +156,7 @@ const QuickStats = ({ stats, userPlan, isPremiumFeature, userId }: QuickStatsPro
       });
       
       setRealStats({
-        totalLeads: leadsCount || 0,
+        totalLeads,
         activeConversations: uniqueConversations,
         chatbotInteractions: interactionsCount || 0,
         totalProperties: properties?.length || 0,

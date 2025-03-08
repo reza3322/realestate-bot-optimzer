@@ -29,7 +29,7 @@ Deno.serve(async (req) => {
     const body = await req.json();
     console.log("📥 Received Body:", body);
 
-    const { filePath, userId, contentType, fileName } = body;
+    const { filePath, userId, contentType, fileName, priority = 5 } = body;
 
     if (!filePath || !userId || !contentType || !fileName) {
       console.error("❌ Missing required fields:", body);
@@ -39,7 +39,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log(`📄 Processing file: ${filePath} for user: ${userId}, content type: ${contentType}`);
+    console.log(`📄 Processing file: ${filePath} for user: ${userId}, content type: ${contentType}, priority: ${priority}`);
 
     // Initialize Supabase Client
     const supabase = createClient(
@@ -71,17 +71,22 @@ Deno.serve(async (req) => {
             fileSizeLimit: 5242880, // 5MB limit
           });
         
-        if (createBucketError && createBucketError.message !== "The resource already exists") {
-          console.error("❌ Error creating bucket:", createBucketError);
-          return new Response(
-            JSON.stringify({ success: false, error: "Failed to create storage bucket", details: createBucketError }),
-            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-        
-        // If bucket was created successfully, add policies
-        // This step is only needed for newly created buckets
-        if (!createBucketError) {
+        if (createBucketError) {
+          // Check if the error is because the bucket already exists
+          if (createBucketError.message && createBucketError.message.includes("already exists")) {
+            console.log("🟢 Bucket already exists, continuing...");
+          } else {
+            console.error("❌ Error creating bucket:", createBucketError);
+            return new Response(
+              JSON.stringify({ success: false, error: "Failed to create storage bucket", details: createBucketError }),
+              { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+        } else {
+          // If bucket was created successfully, add policies
+          // This step is only needed for newly created buckets
+          console.log("✅ Bucket created, adding policies...");
+          
           // Add bucket policies to allow authenticated users to upload files
           const { error: policyError } = await supabase
             .storage
@@ -153,6 +158,7 @@ Deno.serve(async (req) => {
     }
 
     console.log(`📝 Extracted ${extractedText.length} characters of text`);
+    console.log(`🔢 Using priority level: ${priority}`);
 
     // Insert Extracted Content into Supabase
     const { data: insertData, error: insertError } = await supabase
@@ -163,7 +169,7 @@ Deno.serve(async (req) => {
         question: `What information is in ${fileName}?`,
         answer: extractedText.substring(0, 5000),
         category: "File Import",
-        priority: 5
+        priority: parseInt(priority, 10) || 5
       })
       .select();
 
@@ -181,7 +187,8 @@ Deno.serve(async (req) => {
       JSON.stringify({
         success: true,
         message: "File processed successfully",
-        entriesCreated: 1
+        entriesCreated: 1,
+        priority: priority
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

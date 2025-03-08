@@ -41,6 +41,7 @@ const Dashboard = () => {
     let leadsSubscription;
     let conversationsSubscription;
     let propertiesSubscription;
+    let trainingDataSubscription;
 
     const setupRealtimeSubscriptions = async () => {
       if (!user) return;
@@ -74,6 +75,15 @@ const Dashboard = () => {
           () => fetchStats(user.id)
         )
         .subscribe();
+        
+      // Subscribe to training data changes
+      trainingDataSubscription = supabase
+        .channel('training-data-changes')
+        .on('postgres_changes', 
+          { event: '*', schema: 'public', table: 'chatbot_training_data', filter: `user_id=eq.${user.id}` },
+          () => fetchActivities(user.id)
+        )
+        .subscribe();
     };
 
     if (user) {
@@ -85,6 +95,7 @@ const Dashboard = () => {
       if (leadsSubscription) supabase.removeChannel(leadsSubscription);
       if (conversationsSubscription) supabase.removeChannel(conversationsSubscription);
       if (propertiesSubscription) supabase.removeChannel(propertiesSubscription);
+      if (trainingDataSubscription) supabase.removeChannel(trainingDataSubscription);
     };
   }, [user]);
 
@@ -139,6 +150,17 @@ const Dashboard = () => {
       // Get leads
       const { data: leadsData } = await getLeads();
       
+      // Get property-related chatbot questions as potential leads
+      const { count: chatLeadsCount, error: chatLeadsError } = await supabase
+        .from('chatbot_conversations')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .ilike('message', '%property%');
+        
+      if (chatLeadsError) {
+        console.error('Error fetching chat leads:', chatLeadsError);
+      }
+      
       // Get properties
       const { data: propertiesData } = await getProperties();
       
@@ -166,7 +188,7 @@ const Dashboard = () => {
       const uniqueConversations = conversationsData ? 
         [...new Set(conversationsData.map(c => c.conversation_id))].length : 0;
       
-      const totalLeads = leadsData?.length || 0;
+      const totalLeads = (leadsData?.length || 0) + (chatLeadsCount || 0);
       const totalProperties = propertiesData?.length || 0;
       const featuredProperties = propertiesData?.filter(p => p.featured)?.length || 0;
       
@@ -349,7 +371,7 @@ const Dashboard = () => {
                         
                         <Button 
                           onClick={() => setActiveTab('marketing')} 
-                          className="flex justify-start items-center h-auto py-2"
+                          className="flex justify-start items-center h-auto py-2 w-full"
                           variant={isPremiumFeature('professional') ? "outline" : "outline"}
                           size="sm">
                           {isPremiumFeature('professional') && <Lock className="mr-2 h-4 w-4 text-muted-foreground flex-shrink-0" />}
@@ -361,7 +383,7 @@ const Dashboard = () => {
                         
                         <Button 
                           onClick={() => setActiveTab('settings')} 
-                          className="flex justify-start items-center h-auto py-2"
+                          className="flex justify-start items-center h-auto py-2 w-full"
                           variant="outline" 
                           size="sm">
                           {isPremiumFeature('professional') ? (
@@ -379,7 +401,7 @@ const Dashboard = () => {
                       </div>
                       
                       {userPlan === 'starter' && (
-                        <Button onClick={() => setActiveTab('settings')} variant="default" size="sm" className="mt-2">
+                        <Button onClick={() => setActiveTab('settings')} variant="default" size="sm" className="mt-2 w-full">
                           Upgrade to Professional
                         </Button>
                       )}

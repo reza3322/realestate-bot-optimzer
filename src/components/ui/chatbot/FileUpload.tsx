@@ -5,11 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
-import { FilePlus, FileText, Upload, Loader2, AlertCircle, CheckCircle2, FileX, FileSearch } from "lucide-react";
+import { FilePlus, FileText, Upload, Loader2, AlertCircle, CheckCircle2, FileX, FileSearch, Trash2 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Slider } from "@/components/ui/slider";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
 interface FileUploadProps {
   userId: string;
@@ -25,15 +27,18 @@ interface UploadedFile {
   status: 'uploading' | 'processing' | 'completed' | 'error';
   error?: string;
   contentType: string;
+  priority?: number;
   createdAt: Date;
 }
 
 const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [contentType, setContentType] = useState<string>("faqs");
+  const [priority, setPriority] = useState<number>(5);
   const [isUploading, setIsUploading] = useState<boolean>(false);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [isLoadingFiles, setIsLoadingFiles] = useState<boolean>(true);
+  const [isDeletingFile, setIsDeletingFile] = useState<string | null>(null);
 
   useEffect(() => {
     fetchUploadedFiles();
@@ -84,7 +89,7 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
     }
   };
 
-  const processPdfContent = async (filePath: string, fileName: string, fileId: string) => {
+  const processPdfContent = async (filePath: string, fileName: string, fileId: string, priority: number = 5) => {
     // Update file status to processing
     setUploadedFiles(prev => 
       prev.map(file => 
@@ -100,7 +105,8 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
           filePath,
           userId,
           contentType,
-          fileName
+          fileName,
+          priority
         }
       });
 
@@ -116,7 +122,7 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
       setUploadedFiles(prev => 
         prev.map(file => 
           file.id === fileId 
-            ? { ...file, status: 'completed' as const } 
+            ? { ...file, status: 'completed' as const, priority } 
             : file
         )
       );
@@ -159,6 +165,7 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
       type: selectedFile.type,
       status: 'uploading',
       contentType,
+      priority,
       createdAt: new Date()
     };
     
@@ -192,7 +199,7 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
       
       // If it's a PDF or text file, process its content
       if (selectedFile.type === 'application/pdf' || selectedFile.type === 'text/plain') {
-        await processPdfContent(filePath, selectedFile.name, newFile.id);
+        await processPdfContent(filePath, selectedFile.name, newFile.id, priority);
       }
       
       setSelectedFile(null);
@@ -213,6 +220,43 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
       if (onUploadComplete) onUploadComplete(false);
     } finally {
       setIsUploading(false);
+    }
+  };
+
+  const deleteFile = async (filePath: string, fileId: string) => {
+    setIsDeletingFile(fileId);
+    try {
+      // First, try to delete from storage
+      const { error: storageError } = await supabase
+        .storage
+        .from('chatbot_training_files')
+        .remove([filePath]);
+
+      if (storageError) {
+        console.error('Error deleting file from storage:', storageError);
+        toast.error('Failed to delete file from storage');
+      }
+
+      // Then, try to delete related training data
+      const { error: dbError } = await supabase
+        .from('chatbot_training_data')
+        .delete()
+        .eq('user_id', userId)
+        .ilike('question', `%${filePath.split('/').pop() || ''}%`);
+
+      if (dbError) {
+        console.error('Error deleting associated training data:', dbError);
+        // Continue even if this fails, as the file itself was deleted
+      }
+
+      // Remove from local state
+      setUploadedFiles(prev => prev.filter(file => file.id !== fileId));
+      toast.success('File deleted successfully');
+    } catch (error) {
+      console.error('Error in deleteFile:', error);
+      toast.error('Failed to delete file');
+    } finally {
+      setIsDeletingFile(null);
     }
   };
 
@@ -259,7 +303,7 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
   };
 
   const processFile = async (file: UploadedFile) => {
-    await processPdfContent(file.path, file.name, file.id);
+    await processPdfContent(file.path, file.name, file.id, file.priority || 5);
   };
 
   return (
@@ -274,55 +318,74 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
       
       <CardContent className="space-y-4">
         <div className="space-y-2">
-          <div className="flex gap-2">
-            <Select
-              value={contentType}
-              onValueChange={(value) => setContentType(value)}
-            >
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Content Type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="faqs">FAQs</SelectItem>
-                <SelectItem value="property">Property Details</SelectItem>
-                <SelectItem value="business">Business Info</SelectItem>
-                <SelectItem value="custom">Custom Content</SelectItem>
-              </SelectContent>
-            </Select>
-            
-            <div className="relative flex-1">
-              <Input
-                type="file"
-                accept=".pdf,.txt"
-                onChange={handleFileChange}
-                className="opacity-0 absolute inset-0 w-full h-full cursor-pointer z-10"
-              />
-              <div className="border border-input rounded-md px-3 py-2 flex items-center justify-between h-10">
-                <span className="text-sm text-muted-foreground overflow-hidden overflow-ellipsis whitespace-nowrap">
-                  {selectedFile ? selectedFile.name : 'Choose a file...'}
-                </span>
-                <Upload className="h-4 w-4 text-muted-foreground" />
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Select
+                value={contentType}
+                onValueChange={(value) => setContentType(value)}
+              >
+                <SelectTrigger className="w-full sm:w-[180px]">
+                  <SelectValue placeholder="Content Type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="faqs">FAQs</SelectItem>
+                  <SelectItem value="property">Property Details</SelectItem>
+                  <SelectItem value="business">Business Info</SelectItem>
+                  <SelectItem value="custom">Custom Content</SelectItem>
+                </SelectContent>
+              </Select>
+              
+              <div className="relative flex-1">
+                <Input
+                  type="file"
+                  accept=".pdf,.txt"
+                  onChange={handleFileChange}
+                  className="opacity-0 absolute inset-0 w-full h-full cursor-pointer z-10"
+                />
+                <div className="border border-input rounded-md px-3 py-2 flex items-center justify-between h-10">
+                  <span className="text-sm text-muted-foreground overflow-hidden overflow-ellipsis whitespace-nowrap">
+                    {selectedFile ? selectedFile.name : 'Choose a file...'}
+                  </span>
+                  <Upload className="h-4 w-4 text-muted-foreground" />
+                </div>
               </div>
             </div>
             
-            <Button 
-              onClick={uploadFile} 
-              disabled={!selectedFile || isUploading}
-              className="w-24"
-            >
-              {isUploading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  <span>Uploading</span>
-                </>
-              ) : (
-                <span>Upload</span>
-              )}
-            </Button>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">Priority: {priority}</span>
+                <span className="text-xs text-muted-foreground">(Higher priority = more influence)</span>
+              </div>
+              <Slider 
+                value={[priority]} 
+                min={0} 
+                max={10} 
+                step={1} 
+                onValueChange={(value) => setPriority(value[0])}
+              />
+            </div>
+            
+            <div className="flex justify-end">
+              <Button 
+                onClick={uploadFile} 
+                disabled={!selectedFile || isUploading}
+                className="w-full sm:w-auto"
+              >
+                {isUploading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <span>Uploading</span>
+                  </>
+                ) : (
+                  <span>Upload</span>
+                )}
+              </Button>
+            </div>
           </div>
           
           <p className="text-xs text-muted-foreground">
             PDF and text files will be automatically processed and their content will be used to train your chatbot.
+            The priority level determines how much weight this content gets when answering questions.
           </p>
         </div>
         
@@ -369,6 +432,9 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
                           <p className="text-xs text-muted-foreground">
                             {formatFileSize(file.size)} • {new Date(file.createdAt).toLocaleString()}
                           </p>
+                          {file.priority !== undefined && (
+                            <Badge className="mt-1 text-xs" variant="secondary">Priority: {file.priority}</Badge>
+                          )}
                           {file.error && (
                             <p className="text-xs text-red-600 mt-1 flex items-center">
                               <AlertCircle className="h-3 w-3 mr-1" />
@@ -379,20 +445,52 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
                       </div>
                       <div className="flex items-center gap-2">
                         {getStatusBadge(file)}
-                        <div>
-                          {getStatusIcon(file.status)}
+                        {getStatusIcon(file.status)}
+                        
+                        <div className="flex gap-1">
+                          {file.status === 'completed' && (file.type === 'application/pdf' || file.type === 'text/plain') && (
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              onClick={() => processFile(file)}
+                              className="h-8 w-8 p-0"
+                              title="Reprocess file content"
+                            >
+                              <FileSearch className="h-4 w-4" />
+                            </Button>
+                          )}
+                          
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                title="Delete file"
+                              >
+                                {isDeletingFile === file.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Trash2 className="h-4 w-4" />
+                                )}
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Delete File</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Are you sure you want to delete "{file.name}"? This will also remove any training data extracted from this file.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => deleteFile(file.path, file.id)} className="bg-red-500 hover:bg-red-600">
+                                  Delete
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
                         </div>
-                        {file.status === 'completed' && (file.type === 'application/pdf' || file.type === 'text/plain') && (
-                          <Button 
-                            variant="ghost" 
-                            size="sm" 
-                            onClick={() => processFile(file)}
-                            className="h-8 w-8 p-0"
-                            title="Process file content"
-                          >
-                            <FileSearch className="h-4 w-4" />
-                          </Button>
-                        )}
                       </div>
                     </div>
                   </div>
@@ -403,10 +501,11 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
         </div>
       </CardContent>
       
-      <CardFooter className="bg-muted/50 px-6 py-4 border-t flex items-center gap-2 text-sm text-muted-foreground">
-        <AlertCircle size={16} />
+      <CardFooter className="bg-muted/50 px-6 py-4 border-t flex flex-col sm:flex-row items-start sm:items-center gap-2 text-sm text-muted-foreground">
+        <AlertCircle size={16} className="flex-shrink-0 mt-1 sm:mt-0" />
         <p>
           Uploaded files will be processed and their content will be used to train your chatbot.
+          Higher priority files will have more influence on chatbot responses.
           For best results, use text (.txt) files rather than PDFs.
         </p>
       </CardFooter>
