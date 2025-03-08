@@ -1,147 +1,396 @@
 
-import { Message, ChatbotResponse, VisitorInfo } from './types';
+import { supabase } from "@/lib/supabase";
+import { VisitorInfo } from "./types";
 
-// Demo responses for testing the chatbot
-export const demoResponses = [
-  "I'd be happy to help you find a property. What's your budget range?",
-  "Great! And what neighborhoods are you interested in?",
-  "I've found 3 properties that match your criteria. Would you like to schedule a viewing?",
-  "Perfect! I've notified your agent and scheduled a viewing for Saturday at 2pm. You'll receive a confirmation email shortly.",
-  "Our agents specialize in luxury properties in downtown and suburban areas.",
-  "Yes, we have several properties with pools available right now.",
-  "The average price in that neighborhood has increased by 12% over the last year.",
-  "I can help you get pre-approved for a mortgage through our partner lenders."
-];
+// Define a structure for the response from the chatbot
+export interface ChatbotResponseResult {
+  response: string;
+  error?: string;
+  source?: 'ai' | 'training';
+  conversationId?: string;
+  leadInfo?: VisitorInfo;
+}
 
-export const getResponseForMessage = (messages: Message[]): string => {
-  const responseIndex = Math.min(messages.length - 1, demoResponses.length - 1);
-  return demoResponses[responseIndex];
+interface Message {
+  role: string;
+  content: string;
+}
+
+// Extract lead information from a message
+const extractLeadInfo = (message: string): Partial<VisitorInfo> => {
+  const leadInfo: Partial<VisitorInfo> = {};
+  
+  // Extract email
+  const emailRegex = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g;
+  const emailMatches = message.match(emailRegex);
+  if (emailMatches && emailMatches.length > 0) {
+    leadInfo.email = emailMatches[0];
+  }
+  
+  // Extract phone number (simple pattern)
+  const phoneRegex = /\b(\+\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b/g;
+  const phoneMatches = message.match(phoneRegex);
+  if (phoneMatches && phoneMatches.length > 0) {
+    leadInfo.phone = phoneMatches[0];
+  }
+  
+  // Extract name patterns (simple approach)
+  const nameRegex = /(?:my name is|i am|i'm) ([A-Z][a-z]+(?: [A-Z][a-z]+)?)/i;
+  const nameMatch = message.match(nameRegex);
+  if (nameMatch && nameMatch[1]) {
+    leadInfo.name = nameMatch[1];
+  }
+  
+  // Extract budget
+  const budgetRegex = /(?:budget|afford|looking to spend|price range)[^\d]*(\$?[\d,]+(?:[\d,.]+k)?(?:\s*-\s*\$?[\d,]+(?:[\d,.]+k)?)?)/i;
+  const budgetMatch = message.match(budgetRegex);
+  if (budgetMatch && budgetMatch[1]) {
+    leadInfo.budget = budgetMatch[1];
+  }
+  
+  // Extract property interest
+  if (message.toLowerCase().includes('house') || 
+      message.toLowerCase().includes('home') || 
+      message.toLowerCase().includes('property')) {
+    if (message.toLowerCase().includes('buying') || message.toLowerCase().includes('purchase')) {
+      leadInfo.propertyInterest = 'Buying';
+    } else if (message.toLowerCase().includes('selling') || message.toLowerCase().includes('sell')) {
+      leadInfo.propertyInterest = 'Selling';
+    } else if (message.toLowerCase().includes('renting') || message.toLowerCase().includes('rent')) {
+      leadInfo.propertyInterest = 'Renting';
+    }
+  }
+  
+  return leadInfo;
 };
 
-// Custom hook for demo response generation
-export const useDemoResponse = () => {
-  const generateDemoResponse = async (message: string): Promise<string> => {
-    // Simple logic for demo purposes
-    // In a real app, this would call an API
+// Find the most relevant training data for a user's question
+async function findRelevantTrainingData(
+  userId: string, 
+  question: string
+): Promise<{ answer: string; source: 'training' } | null> {
+  try {
+    // Fetch matching training data using basic text search
+    // In a production system, you'd use vector embeddings or a more sophisticated matching system
+    const searchableQuestion = question.toLowerCase();
     
-    // Get a random response from the demo responses
-    const randomIndex = Math.floor(Math.random() * demoResponses.length);
+    // First, try to find an exact match in the training data
+    const { data: exactMatches, error: exactMatchError } = await supabase
+      .from('chatbot_training_data')
+      .select('question, answer, priority')
+      .eq('user_id', userId)
+      .or(`question.ilike.%${searchableQuestion}%,answer.ilike.%${searchableQuestion}%`)
+      .order('priority', { ascending: false })
+      .limit(5);
     
-    // Add a small delay to simulate thinking
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve(demoResponses[randomIndex]);
-      }, 500);
-    });
-  };
+    if (exactMatchError) {
+      console.error('Error searching training data:', exactMatchError);
+      return null;
+    }
+    
+    // If we found matches, return the highest priority one
+    if (exactMatches && exactMatches.length > 0) {
+      return {
+        answer: exactMatches[0].answer,
+        source: 'training'
+      };
+    }
+    
+    // If no exact matches, try a more permissive search by splitting the question into words
+    // and finding training data that contains multiple of these words
+    const words = searchableQuestion.split(/\s+/).filter(word => word.length > 3);
+    if (words.length < 2) return null; // Not enough significant words to match
+    
+    // Build a query that looks for training data containing at least 2 of the significant words
+    const wordLikeConditions = words.map(word => `question.ilike.%${word}%`).join(',');
+    
+    const { data: wordMatches, error: wordMatchError } = await supabase
+      .from('chatbot_training_data')
+      .select('question, answer, priority')
+      .eq('user_id', userId)
+      .or(wordLikeConditions)
+      .order('priority', { ascending: false })
+      .limit(3);
+    
+    if (wordMatchError) {
+      console.error('Error searching training data by words:', wordMatchError);
+      return null;
+    }
+    
+    // If we found word-based matches, return the highest priority one
+    if (wordMatches && wordMatches.length > 0) {
+      return {
+        answer: wordMatches[0].answer,
+        source: 'training'
+      };
+    }
+    
+    // No matches found in training data
+    return null;
+    
+  } catch (error) {
+    console.error('Error in findRelevantTrainingData:', error);
+    return null;
+  }
+}
 
-  return { generateDemoResponse };
-};
+// Check if a question is about properties
+async function isAboutProperties(question: string): Promise<boolean> {
+  const propertyKeywords = [
+    'house', 'property', 'home', 'apartment', 'condo', 'real estate',
+    'buying', 'selling', 'renting', 'mortgage', 'loan', 'bedroom', 'bathroom',
+    'square feet', 'location', 'neighborhood', 'price', 'cost', 'value'
+  ];
+  
+  const lowerQuestion = question.toLowerCase();
+  return propertyKeywords.some(keyword => lowerQuestion.includes(keyword));
+}
 
-// Function to test chatbot with real OpenAI API
-export const testChatbotResponse = async (
+// Get relevant property listings for a user
+async function getRelevantPropertyListings(userId: string, question: string): Promise<string> {
+  try {
+    // Fetch user's property listings
+    const { data: properties, error } = await supabase
+      .from('properties')
+      .select('id, title, description, price, address, bedrooms, bathrooms, size, type')
+      .eq('user_id', userId)
+      .limit(5);
+    
+    if (error) {
+      console.error('Error fetching property listings:', error);
+      return '';
+    }
+    
+    if (!properties || properties.length === 0) {
+      return "I don't have any property listings to share at the moment.";
+    }
+    
+    // Format property listings for inclusion in the response
+    const formattedListings = properties.map(property => {
+      return `
+Property: ${property.title}
+${property.description ? `Description: ${property.description}` : ''}
+Price: $${Number(property.price).toLocaleString()}
+${property.address ? `Location: ${property.address}` : ''}
+${property.bedrooms ? `Bedrooms: ${property.bedrooms}` : ''}${property.bathrooms ? `, Bathrooms: ${property.bathrooms}` : ''}
+${property.size ? `Size: ${property.size} sq ft` : ''}
+${property.type ? `Type: ${property.type}` : ''}
+      `.trim();
+    }).join('\n\n');
+    
+    return `Here are some property listings that might interest you:\n\n${formattedListings}`;
+    
+  } catch (error) {
+    console.error('Error in getRelevantPropertyListings:', error);
+    return '';
+  }
+}
+
+// Chat history management
+async function saveConversation(
+  userId: string,
+  message: string,
+  response: string,
+  visitorInfo?: VisitorInfo,
+  conversationId?: string
+): Promise<string> {
+  try {
+    // Generate a new conversation ID if none provided
+    const newConversationId = conversationId || `conv_${Date.now()}`;
+    
+    // Save the conversation
+    const { error } = await supabase
+      .from('chatbot_conversations')
+      .insert({
+        user_id: userId,
+        visitor_id: visitorInfo?.visitorId,
+        conversation_id: newConversationId,
+        message,
+        response
+      });
+    
+    if (error) {
+      console.error('Error saving conversation:', error);
+    }
+    
+    return newConversationId;
+    
+  } catch (error) {
+    console.error('Error in saveConversation:', error);
+    return conversationId || `conv_${Date.now()}`;
+  }
+}
+
+// Main function to test the chatbot response
+export async function testChatbotResponse(
   message: string,
   userId: string,
   visitorInfo?: VisitorInfo,
   conversationId?: string,
   previousMessages?: Message[]
-): Promise<{ 
-  response: string; 
-  error?: string; 
-  source?: 'ai' | 'training';
-  conversationId?: string;
-  leadInfo?: VisitorInfo;
-}> => {
+): Promise<ChatbotResponseResult> {
   try {
-    console.log(`Sending message to chatbot API: "${message}" for user: ${userId}`);
+    console.log(`Processing message: "${message}" for user ${userId}`);
     
-    // Hardcoded values instead of using process.env which isn't available in browser
-    const supabaseUrl = 'https://ckgaqkbsnrvccctqxsqv.supabase.co';
-    const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNrZ2Fxa2JzbnJ2Y2NjdHF4c3F2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDEwMTEyODksImV4cCI6MjA1NjU4NzI4OX0.z62BR5psK8FBR5lfqbnpbFMfQLKgzFCisqDiuWg4MKM';
-
-    if (!supabaseUrl) {
-      console.error('Supabase URL is undefined');
-      return { response: '', error: 'Supabase URL is not configured' };
-    }
-
-    console.log(`Making request to: ${supabaseUrl}/functions/v1/chatbot-response`);
+    // Extract lead information from the message
+    const extractedLeadInfo = extractLeadInfo(message);
+    console.log('Extracted lead info:', extractedLeadInfo);
     
-    try {
-      const response = await fetch(`${supabaseUrl}/functions/v1/chatbot-response`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${supabaseAnonKey}`,
-        },
-        body: JSON.stringify({
-          message,
-          userId,
-          visitorInfo,
-          conversationId: conversationId || ('test-' + Date.now()),
-          previousMessages
-        }),
-      });
-
-      // Log response details for debugging
-      console.log('Response status:', response.status);
-      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+    // Combine with existing visitor info
+    const updatedVisitorInfo = {
+      ...visitorInfo,
+      ...extractedLeadInfo
+    };
+    
+    // First, check if we have relevant training data for this question
+    const trainingDataMatch = await findRelevantTrainingData(userId, message);
+    
+    if (trainingDataMatch) {
+      console.log('Found matching training data');
       
-      if (!response.ok) {
-        let errorMessage = `Server error: ${response.status}`;
-        const contentType = response.headers.get('content-type');
-        
-        if (contentType && contentType.includes('application/json')) {
-          try {
-            const errorData = await response.json();
-            console.error('JSON error response:', errorData);
-            errorMessage = errorData.error || errorMessage;
-          } catch (e) {
-            console.error('Error parsing JSON error response:', e);
+      // Save the conversation
+      const newConversationId = await saveConversation(
+        userId,
+        message,
+        trainingDataMatch.answer,
+        updatedVisitorInfo,
+        conversationId
+      );
+      
+      return {
+        response: trainingDataMatch.answer,
+        source: 'training',
+        conversationId: newConversationId,
+        leadInfo: Object.keys(extractedLeadInfo).length > 0 ? extractedLeadInfo : undefined
+      };
+    }
+    
+    // Check if the question is about properties
+    const aboutProperties = await isAboutProperties(message);
+    
+    // Construct the messages for the AI
+    const messages: Message[] = [
+      {
+        role: 'system',
+        content: `You are a helpful real estate assistant. Be friendly, professional, and concise in your responses.
+        Your primary goal is to assist with real estate inquiries and provide helpful information about properties.
+        Always be truthful and if you don't know something, say so rather than making up information.
+        ${aboutProperties ? 'The user is asking about properties. Include relevant property details in your response.' : ''}
+        If the user shares contact information or shows interest in a property, acknowledge it and offer to help them further.`
+      }
+    ];
+    
+    // Add previous messages for context if provided
+    if (previousMessages && previousMessages.length > 0) {
+      messages.push(...previousMessages.slice(-4)); // Add last 4 messages for context
+    }
+    
+    // Add the current user message
+    messages.push({ role: 'user', content: message });
+    
+    // If the question is about properties, fetch relevant listings
+    let propertyListings = '';
+    if (aboutProperties) {
+      propertyListings = await getRelevantPropertyListings(userId, message);
+      if (propertyListings) {
+        messages.push({
+          role: 'system',
+          content: `Use the following property listing information in your response if relevant: ${propertyListings}`
+        });
+      }
+    }
+    
+    // Call the OpenAI API through the Supabase function
+    const { data, error } = await supabase.functions.invoke('ai-chatbot', {
+      body: { messages }
+    });
+    
+    if (error) {
+      console.error('Error calling AI chatbot function:', error);
+      throw new Error(`Failed to generate response: ${error.message}`);
+    }
+    
+    const aiResponse = data?.response || 'I apologize, but I am unable to generate a response at the moment.';
+    
+    // Save the conversation
+    const newConversationId = await saveConversation(
+      userId,
+      message,
+      aiResponse,
+      updatedVisitorInfo,
+      conversationId
+    );
+    
+    // Create a lead if enough information is available
+    if (Object.keys(extractedLeadInfo).length > 0) {
+      if (extractedLeadInfo.email || extractedLeadInfo.phone) {
+        try {
+          // Check if lead already exists with this email or phone
+          const { data: existingLeads, error: searchError } = await supabase
+            .from('leads')
+            .select('id')
+            .or(`email.eq.${extractedLeadInfo.email || ''},phone.eq.${extractedLeadInfo.phone || ''}`)
+            .eq('user_id', userId)
+            .limit(1);
+          
+          if (searchError) {
+            console.error('Error searching for existing lead:', searchError);
+          } else if (!existingLeads || existingLeads.length === 0) {
+            // Create a new lead
+            const leadData = {
+              user_id: userId,
+              email: extractedLeadInfo.email || '',
+              phone: extractedLeadInfo.phone || '',
+              first_name: extractedLeadInfo.name ? extractedLeadInfo.name.split(' ')[0] : '',
+              last_name: extractedLeadInfo.name && extractedLeadInfo.name.split(' ').length > 1 
+                ? extractedLeadInfo.name.split(' ').slice(1).join(' ') 
+                : '',
+              budget: extractedLeadInfo.budget || null,
+              property_interest: extractedLeadInfo.propertyInterest || null,
+              source: 'Chatbot',
+              notes: `Created from chatbot conversation. First message: "${message.substring(0, 100)}${message.length > 100 ? '...' : ''}"`
+            };
+            
+            const { error: insertError } = await supabase
+              .from('leads')
+              .insert([leadData]);
+            
+            if (insertError) {
+              console.error('Error creating lead:', insertError);
+            } else {
+              console.log('Created new lead from chatbot conversation');
+              
+              // Log this activity
+              await supabase
+                .from('activities')
+                .insert({
+                  user_id: userId,
+                  type: 'lead',
+                  description: `New lead created from chatbot: ${extractedLeadInfo.name || extractedLeadInfo.email || extractedLeadInfo.phone}`,
+                  target_type: 'lead'
+                });
+            }
+          } else {
+            console.log('Lead already exists, not creating duplicate');
           }
-        } else {
-          // If not JSON, try to get text
-          try {
-            const errorText = await response.text();
-            console.error('Non-JSON error response:', errorText);
-            errorMessage = `Server error: ${response.status} - ${errorText.substring(0, 100)}`;
-          } catch (e) {
-            console.error('Error getting response text:', e);
-          }
+        } catch (leadError) {
+          console.error('Error handling lead creation:', leadError);
         }
-        
-        console.error('Test chatbot error:', errorMessage);
-        return { response: '', error: errorMessage };
       }
-
-      const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        console.error('Non-JSON response received:', contentType);
-        const text = await response.text();
-        console.error('Response text (first 200 chars):', text.substring(0, 200));
-        return { response: '', error: 'Invalid response format from server' };
-      }
-
-      const data = await response.json();
-      console.log('Successful response from chatbot API:', data);
-      
-      return { 
-        response: data.response,
-        source: data.source || 'ai',
-        conversationId: data.conversationId,
-        leadInfo: data.leadInfo
-      };
-    } catch (fetchError) {
-      console.error('Fetch error calling Edge Function:', fetchError);
-      return { 
-        response: '', 
-        error: 'Network error connecting to chatbot API: ' + fetchError.message 
-      };
     }
+    
+    return {
+      response: aiResponse,
+      source: 'ai',
+      conversationId: newConversationId,
+      leadInfo: Object.keys(extractedLeadInfo).length > 0 ? extractedLeadInfo : undefined
+    };
+    
   } catch (error) {
-    console.error('Test chatbot exception:', error);
-    return { 
-      response: '', 
-      error: error instanceof Error ? error.message : 'Network error connecting to chatbot API' 
+    console.error('Error in testChatbotResponse:', error);
+    return {
+      response: 'I apologize, but I encountered an error while processing your request. Please try again later.',
+      error: error.message
     };
   }
-};
+}

@@ -9,7 +9,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
-import { Plus, Trash2, FileUp, Edit, Save, X, AlertCircle, FileText } from "lucide-react";
+import { Plus, Trash2, FileUp, Edit, Save, X, AlertCircle, FileText, FileQuestion } from "lucide-react";
+import FileUpload from "./FileUpload";
+import { LanguageCode } from "./types";
 
 interface TrainingItem {
   id?: string;
@@ -22,9 +24,11 @@ interface TrainingItem {
 
 interface ChatbotTrainingProps {
   userId: string;
+  userPlan?: string;
+  isPremiumFeature?: (requiredPlan: string) => boolean;
 }
 
-const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
+const ChatbotTraining = ({ userId, userPlan, isPremiumFeature }: ChatbotTrainingProps) => {
   const [activeTab, setActiveTab] = useState<string>("faqs");
   const [items, setItems] = useState<TrainingItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -38,6 +42,7 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [fileUploading, setFileUploading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [activeTabSection, setActiveTabSection] = useState<"manual" | "file-upload">("manual");
 
   useEffect(() => {
     fetchTrainingData();
@@ -207,80 +212,10 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
     });
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    // Only accept text or PDF files
-    if (file.type !== 'text/plain' && file.type !== 'application/pdf') {
-      toast.error('Only text or PDF files are accepted');
-      return;
-    }
-
-    setFileUploading(true);
-    try {
-      // Upload file to storage
-      const filePath = `${userId}/${activeTab}/${Date.now()}_${file.name}`;
-      const { error: uploadError } = await supabase.storage
-        .from('chatbot_training_files')
-        .upload(filePath, file);
-
-      if (uploadError) throw uploadError;
-
-      // For text files, we can parse and add content directly
-      if (file.type === 'text/plain') {
-        const text = await file.text();
-        const lines = text.split('\n');
-        
-        let successCount = 0;
-        let failureCount = 0;
-        
-        // Simple parser: Assumes pairs of lines where odd lines are questions and even lines are answers
-        for (let i = 0; i < lines.length; i += 2) {
-          const question = lines[i]?.trim();
-          const answer = lines[i + 1]?.trim();
-          
-          if (question && answer) {
-            try {
-              const { error } = await supabase
-                .from('chatbot_training_data')
-                .insert({
-                  user_id: userId,
-                  content_type: activeTab,
-                  question,
-                  answer,
-                  category: 'Imported',
-                  priority: 0
-                });
-              
-              if (error) throw error;
-              successCount++;
-            } catch (e) {
-              failureCount++;
-              console.error('Error inserting item:', e);
-            }
-          }
-        }
-        
-        if (successCount > 0) {
-          toast.success(`Successfully imported ${successCount} items`);
-          fetchTrainingData();
-        }
-        
-        if (failureCount > 0) {
-          toast.error(`Failed to import ${failureCount} items`);
-        }
-      } else {
-        // For PDF files, just notify the user
-        toast.success('File uploaded successfully. PDF content will be processed soon.');
-      }
-    } catch (error) {
-      console.error('Error uploading file:', error);
-      toast.error('Failed to upload file');
-    } finally {
-      setFileUploading(false);
-      // Clear the file input
-      e.target.value = '';
+  const handleFileUploadComplete = (success: boolean) => {
+    if (success) {
+      // Refresh the training data to show newly added items
+      fetchTrainingData();
     }
   };
 
@@ -311,127 +246,120 @@ const ChatbotTraining = ({ userId }: ChatbotTrainingProps) => {
           <TabsContent value={activeTab} className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-4">
-                <h3 className="text-lg font-medium">Add New {activeTab === 'faqs' ? 'FAQ' : 
+                <Tabs value={activeTabSection} onValueChange={(value) => setActiveTabSection(value as "manual" | "file-upload")}>
+                  <TabsList className="w-full mb-4">
+                    <TabsTrigger value="manual" className="flex-1">
+                      <FileQuestion className="w-4 h-4 mr-2" />
+                      Manual Entry
+                    </TabsTrigger>
+                    <TabsTrigger value="file-upload" className="flex-1">
+                      <FileUp className="w-4 h-4 mr-2" />
+                      File Upload
+                    </TabsTrigger>
+                  </TabsList>
+                  
+                  <TabsContent value="manual" className="space-y-4">
+                    <h3 className="text-lg font-medium">Add New {activeTab === 'faqs' ? 'FAQ' : 
                                                            activeTab === 'property' ? 'Property Detail' : 
                                                            activeTab === 'business' ? 'Business Info' : 
                                                            'Custom Response'}</h3>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="question">
-                    {activeTab === 'faqs' ? 'Question' : 
-                     activeTab === 'property' ? 'Property Query' : 
-                     activeTab === 'business' ? 'Business Query' : 
-                     'User Query'}
-                  </Label>
-                  <Input 
-                    id="question" 
-                    name="question"
-                    value={newItem.question}
-                    onChange={handleInputChange}
-                    placeholder="e.g., What are your office hours?"
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="answer">
-                    {activeTab === 'faqs' ? 'Answer' : 
-                     activeTab === 'property' ? 'Property Information' : 
-                     activeTab === 'business' ? 'Business Information' : 
-                     'Response'}
-                  </Label>
-                  <Textarea 
-                    id="answer" 
-                    name="answer"
-                    value={newItem.answer}
-                    onChange={handleInputChange}
-                    placeholder="e.g., Our office is open Monday to Friday, 9 AM to 5 PM."
-                    rows={4}
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="category">Category (Optional)</Label>
-                  <Input 
-                    id="category" 
-                    name="category"
-                    value={newItem.category || ''}
-                    onChange={handleInputChange}
-                    placeholder="e.g., Office Information"
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="priority">Priority (0-10)</Label>
-                  <Input 
-                    id="priority" 
-                    name="priority"
-                    type="number"
-                    min={0}
-                    max={10}
-                    value={newItem.priority || 0}
-                    onChange={handleInputChange}
-                    placeholder="Priority level (higher numbers = higher priority)"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Higher priority items will be matched first when a similar question is asked.
-                  </p>
-                </div>
-                
-                <div className="flex gap-2">
-                  {editingIndex === null ? (
-                    <Button 
-                      onClick={addItem} 
-                      className="flex gap-2 items-center"
-                    >
-                      <Plus size={16} />
-                      Add Item
-                    </Button>
-                  ) : (
-                    <>
-                      <Button 
-                        onClick={updateItem} 
-                        className="flex gap-2 items-center"
-                      >
-                        <Save size={16} />
-                        Save Changes
-                      </Button>
-                      <Button 
-                        variant="outline" 
-                        onClick={cancelEditing} 
-                        className="flex gap-2 items-center"
-                      >
-                        <X size={16} />
-                        Cancel
-                      </Button>
-                    </>
-                  )}
-                </div>
-                
-                <div className="pt-4 border-t">
-                  <p className="text-sm font-medium mb-2">Bulk Import</p>
-                  <div className="flex flex-col gap-2">
-                    <label 
-                      htmlFor="file-upload" 
-                      className="cursor-pointer"
-                    >
-                      <div className="flex items-center gap-2 px-4 py-2 border border-dashed border-gray-300 rounded-md hover:bg-secondary/50 transition-colors">
-                        <FileUp size={16} />
-                        <span>{fileUploading ? 'Uploading...' : 'Upload text or PDF file'}</span>
-                      </div>
+                    
+                    <div className="space-y-2">
+                      <Label htmlFor="question">
+                        {activeTab === 'faqs' ? 'Question' : 
+                         activeTab === 'property' ? 'Property Query' : 
+                         activeTab === 'business' ? 'Business Query' : 
+                         'User Query'}
+                      </Label>
                       <Input 
-                        id="file-upload" 
-                        type="file" 
-                        accept=".txt,.pdf" 
-                        className="hidden"
-                        onChange={handleFileUpload}
-                        disabled={fileUploading}
+                        id="question" 
+                        name="question"
+                        value={newItem.question}
+                        onChange={handleInputChange}
+                        placeholder="e.g., What are your office hours?"
                       />
-                    </label>
-                    <p className="text-xs text-muted-foreground">
-                      For text files: Each question and answer should be on separate lines.
-                    </p>
-                  </div>
-                </div>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label htmlFor="answer">
+                        {activeTab === 'faqs' ? 'Answer' : 
+                         activeTab === 'property' ? 'Property Information' : 
+                         activeTab === 'business' ? 'Business Information' : 
+                         'Response'}
+                      </Label>
+                      <Textarea 
+                        id="answer" 
+                        name="answer"
+                        value={newItem.answer}
+                        onChange={handleInputChange}
+                        placeholder="e.g., Our office is open Monday to Friday, 9 AM to 5 PM."
+                        rows={4}
+                      />
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label htmlFor="category">Category (Optional)</Label>
+                      <Input 
+                        id="category" 
+                        name="category"
+                        value={newItem.category || ''}
+                        onChange={handleInputChange}
+                        placeholder="e.g., Office Information"
+                      />
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label htmlFor="priority">Priority (0-10)</Label>
+                      <Input 
+                        id="priority" 
+                        name="priority"
+                        type="number"
+                        min={0}
+                        max={10}
+                        value={newItem.priority || 0}
+                        onChange={handleInputChange}
+                        placeholder="Priority level (higher numbers = higher priority)"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Higher priority items will be matched first when a similar question is asked.
+                      </p>
+                    </div>
+                    
+                    <div className="flex gap-2">
+                      {editingIndex === null ? (
+                        <Button 
+                          onClick={addItem} 
+                          className="flex gap-2 items-center"
+                        >
+                          <Plus size={16} />
+                          Add Item
+                        </Button>
+                      ) : (
+                        <>
+                          <Button 
+                            onClick={updateItem} 
+                            className="flex gap-2 items-center"
+                          >
+                            <Save size={16} />
+                            Save Changes
+                          </Button>
+                          <Button 
+                            variant="outline" 
+                            onClick={cancelEditing} 
+                            className="flex gap-2 items-center"
+                          >
+                            <X size={16} />
+                            Cancel
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </TabsContent>
+                  
+                  <TabsContent value="file-upload">
+                    <FileUpload userId={userId} onUploadComplete={handleFileUploadComplete} />
+                  </TabsContent>
+                </Tabs>
               </div>
               
               <div className="space-y-4">
