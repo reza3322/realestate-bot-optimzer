@@ -213,6 +213,7 @@ export type Database = {
           extracted_text: string
           id: string
           priority: number | null
+          processing_status: string | null
           source_file: string
           updated_at: string | null
           user_id: string
@@ -224,6 +225,7 @@ export type Database = {
           extracted_text: string
           id?: string
           priority?: number | null
+          processing_status?: string | null
           source_file: string
           updated_at?: string | null
           user_id: string
@@ -235,6 +237,7 @@ export type Database = {
           extracted_text?: string
           id?: string
           priority?: number | null
+          processing_status?: string | null
           source_file?: string
           updated_at?: string | null
           user_id?: string

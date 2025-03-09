@@ -1,3 +1,4 @@
+
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.36.0";
 import { corsHeaders } from "../_shared/cors.ts";
 
@@ -69,6 +70,7 @@ Deno.serve(async (req) => {
     
     let extractedText = "";
     let isScannedOrBinary = false;
+    let processingStatus = "complete"; // Default processing status
     
     // Determine file type from filename
     const fileType = fileName.toLowerCase().endsWith('.pdf') ? 'pdf' : 
@@ -101,6 +103,7 @@ Deno.serve(async (req) => {
           } else {
             console.log("⚠️ All extraction methods failed to get readable text");
             isScannedOrBinary = true;
+            processingStatus = "partial"; // Update processing status for scanned/binary PDFs
             extractedText = "⚠️ This document appears to be a scanned, encrypted, or image-based PDF. The system could not extract readable text content. For best results, please upload a text-based PDF or a text file.";
           }
         }
@@ -114,6 +117,7 @@ Deno.serve(async (req) => {
       } catch (pdfError) {
         console.error("❌ Error extracting PDF text:", pdfError);
         isScannedOrBinary = true;
+        processingStatus = "failed"; // Update processing status for extraction errors
         extractedText = "Error extracting text from PDF. The file may be corrupt, encrypted, or in an unsupported format.";
       }
     } else if (fileType === 'txt') {
@@ -124,6 +128,7 @@ Deno.serve(async (req) => {
         console.log(`📝 Extracted ${extractedText.length} characters of text from TXT file`);
       } catch (txtError) {
         console.error("❌ Error extracting text from TXT file:", txtError);
+        processingStatus = "failed"; // Update processing status for extraction errors
         extractedText = "Error extracting text from file. The file may be corrupt or in an unsupported format.";
       }
     } else {
@@ -150,7 +155,7 @@ Deno.serve(async (req) => {
 
     console.log(`🔍 Inserting into chatbot_training_files table...`);
 
-    // Store File Metadata in chatbot_training_files Table
+    // Store File Metadata in chatbot_training_files Table with processing_status
     const { data: insertData, error: insertError } = await supabase
       .from("chatbot_training_files")
       .insert({
@@ -160,7 +165,7 @@ Deno.serve(async (req) => {
         category: isScannedOrBinary ? "File Import (Scanned PDF)" : "File Import",
         priority: parseInt(String(priority), 10) || 5,
         content_type: fileType === 'pdf' ? 'application/pdf' : 'text/plain',
-        processing_status: isScannedOrBinary ? "partial" : "complete"
+        processing_status: processingStatus
       })
       .select();
 
@@ -184,7 +189,8 @@ Deno.serve(async (req) => {
         entriesCreated: 1,
         priority: priority,
         table: "chatbot_training_files",
-        isScannedOrBinary: isScannedOrBinary
+        isScannedOrBinary: isScannedOrBinary,
+        processingStatus: processingStatus
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
