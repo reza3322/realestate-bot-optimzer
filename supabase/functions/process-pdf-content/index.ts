@@ -2,6 +2,9 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.36.0";
 import { corsHeaders } from "../_shared/cors.ts";
 import { PdfReader } from "https://deno.land/x/pdfreader@v1.1.1/mod.ts";
 
+// ✅ Import OCR library for scanned PDFs
+import { recognize } from "https://deno.land/x/tesseract@v1.0.0/mod.ts";
+
 Deno.serve(async (req) => {
   console.log(`🔄 Request received: ${req.method}`);
 
@@ -68,6 +71,11 @@ Deno.serve(async (req) => {
       try {
         const arrayBuffer = await fileData.arrayBuffer();
         extractedText = await extractPdfText(arrayBuffer);
+        
+        if (!extractedText.trim()) {
+          console.log("⚠️ No text found in PDF. Attempting OCR...");
+          extractedText = await extractTextWithOCR(arrayBuffer);
+        }
       } catch (pdfError) {
         console.error("❌ Error extracting PDF text:", pdfError);
         return new Response(
@@ -96,7 +104,6 @@ Deno.serve(async (req) => {
 
     console.log(`📝 Extracted ${extractedText.length} characters of text`);
 
-    // ✅ Advanced Cleaning (Fully sanitize extracted text)
     extractedText = extractedText
       .replace(/\u0000/g, "") // Remove null characters
       .replace(/[\x00-\x1F\x7F]/g, "") // Remove all non-printable characters
@@ -112,7 +119,7 @@ Deno.serve(async (req) => {
         user_id: userId,
         content_type: contentType,
         question: `What information is in ${fileName}?`,
-        answer: extractedText.substring(0, 5000), // ✅ Prevents long text issues
+        answer: extractedText.substring(0, 5000), // Prevents long text issues
         category: "File Import",
         priority: parseInt(priority, 10) || 5
       })
@@ -147,39 +154,33 @@ Deno.serve(async (req) => {
   }
 });
 
-// ✅ Extract Text from PDF Function using `pdfreader`
+// ✅ Extract Text from PDF Function
 async function extractPdfText(pdfArrayBuffer: ArrayBuffer): Promise<string> {
   try {
     console.log("🔍 Extracting text from PDF...");
-
     const reader = new PdfReader();
     let extractedText = "";
 
     await new Promise((resolve, reject) => {
       reader.parseBuffer(new Uint8Array(pdfArrayBuffer), (err, item) => {
-        if (err) {
-          reject(err);
-        } else if (!item) {
-          resolve(null); // End of PDF
-        } else if (item.text) {
-          extractedText += item.text + " ";
-        }
+        if (err) reject(err);
+        else if (!item) resolve(null);
+        else if (item.text) extractedText += item.text + " ";
       });
     });
 
-    console.log("✅ PDF text extraction successful!");
-
-    // ✅ Final sanitization
-    return extractedText
-      .replace(/\u0000/g, "") // Remove null characters
-      .replace(/[\x00-\x1F\x7F]/g, "") // Remove all control characters
-      .replace(/[^\x20-\x7EäöüßÄÖÜéèàù]/g, "") // Keep common characters
-      .replace(/\s+/g, " ") // Normalize spaces
-      .normalize("NFC") // Ensure UTF-8 encoding
-      .trim();
-
+    return extractedText.trim();
   } catch (error) {
     console.error("❌ Error extracting PDF text:", error);
-    throw new Error(`Failed to extract text from PDF: ${error.message}`);
+    return "";
   }
+}
+
+// ✅ OCR Function for Scanned PDFs
+async function extractTextWithOCR(pdfArrayBuffer: ArrayBuffer): Promise<string> {
+  console.log("📸 Running OCR on PDF...");
+  const image = new Uint8Array(pdfArrayBuffer);
+  const text = await recognize(image, "eng"); // English OCR
+  console.log("✅ OCR Extraction Successful!");
+  return text.trim();
 }
