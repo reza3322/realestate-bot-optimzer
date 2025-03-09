@@ -63,7 +63,7 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
       setSelectedFile(null);
       if (onUploadComplete) onUploadComplete(true);
 
-    } catch (error) {
+    } catch (error: any) {
       console.error("Upload error:", error);
       toast.error(`Failed to upload file: ${error.message || "Unknown error"}`);
       setFileStatus("Upload failed. Please try again.");

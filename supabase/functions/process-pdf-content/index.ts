@@ -28,7 +28,7 @@ Deno.serve(async (req) => {
     const body = await req.json();
     console.log("📥 Received Body:", body);
 
-    const { filePath, userId, fileName, priority = 5, contentType = "application/octet-stream" } = body;
+    const { filePath, userId, fileName, priority = 5 } = body;
 
     if (!filePath || !userId || !fileName) {
       return new Response(
@@ -38,7 +38,6 @@ Deno.serve(async (req) => {
     }
 
     console.log(`📄 Processing file: ${filePath} for user: ${userId}`);
-    console.log(`📄 Content Type: ${contentType}`);
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") || "",
@@ -46,7 +45,7 @@ Deno.serve(async (req) => {
     );
 
     console.log(`📥 Attempting to download file: ${filePath}`);
-    const { data: fileResponse, error: downloadError } = await supabase
+    const { data: fileData, error: downloadError } = await supabase
       .storage
       .from("chatbot_training_files")
       .download(filePath);
@@ -59,7 +58,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    if (!fileResponse) {
+    if (!fileData) {
       console.error("❌ No file data received");
       return new Response(
         JSON.stringify({ success: false, error: "No file data received" }),
@@ -69,91 +68,126 @@ Deno.serve(async (req) => {
 
     console.log("✅ File downloaded successfully");
     
-    let fileData;
-    try {
-      // Handle different response types from storage API
-      if (fileResponse instanceof Uint8Array || fileResponse instanceof ArrayBuffer) {
-        fileData = fileResponse;
-      } else if (typeof fileResponse === 'object' && fileResponse !== null) {
-        // If it's a Response-like object or Blob
-        if ('arrayBuffer' in fileResponse && typeof fileResponse.arrayBuffer === 'function') {
-          fileData = await fileResponse.arrayBuffer();
-        } else if ('blob' in fileResponse && typeof fileResponse.blob === 'function') {
-          const blob = await fileResponse.blob();
-          fileData = await blob.arrayBuffer();
-        } else {
-          throw new Error(`Cannot process file data of type: ${typeof fileResponse}`);
-        }
-      } else {
-        throw new Error(`Unexpected file data format: ${typeof fileResponse}`);
-      }
-    } catch (error) {
-      console.error("❌ Error processing file data:", error);
-      return new Response(
-        JSON.stringify({ success: false, error: "Failed to process file data", details: error.message }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
     let extractedText = "";
-    let finalContentType = contentType || "application/octet-stream";
-
-    // Determine content type based on file extension if not provided
-    if (!finalContentType || finalContentType === "application/octet-stream") {
-      if (fileName.toLowerCase().endsWith(".pdf")) {
-        finalContentType = "application/pdf";
-      } else if (fileName.toLowerCase().endsWith(".txt")) {
-        finalContentType = "text/plain";
-      }
-    }
-
-    console.log("📄 Final Content Type:", finalContentType);
-
-    // Extract text based on content type
-    if (finalContentType === "application/pdf") {
-      console.log("📄 Processing PDF file");
+    
+    // Determine file type from filename
+    const fileType = fileName.toLowerCase().endsWith('.pdf') ? 'pdf' : 
+                    fileName.toLowerCase().endsWith('.txt') ? 'txt' : 
+                    'unknown';
+    
+    console.log(`📄 File type detected: ${fileType}`);
+    
+    if (fileType === 'pdf') {
+      // For PDFs, use a more robust text extraction approach
       try {
-        if (fileData instanceof ArrayBuffer || ArrayBuffer.isView(fileData)) {
-          // For PDFs, extract text with simple parsing
-          const decoder = new TextDecoder('utf-8');
-          const rawText = decoder.decode(fileData);
-          
-          // Basic PDF text extraction
-          extractedText = rawText
-            .replace(/%PDF-[\d.]+[\s\S]*?(?=\w{2,})/g, '') // Remove PDF header
-            .replace(/endobj|endstream|stream[\s\S]*?endstream/g, ' ') // Remove PDF objects and streams
-            .replace(/<<[\s\S]*?>>/g, ' ') // Remove PDF dictionaries
-            .replace(/\d+ 0 obj[\s\S]*?endobj/g, ' ') // Remove object definitions
-            .replace(/\/([A-Za-z0-9]+)(?=\W)/g, ' ') // Remove PDF operators
-            .replace(/\\([nrtfv\\()[\]])/g, ' ') // Handle escape sequences (fixed regex)
-            .replace(/[^\x20-\x7E\n]/g, ' ') // Keep only ASCII printable chars
-            .replace(/\s+/g, ' ') // Normalize whitespace
-            .trim();
-          
-          // Fallback message if extraction fails
-          if (!extractedText || extractedText.trim().length < 50) {
-            console.log("⚠️ Minimal text extracted from PDF. Using fallback message.");
-            extractedText = "This PDF could not be properly extracted. It may be an image-based PDF or have security restrictions. Please upload a text version or try a different format.";
-          }
+        // Convert ArrayBuffer to Uint8Array if needed
+        let fileBytes;
+        if (fileData instanceof ArrayBuffer) {
+          fileBytes = new Uint8Array(fileData);
+        } else if (ArrayBuffer.isView(fileData)) {
+          fileBytes = new Uint8Array(fileData.buffer);
+        } else if (typeof fileData.arrayBuffer === 'function') {
+          // Handle Response or Blob type
+          const buffer = await fileData.arrayBuffer();
+          fileBytes = new Uint8Array(buffer);
         } else {
-          console.error("⚠️ File data is not in a decodable format:", typeof fileData);
-          extractedText = "PDF content extraction failed. Invalid file format.";
+          throw new Error(`Unsupported file data type: ${typeof fileData}`);
+        }
+        
+        // Simple PDF text extraction using byte patterns
+        // This is a basic approach that looks for text objects in the PDF
+        const pdfText = new TextDecoder().decode(fileBytes);
+        
+        // Extract text content between BT (Begin Text) and ET (End Text) markers
+        const textMarkers = [];
+        let startIndex = 0;
+        
+        while ((startIndex = pdfText.indexOf('BT', startIndex)) !== -1) {
+          const endIndex = pdfText.indexOf('ET', startIndex);
+          if (endIndex === -1) break;
+          
+          textMarkers.push({
+            start: startIndex,
+            end: endIndex + 2, // +2 to include 'ET'
+            content: pdfText.substring(startIndex, endIndex + 2)
+          });
+          
+          startIndex = endIndex + 2;
+        }
+        
+        // Process text blocks to extract readable content
+        let cleanText = "";
+        for (const marker of textMarkers) {
+          // Extract text between parentheses which often contains the actual content
+          const matches = marker.content.match(/\((.*?)\)/g);
+          if (matches) {
+            for (const match of matches) {
+              // Remove the parentheses and handle basic PDF escape sequences
+              let text = match.substring(1, match.length - 1)
+                .replace(/\\r/g, '\r')
+                .replace(/\\n/g, '\n')
+                .replace(/\\t/g, '\t')
+                .replace(/\\\\/g, '\\')
+                .replace(/\\\(/g, '(')
+                .replace(/\\\)/g, ')');
+              
+              cleanText += text + ' ';
+            }
+          }
+        }
+        
+        // If the extraction above didn't yield much, try a fallback method
+        if (cleanText.trim().length < 100) {
+          console.log("⚠️ Primary extraction yielded little text, trying fallback method");
+          
+          // Look for text following Tj or TJ operators which display text in PDFs
+          const tjMatches = pdfText.match(/\([^\)]+\)\s*(Tj|TJ)/g);
+          if (tjMatches) {
+            cleanText = tjMatches.map(match => {
+              // Extract just the text part without the Tj/TJ operator
+              return match.match(/\(([^\)]+)\)/)?.[1] || '';
+            }).join(' ');
+          }
+        }
+        
+        // Final cleanup
+        extractedText = cleanText
+          .replace(/\s+/g, ' ')  // Replace multiple spaces with a single space
+          .trim();
+        
+        console.log(`📝 Extracted text length: ${extractedText.length} characters`);
+        console.log(`📝 Sample text: ${extractedText.substring(0, 150)}...`);
+        
+        // If we still couldn't extract meaningful text
+        if (!extractedText || extractedText.length < 50) {
+          console.log("⚠️ Could not extract meaningful text from PDF");
+          extractedText = "This document appears to be a scanned or image-based PDF. The system could not extract text content. For best results, please upload a text-based PDF or a text file.";
         }
       } catch (pdfError) {
-        console.error("PDF extraction error:", pdfError);
-        extractedText = "PDF content extraction failed. Please upload a text version of this document.";
+        console.error("❌ Error extracting PDF text:", pdfError);
+        extractedText = "Error extracting text from PDF. The file may be corrupt or in an unsupported format.";
       }
-    } else if (finalContentType === "text/plain") {
-      if (fileData instanceof ArrayBuffer || ArrayBuffer.isView(fileData)) {
-        const decoder = new TextDecoder('utf-8');
-        extractedText = decoder.decode(fileData);
-      } else {
-        console.error("⚠️ Text file data is not in a decodable format:", typeof fileData);
-        extractedText = "Text content extraction failed. Invalid file format.";
+    } else if (fileType === 'txt') {
+      // For text files, simply decode the content
+      try {
+        if (fileData instanceof ArrayBuffer || ArrayBuffer.isView(fileData)) {
+          const decoder = new TextDecoder('utf-8');
+          extractedText = decoder.decode(fileData);
+        } else if (typeof fileData.text === 'function') {
+          // Handle Response type
+          extractedText = await fileData.text();
+        } else {
+          throw new Error(`Unsupported text file data type: ${typeof fileData}`);
+        }
+        
+        console.log(`📝 Extracted ${extractedText.length} characters of text from TXT file`);
+      } catch (txtError) {
+        console.error("❌ Error extracting text from TXT file:", txtError);
+        extractedText = "Error extracting text from file. The file may be corrupt or in an unsupported format.";
       }
     } else {
       return new Response(
-        JSON.stringify({ success: false, error: `Unsupported file type: ${fileName}` }),
+        JSON.stringify({ success: false, error: "Unsupported file type. Only PDF and TXT files are supported." }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -165,8 +199,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log(`📝 Extracted ${extractedText.length} characters of text`);
-    console.log(`🔍 Sample of extracted text: ${extractedText.substring(0, 100)}...`);
     console.log(`🔍 Inserting into chatbot_training_files table...`);
 
     // Store File Metadata in chatbot_training_files Table
@@ -177,8 +209,8 @@ Deno.serve(async (req) => {
         source_file: fileName,
         extracted_text: extractedText,
         category: "File Import",
-        priority: parseInt(priority, 10) || 5,
-        content_type: finalContentType
+        priority: parseInt(String(priority), 10) || 5,
+        content_type: fileType === 'pdf' ? 'application/pdf' : 'text/plain'
       })
       .select();
 
