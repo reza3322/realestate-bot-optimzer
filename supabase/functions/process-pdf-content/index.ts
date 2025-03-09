@@ -104,6 +104,9 @@ Deno.serve(async (req) => {
       .normalize("NFC") // Normalize Unicode
       .trim();
 
+    // **Extra Encoding Fix**
+    extractedText = new TextDecoder("utf-8", { fatal: false }).decode(new TextEncoder().encode(extractedText));
+
     console.log("💾 Inserting extracted text into database...");
     const { data: insertData, error: insertError } = await supabase
       .from("chatbot_training_data")
