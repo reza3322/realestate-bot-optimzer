@@ -1,192 +1,16 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.36.0";
-import { corsHeaders } from "../_shared/cors.ts";
-import { getDocument } from "https://esm.sh/pdfjs-dist@3.7.107/build/pdf.mjs"; // ✅ Correct PDF parser
+import { getDocument } from "https://esm.sh/pdfjs-dist@3.7.107/build/pdf.mjs";
 
-Deno.serve(async (req) => {
-  console.log(`🔄 Request received: ${req.method}`);
+// Replace with your test PDF file path
+const pdfUrl = "https://your-pdf-url.com/sample.pdf";
 
-  if (req.method === "OPTIONS") {
-    return new Response(null, {
-      headers: {
-        ...corsHeaders,
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-        "Access-Control-Max-Age": "86400",
-      },
-      status: 204,
-    });
-  }
-
+async function testPdfExtraction() {
   try {
-    if (req.method !== "POST") {
-      return new Response(
-        JSON.stringify({ error: `Unsupported method: ${req.method}` }),
-        { status: 405, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    console.log("🚀 Processing request...");
-    const body = await req.json();
-    console.log("📥 Received Body:", body);
-
-    const { filePath, userId, fileName, priority = 5, contentType = "" } = body;
-
-    if (!filePath || !userId || !fileName) {
-      return new Response(
-        JSON.stringify({ success: false, error: "Missing required fields", received: body }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    console.log(`📄 Processing file: ${filePath} for user: ${userId}`);
-
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL") || "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || ""
-    );
-
-    console.log(`📥 Attempting to download file: ${filePath}`);
-    const { data: fileResponse, error: downloadError } = await supabase
-      .storage
-      .from("chatbot_training_files")
-      .download(filePath);
-
-    if (downloadError) {
-      console.error("❌ Download Error:", downloadError);
-      return new Response(
-        JSON.stringify({ success: false, error: "Failed to download file", details: downloadError }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    if (!fileResponse) {
-      console.error("❌ No file data received");
-      return new Response(
-        JSON.stringify({ success: false, error: "No file data received" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    console.log("✅ File downloaded successfully");
-
-    // Convert Response to ArrayBuffer if needed
-    let fileData: ArrayBuffer;
-
-    if (fileResponse instanceof Response) {
-      fileData = await fileResponse.arrayBuffer();
-    } else if (fileResponse instanceof Blob) {
-      fileData = await fileResponse.arrayBuffer();
-    } else if (fileResponse instanceof Uint8Array) {
-      fileData = fileResponse.buffer;
-    } else if (fileResponse instanceof ArrayBuffer) {
-      fileData = fileResponse;
-    } else {
-      console.error("❌ Unknown file data format:", typeof fileResponse);
-      return new Response(
-        JSON.stringify({ success: false, error: "Unsupported file data format" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    console.log("📂 Debug: fileData type:", typeof fileData);
-    console.log("📂 Debug: fileData instanceof ArrayBuffer:", fileData instanceof ArrayBuffer);
-
-    let extractedText = "";
-    let finalContentType = contentType || "application/octet-stream";
-
-    // Determine content type based on file extension if not explicitly provided
-    if (finalContentType === "application/octet-stream") {
-      if (fileName.toLowerCase().endsWith(".pdf")) {
-        finalContentType = "application/pdf";
-      } else if (fileName.toLowerCase().endsWith(".txt")) {
-        finalContentType = "text/plain";
-      }
-    }
-
-    console.log("📄 Final Content Type:", finalContentType);
-
-    // Extract text based on content type
-    if (finalContentType === "application/pdf") {
-      console.log("📄 Processing PDF file");
-      try {
-        extractedText = await extractPdfText(fileData);
-        
-        // Clean up the extracted text
-        if (extractedText) {
-          console.log("🧹 Cleaning up extracted text");
-          extractedText = cleanupPdfText(extractedText);
-        }
-      } catch (pdfError) {
-        console.error("❌ PDF extraction error:", pdfError);
-        extractedText = "PDF content extraction failed. This may be an image-based PDF or have security restrictions. Please upload a text version.";
-      }
-    } else if (finalContentType === "text/plain") {
-      extractedText = new TextDecoder("utf-8").decode(fileData);
-    } else {
-      return new Response(
-        JSON.stringify({ success: false, error: `Unsupported file type: ${fileName}` }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    console.log("📄 Detected Content Type:", finalContentType);
-
-    if (!extractedText || extractedText.trim().length === 0) {
-      return new Response(
-        JSON.stringify({ success: false, error: "No text was extracted from the file" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    console.log(`📝 Extracted ${extractedText.length} characters of text`);
-    console.log(`🔍 Sample of extracted text: ${extractedText.substring(0, 100)}...`);
-
-    // ✅ Store File Metadata in chatbot_training_files Table
-    const { data: insertData, error: insertError } = await supabase
-      .from("chatbot_training_files")
-      .insert({
-        user_id: userId,
-        source_file: fileName,
-        extracted_text: extractedText.substring(0, 5000), // Limit to first 5000 characters
-        category: "File Import",
-        priority: parseInt(priority, 10) || 5,
-        content_type: finalContentType
-      })
-      .select();
-
-    if (insertError) {
-      console.error("❌ DATABASE ERROR:", insertError);
-      return new Response(
-        JSON.stringify({ success: false, error: "Failed to store file data", details: insertError }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    console.log("✅ Successfully inserted data into chatbot_training_files table");
-
-    return new Response(
-      JSON.stringify({
-        success: true,
-        message: "File processed successfully",
-        entriesCreated: 1,
-        priority: priority,
-        table: "chatbot_training_files"
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  } catch (error) {
-    console.error("Unexpected error:", error);
-    return new Response(
-      JSON.stringify({ success: false, error: error.message }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-});
-
-// ✅ **Proper PDF Text Extraction Function**
-async function extractPdfText(pdfArrayBuffer: ArrayBuffer): Promise<string> {
-  try {
-    console.log("🔍 Extracting text from PDF using pdfjs-dist...");
-    const pdfDoc = await getDocument({ data: new Uint8Array(pdfArrayBuffer) }).promise;
+    console.log("🔍 Fetching PDF...");
+    const response = await fetch(pdfUrl);
+    const arrayBuffer = await response.arrayBuffer();
+    
+    console.log("📄 Extracting text using pdfjs-dist...");
+    const pdfDoc = await getDocument({ data: new Uint8Array(arrayBuffer) }).promise;
     let extractedText = "";
 
     for (let i = 1; i <= pdfDoc.numPages; i++) {
@@ -195,10 +19,11 @@ async function extractPdfText(pdfArrayBuffer: ArrayBuffer): Promise<string> {
       extractedText += textContent.items.map((item) => item.str).join(" ") + "\n\n";
     }
 
-    console.log(`✅ Extracted ${extractedText.length} characters from PDF.`);
-    return extractedText.trim();
+    console.log("✅ Extracted Text:");
+    console.log(extractedText);
   } catch (error) {
-    console.error("❌ Error extracting PDF text:", error);
-    return "PDF content extraction failed.";
+    console.error("❌ PDF Extraction Failed:", error);
   }
 }
+
+testPdfExtraction();
