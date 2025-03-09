@@ -95,13 +95,13 @@ Deno.serve(async (req) => {
 
     console.log(`📝 Extracted ${extractedText.length} characters of text`);
 
-    // **✅ FIXED Unicode Issue (`\u0000` error)**
+    // **✅ Stronger Unicode Cleaning to Fix `\u0000` Error**
     extractedText = extractedText
-      .replace(/\u0000/g, "")                     // Remove null bytes
-      .replace(/[\x00-\x1F\x7F]/g, "")           // Remove non-printable ASCII
-      .replace(/[^\x20-\x7EäöüßÄÖÜéèàù]/g, "")   // Keep readable characters
-      .replace(/\s+/g, " ")                      // Replace multiple spaces
-      .normalize("NFC")                          // Normalize Unicode
+      .replace(/\u0000/g, "") // Remove null bytes
+      .replace(/[\x00-\x1F\x7F-\x9F]/g, "") // Remove non-printable ASCII & control characters
+      .replace(/[^\x20-\x7EäöüßÄÖÜéèàùç]/g, "") // Keep readable characters
+      .replace(/\s+/g, " ") // Replace multiple spaces
+      .normalize("NFC") // Normalize Unicode
       .trim();
 
     console.log("💾 Inserting extracted text into database...");
@@ -141,25 +141,3 @@ Deno.serve(async (req) => {
     );
   }
 });
-
-// ✅ Extract Text from PDF Function
-async function extractPdfText(pdfArrayBuffer: ArrayBuffer): Promise<string> {
-  try {
-    console.log("🔍 Extracting text from PDF...");
-    const reader = new PdfReader();
-    let extractedText = "";
-
-    await new Promise((resolve, reject) => {
-      reader.parseBuffer(new Uint8Array(pdfArrayBuffer), (err, item) => {
-        if (err) reject(err);
-        else if (!item) resolve(null);
-        else if (item.text) extractedText += item.text + " ";
-      });
-    });
-
-    return extractedText.trim();
-  } catch (error) {
-    console.error("❌ Error extracting PDF text:", error);
-    return "";
-  }
-}
