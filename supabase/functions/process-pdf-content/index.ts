@@ -29,7 +29,7 @@ Deno.serve(async (req) => {
     const body = await req.json();
     console.log("📥 Received Body:", body);
 
-    const { filePath, userId, fileName, priority = 5 } = body;
+    const { filePath, userId, fileName, priority = 5, contentType = "application/octet-stream" } = body;
 
     if (!filePath || !userId || !fileName) {
       return new Response(
@@ -39,6 +39,7 @@ Deno.serve(async (req) => {
     }
 
     console.log(`📄 Processing file: ${filePath} for user: ${userId}`);
+    console.log(`📄 Content Type: ${contentType}`);
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") || "",
@@ -62,12 +63,22 @@ Deno.serve(async (req) => {
     console.log("✅ File downloaded successfully");
 
     let extractedText = "";
-    let contentType = "application/octet-stream"; // Default content type
+    let finalContentType = contentType || "application/octet-stream"; // Ensure content type is not null
 
-    // Determine content type based on file extension
-    if (fileName.toLowerCase().endsWith(".pdf")) {
+    // Determine content type based on file extension if not provided
+    if (!finalContentType || finalContentType === "application/octet-stream") {
+      if (fileName.toLowerCase().endsWith(".pdf")) {
+        finalContentType = "application/pdf";
+      } else if (fileName.toLowerCase().endsWith(".txt")) {
+        finalContentType = "text/plain";
+      }
+    }
+
+    console.log("📄 Final Content Type:", finalContentType);
+
+    // Extract text based on content type
+    if (finalContentType === "application/pdf") {
       console.log("📄 Processing PDF file");
-      contentType = "application/pdf";
       try {
         // Simple extraction for PDF (without pdfium_wasm)
         const decoder = new TextDecoder('utf-8');
@@ -84,8 +95,7 @@ Deno.serve(async (req) => {
         console.error("PDF extraction error:", pdfError);
         extractedText = "PDF content extraction failed. Please upload a text version of this document.";
       }
-    } else if (fileName.toLowerCase().endsWith(".txt")) {
-      contentType = "text/plain";
+    } else if (finalContentType === "text/plain") {
       const decoder = new TextDecoder('utf-8');
       extractedText = decoder.decode(fileData);
     } else {
@@ -95,7 +105,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log("📄 Detected Content Type:", contentType);
+    console.log("📄 Detected Content Type:", finalContentType);
 
     if (!extractedText || extractedText.trim().length === 0) {
       return new Response(
@@ -116,7 +126,7 @@ Deno.serve(async (req) => {
         extracted_text: extractedText.substring(0, 5000),
         category: "File Import",
         priority: parseInt(priority, 10) || 5,
-        content_type: contentType // Ensuring this value is set
+        content_type: finalContentType // Ensuring this value is set
       })
       .select();
 

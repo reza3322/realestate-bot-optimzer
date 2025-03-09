@@ -50,7 +50,11 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
         contentType = "application/pdf";
       } else if (selectedFile.name.toLowerCase().endsWith(".txt")) {
         contentType = "text/plain";
+      } else {
+        contentType = selectedFile.type || "application/octet-stream";
       }
+      
+      console.log("Content Type being sent:", contentType);
       
       // Step 2: Process the file content
       const { data, error: processError } = await supabase.functions.invoke("process-pdf-content", {
@@ -59,7 +63,7 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
           userId,
           fileName: selectedFile.name,
           priority,
-          contentType // Explicitly passing content type
+          contentType: contentType // Explicitly passing content type
         },
       });
 
