@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.36.0";
 import { corsHeaders } from "../_shared/cors.ts";
+import { createPDFReader } from "https://deno.land/x/pdfium_wasm@v0.0.3/mod.ts";
 
 Deno.serve(async (req) => {
   console.log(`🔄 Request received: ${req.method}`);
@@ -60,19 +61,13 @@ Deno.serve(async (req) => {
     console.log("✅ File downloaded successfully");
 
     let extractedText = "";
-    let contentType = "";
+    let contentType = "application/octet-stream"; // ✅ Default to prevent null values
 
     if (fileName.toLowerCase().endsWith(".pdf")) {
       console.log("📄 Processing PDF file");
       contentType = "application/pdf";
       try {
-<<<<<<< HEAD
         extractedText = await extractPdfText(fileData);
-=======
-        // Use a simple text extraction method for PDF files
-        extractedText = await extractSimpleText(fileData);
-
->>>>>>> 7ed44b24f12f1687a3051682557661db2a022a99
         if (!extractedText.trim()) {
           console.log("⚠️ No text found in PDF. Returning fallback.");
           extractedText = "This PDF could not be processed automatically. Please consider uploading a text file version.";
@@ -94,6 +89,8 @@ Deno.serve(async (req) => {
       );
     }
 
+    console.log("📄 Detected Content Type:", contentType);
+
     if (!extractedText || extractedText.trim().length === 0) {
       return new Response(
         JSON.stringify({ success: false, error: "No text was extracted from the file" }),
@@ -112,12 +109,8 @@ Deno.serve(async (req) => {
         source_file: fileName,
         extracted_text: extractedText.substring(0, 5000),
         category: "File Import",
-<<<<<<< HEAD
         priority: parseInt(priority, 10) || 5,
-        content_type: contentType // ✅ Fix: Adding missing content_type
-=======
-        priority: parseInt(String(priority), 10) || 5
->>>>>>> 7ed44b24f12f1687a3051682557661db2a022a99
+        content_type: contentType // ✅ Ensure content_type is always set
       })
       .select();
 
@@ -150,46 +143,3 @@ Deno.serve(async (req) => {
     );
   }
 });
-
-// Simple text extraction function as a fallback
-async function extractSimpleText(pdfArrayBuffer: ArrayBuffer): Promise<string> {
-  try {
-
-    console.log("🔍 Extracting text from PDF...");
-    const pdfReader = await createPDFReader();
-    const pdfDocument = await pdfReader.loadDocument(new Uint8Array(pdfArrayBuffer));
-
-    let extractedText = "";
-    const pageCount = pdfDocument.getPageCount();
-
-    for (let i = 0; i < pageCount; i++) {
-      const page = pdfDocument.getPage(i);
-      const text = page.getText();
-      extractedText += text + " ";
-      page.delete();
-=======
-    console.log("🔍 Extracting text from PDF using simple method...");
-    
-    // Convert ArrayBuffer to string - this is a very basic approach
-    // For PDF files, in a production environment, you would use a more robust solution
-    const decoder = new TextDecoder("utf-8");
-    let text = "";
-    
-    try {
-      // Try to decode text content
-      text = decoder.decode(pdfArrayBuffer);
-    } catch (error) {
-      console.log("Basic text extraction failed, using fallback");
-      text = "PDF content extraction failed. Please upload a text version of this document.";
->>>>>>> 7ed44b24f12f1687a3051682557661db2a022a99
-    }
-    
-    // Clean up the text - remove non-printable characters
-    text = text.replace(/[^\x20-\x7E\n\r\t]/g, " ");
-    
-    return text.trim();
-  } catch (error) {
-    console.error("❌ Error extracting PDF text:", error);
-    throw error;
-  }
-}
