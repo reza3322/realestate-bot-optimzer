@@ -7,8 +7,10 @@ import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
 import { AlertCircle, FileText } from "lucide-react";
 import FileUpload from "./FileUpload";
+import WebsiteCrawler from "./WebsiteCrawler";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface ChatbotTrainingProps {
   userId: string;
@@ -55,7 +57,13 @@ const ChatbotTraining = ({ userId, userPlan, isPremiumFeature }: ChatbotTraining
     }
   };
 
-  const handleFileUploadComplete = (success: boolean) => {
+  const handleUploadComplete = (success: boolean) => {
+    if (success) {
+      fetchTrainingFiles();
+    }
+  };
+
+  const handleCrawlComplete = (success: boolean) => {
     if (success) {
       fetchTrainingFiles();
     }
@@ -90,21 +98,32 @@ const ChatbotTraining = ({ userId, userPlan, isPremiumFeature }: ChatbotTraining
       <CardHeader>
         <CardTitle>Train Your Chatbot</CardTitle>
         <CardDescription>
-          Upload documents to train your chatbot with your specific content.
-          Simply upload PDF or text files, and the system will automatically extract and use this content.
+          Upload documents or crawl your website to train your chatbot with your specific content.
+          The system will automatically extract and use this content for better, more relevant responses.
         </CardDescription>
       </CardHeader>
       <CardContent>
         <div className="grid gap-6 md:grid-cols-2">
           <div className="space-y-4">
-            <FileUpload userId={userId} onUploadComplete={handleFileUploadComplete} />
+            <Tabs defaultValue="upload">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="upload">Upload Files</TabsTrigger>
+                <TabsTrigger value="crawl">Crawl Website</TabsTrigger>
+              </TabsList>
+              <TabsContent value="upload" className="pt-4">
+                <FileUpload userId={userId} onUploadComplete={handleUploadComplete} />
+              </TabsContent>
+              <TabsContent value="crawl" className="pt-4">
+                <WebsiteCrawler userId={userId} onCrawlComplete={handleCrawlComplete} />
+              </TabsContent>
+            </Tabs>
           </div>
           
           <div className="space-y-4">
             <div className="flex justify-between items-center">
-              <h3 className="text-lg font-medium">Uploaded Files</h3>
+              <h3 className="text-lg font-medium">Training Content</h3>
               <Input 
-                placeholder="Search files..." 
+                placeholder="Search content..." 
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-48"
@@ -120,13 +139,13 @@ const ChatbotTraining = ({ userId, userPlan, isPremiumFeature }: ChatbotTraining
                 <FileText size={40} className="mb-2 opacity-20" />
                 <p>
                   {searchQuery 
-                    ? 'No matching files found' 
-                    : 'No training files uploaded yet'}
+                    ? 'No matching content found' 
+                    : 'No training content added yet'}
                 </p>
                 <p className="text-sm mt-1">
                   {searchQuery 
                     ? 'Try a different search term'
-                    : 'Upload files to help your chatbot provide better responses'}
+                    : 'Upload files or crawl your website to help your chatbot provide better responses'}
                 </p>
               </div>
             ) : (
@@ -173,8 +192,8 @@ const ChatbotTraining = ({ userId, userPlan, isPremiumFeature }: ChatbotTraining
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <AlertCircle size={16} />
           <p>
-            Upload PDF and text files relevant to your business to improve your chatbot's responses.
-            For best results, use files with clear, well-structured information.
+            Upload files or crawl your website to improve your chatbot's responses.
+            For best results, provide high-quality, relevant content about your business and services.
           </p>
         </div>
       </CardFooter>
