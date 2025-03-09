@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -26,7 +25,7 @@ interface TrainingFile {
   created_at: string;
 }
 
-const ChatbotTraining = ({ userId, userPlan, isPremiumFeature }: ChatbotTrainingProps) => {
+const ChatbotTraining = ({ userId, userPlan = "starter", isPremiumFeature }: ChatbotTrainingProps) => {
   const [trainingFiles, setTrainingFiles] = useState<TrainingFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -114,7 +113,11 @@ const ChatbotTraining = ({ userId, userPlan, isPremiumFeature }: ChatbotTraining
                 <FileUpload userId={userId} onUploadComplete={handleUploadComplete} />
               </TabsContent>
               <TabsContent value="crawl" className="pt-4">
-                <WebsiteCrawler userId={userId} onCrawlComplete={handleCrawlComplete} />
+                <WebsiteCrawler 
+                  userId={userId} 
+                  userPlan={userPlan}
+                  onCrawlComplete={handleCrawlComplete} 
+                />
               </TabsContent>
             </Tabs>
           </div>
@@ -194,6 +197,7 @@ const ChatbotTraining = ({ userId, userPlan, isPremiumFeature }: ChatbotTraining
           <p>
             Upload files or crawl your website to improve your chatbot's responses.
             For best results, provide high-quality, relevant content about your business and services.
+            {userPlan !== "starter" && " With your premium plan, you can train with more content!"}
           </p>
         </div>
       </CardFooter>

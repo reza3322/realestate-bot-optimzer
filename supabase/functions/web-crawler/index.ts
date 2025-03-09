@@ -16,7 +16,7 @@ serve(async (req) => {
 
   try {
     // Get request body
-    const { userId, url } = await req.json()
+    const { userId, url, maxPages } = await req.json()
 
     if (!userId || !url) {
       return new Response(
@@ -25,12 +25,45 @@ serve(async (req) => {
       )
     }
 
-    console.log(`Starting web crawling for URL: ${url} by user: ${userId}`)
+    console.log(`Starting web crawling for URL: ${url} by user: ${userId}, maxPages: ${maxPages || 'default'}`)
 
     // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     const supabase = createClient(supabaseUrl, supabaseKey)
+    
+    // Fetch user plan to determine crawl limits
+    const { data: profileData, error: profileError } = await supabase
+      .from('profiles')
+      .select('plan')
+      .eq('id', userId)
+      .single()
+    
+    if (profileError) {
+      console.error('Error fetching user profile:', profileError)
+    }
+    
+    // Determine max pages based on user plan
+    let pagesToCrawl = 10; // Default limit for all users
+    const userPlan = profileData?.plan || 'starter';
+    
+    if (maxPages && !isNaN(Number(maxPages))) {
+      // If maxPages is specified in request, use it (but enforce plan limits)
+      if (userPlan === 'premium' || userPlan === 'enterprise') {
+        pagesToCrawl = Number(maxPages);
+        console.log(`Premium/Enterprise user - allowing custom crawl limit: ${pagesToCrawl} pages`);
+      } else {
+        // For non-premium users, cap at default
+        pagesToCrawl = Math.min(Number(maxPages), 10);
+        console.log(`Non-premium user - enforcing max limit of 10 pages (requested: ${maxPages})`);
+      }
+    } else if (userPlan === 'premium') {
+      pagesToCrawl = 50; // Premium users get 50 pages by default
+      console.log('Premium user - allowing 50 pages');
+    } else if (userPlan === 'enterprise') {
+      pagesToCrawl = 200; // Enterprise users get 200 pages by default
+      console.log('Enterprise user - allowing 200 pages');
+    }
     
     // Create a property import record to track the progress
     const { data: importRecord, error: importError } = await supabase
@@ -53,7 +86,7 @@ serve(async (req) => {
     }
     
     // Crawl the website and extract content
-    const pagesContent = await crawlWebsite(url)
+    const pagesContent = await crawlWebsite(url, pagesToCrawl)
     
     // Create a new training file entry with the extracted content
     let successCount = 0
@@ -130,6 +163,8 @@ serve(async (req) => {
         pages_total: Object.keys(pagesContent).length,
         pages_imported: successCount,
         pages_failed: errorList.length,
+        plan: userPlan,
+        max_pages: pagesToCrawl,
         errors: errorList.length > 0 ? errorList : undefined
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
