@@ -13,6 +13,7 @@ import { PlusCircle, Upload, FileSpreadsheet, Link, Lock, Trash2, Edit, X, Image
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import Papa from 'papaparse';
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface PropertyListingsProps {
   userPlan: string;
@@ -289,10 +290,12 @@ const PropertyListings = ({ userPlan, isPremiumFeature }: PropertyListingsProps)
     
     const file = files[0];
     
-    // Parse CSV file
+    // Parse CSV file with more flexible options
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
+      dynamicTyping: true, // Automatically convert numeric values
+      transformHeader: (header) => header.trim(), // Trim whitespace from headers
       complete: (results) => {
         setCsvParseResult(results.data);
         setIsCsvDialogOpen(true);
@@ -315,35 +318,14 @@ const PropertyListings = ({ userPlan, isPremiumFeature }: PropertyListingsProps)
         return;
       }
       
-      // Validate and transform CSV data
-      const propertiesToImport = csvParseResult.map(row => ({
-        title: row.title || row.Title || "",
-        description: row.description || row.Description || "",
-        price: parseFloat(row.price || row.Price || "0"),
-        status: row.status || row.Status || "active",
-        type: row.type || row.Type || "",
-        bedrooms: parseInt(row.bedrooms || row.Bedrooms || "0"),
-        bathrooms: parseFloat(row.bathrooms || row.Bathrooms || "0"),
-        address: row.address || row.Address || "",
-        city: row.city || row.City || "",
-        state: row.state || row.State || "",
-        zip: row.zip || row.Zip || "",
-        size: parseFloat(row.size || row.Size || "0"),
-        user_id: session.user.id
-      }));
-      
-      // Filter out invalid properties
-      const validProperties = propertiesToImport.filter(p => p.title && p.price);
-      
-      if (validProperties.length === 0) {
-        toast.error("No valid properties found in CSV. Title and price are required.");
-        return;
-      }
-      
-      // Insert properties
-      const { data, error } = await supabase
-        .from('properties')
-        .insert(validProperties);
+      // Send all parsed data to the backend to handle normalization there
+      const { data, error } = await supabase.functions.invoke('import-properties', {
+        body: {
+          userId: session.user.id,
+          properties: csvParseResult,
+          source: 'csv'
+        }
+      });
         
       if (error) throw error;
       
@@ -352,7 +334,15 @@ const PropertyListings = ({ userPlan, isPremiumFeature }: PropertyListingsProps)
       setCsvParseResult([]);
       fetchProperties();
       
-      toast.success(`Successfully imported ${validProperties.length} properties`);
+      // Show import summary
+      if (data.properties_imported > 0) {
+        toast.success(`Successfully imported ${data.properties_imported} properties`);
+      }
+      
+      if (data.properties_failed > 0) {
+        toast.warning(`${data.properties_failed} properties failed to import`);
+      }
+      
     } catch (error: any) {
       console.error("Error importing properties:", error);
       toast.error(error.message || "Failed to import properties");
@@ -360,6 +350,19 @@ const PropertyListings = ({ userPlan, isPremiumFeature }: PropertyListingsProps)
       setCsvUploadLoading(false);
     }
   };
+  
+  // Display CSV upload guide information
+  const CsvGuideInfo = () => (
+    <div className="text-sm text-muted-foreground mt-4 space-y-2">
+      <h4 className="font-medium text-foreground">CSV Format Guide</h4>
+      <p>Supports various CSV formats with these fields:</p>
+      <ul className="list-disc pl-5 space-y-1">
+        <li><strong>Required:</strong> Title (or name), Price</li>
+        <li><strong>Optional:</strong> Description, Status, Type, Bedrooms, Bathrooms, Address, City, State, Zip, Size</li>
+      </ul>
+      <p>The importer will automatically recognize common field names variants.</p>
+    </div>
+  );
   
   return (
     <div className="space-y-6">
@@ -597,19 +600,19 @@ const PropertyListings = ({ userPlan, isPremiumFeature }: PropertyListingsProps)
         </TabsContent>
       </Tabs>
 
-      {/* Add/Edit Property Dialog */}
+      {/* Add/Edit Property Dialog - Updated with ScrollArea and improved layout */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-[600px]">
+        <DialogContent className="sm:max-w-[650px] max-h-[90vh]">
           <DialogHeader>
             <DialogTitle>{editingProperty ? "Edit Property" : "Add New Property"}</DialogTitle>
             <DialogDescription>
               {editingProperty ? "Update your property details" : "Enter the details of your property"}
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleSubmit}>
-            <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2 col-span-2">
+          <ScrollArea className="max-h-[calc(90vh-180px)]">
+            <form id="property-form" onSubmit={handleSubmit}>
+              <div className="grid gap-4 py-4 px-1">
+                <div className="space-y-2">
                   <Label htmlFor="title">Property Title*</Label>
                   <Input 
                     id="title"
@@ -621,85 +624,91 @@ const PropertyListings = ({ userPlan, isPremiumFeature }: PropertyListingsProps)
                   />
                 </div>
                 
-                <div className="space-y-2">
-                  <Label htmlFor="price">Price* (€)</Label>
-                  <Input 
-                    id="price"
-                    name="price"
-                    value={formData.price || ''}
-                    onChange={handleInputChange}
-                    placeholder="e.g. 850000"
-                    type="number"
-                    required
-                  />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="price">Price* (€)</Label>
+                    <Input 
+                      id="price"
+                      name="price"
+                      value={formData.price || ''}
+                      onChange={handleInputChange}
+                      placeholder="e.g. 850000"
+                      type="number"
+                      required
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="status">Status</Label>
+                    <Select 
+                      value={formData.status} 
+                      onValueChange={(value) => handleSelectChange('status', value)}
+                    >
+                      <SelectTrigger id="status">
+                        <SelectValue placeholder="Select status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="active">Active</SelectItem>
+                        <SelectItem value="pending">Pending</SelectItem>
+                        <SelectItem value="sold">Sold</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="type">Property Type</Label>
+                    <Input 
+                      id="type"
+                      name="type"
+                      value={formData.type}
+                      onChange={handleInputChange}
+                      placeholder="e.g. Villa, Apartment, House" 
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="size">Size (m²)</Label>
+                    <Input 
+                      id="size"
+                      name="size"
+                      value={formData.size || ''}
+                      onChange={handleInputChange}
+                      placeholder="e.g. 200"
+                      type="number" 
+                    />
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="bedrooms">Bedrooms</Label>
+                    <Input 
+                      id="bedrooms"
+                      name="bedrooms"
+                      value={formData.bedrooms || ''}
+                      onChange={handleInputChange}
+                      placeholder="e.g. 4"
+                      type="number" 
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="bathrooms">Bathrooms</Label>
+                    <Input 
+                      id="bathrooms"
+                      name="bathrooms"
+                      value={formData.bathrooms || ''}
+                      onChange={handleInputChange}
+                      placeholder="e.g. 2.5"
+                      type="number" 
+                      step="0.5"
+                    />
+                  </div>
                 </div>
                 
                 <div className="space-y-2">
-                  <Label htmlFor="status">Status</Label>
-                  <Select 
-                    value={formData.status} 
-                    onValueChange={(value) => handleSelectChange('status', value)}
-                  >
-                    <SelectTrigger id="status">
-                      <SelectValue placeholder="Select status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="active">Active</SelectItem>
-                      <SelectItem value="pending">Pending</SelectItem>
-                      <SelectItem value="sold">Sold</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="type">Property Type</Label>
-                  <Input 
-                    id="type"
-                    name="type"
-                    value={formData.type}
-                    onChange={handleInputChange}
-                    placeholder="e.g. Villa, Apartment, House" 
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="bedrooms">Bedrooms</Label>
-                  <Input 
-                    id="bedrooms"
-                    name="bedrooms"
-                    value={formData.bedrooms || ''}
-                    onChange={handleInputChange}
-                    placeholder="e.g. 4"
-                    type="number" 
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="bathrooms">Bathrooms</Label>
-                  <Input 
-                    id="bathrooms"
-                    name="bathrooms"
-                    value={formData.bathrooms || ''}
-                    onChange={handleInputChange}
-                    placeholder="e.g. 2.5"
-                    type="number" 
-                    step="0.5"
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="size">Size (m²)</Label>
-                  <Input 
-                    id="size"
-                    name="size"
-                    value={formData.size || ''}
-                    onChange={handleInputChange}
-                    placeholder="e.g. 200"
-                    type="number" 
-                  />
-                </div>
-                
-                <div className="space-y-2 col-span-2">
                   <Label htmlFor="address">Address</Label>
                   <Input 
                     id="address"
@@ -710,40 +719,42 @@ const PropertyListings = ({ userPlan, isPremiumFeature }: PropertyListingsProps)
                   />
                 </div>
                 
-                <div className="space-y-2">
-                  <Label htmlFor="city">City</Label>
-                  <Input 
-                    id="city"
-                    name="city"
-                    value={formData.city}
-                    onChange={handleInputChange}
-                    placeholder="City" 
-                  />
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="city">City</Label>
+                    <Input 
+                      id="city"
+                      name="city"
+                      value={formData.city}
+                      onChange={handleInputChange}
+                      placeholder="City" 
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="state">State/Province</Label>
+                    <Input 
+                      id="state"
+                      name="state"
+                      value={formData.state}
+                      onChange={handleInputChange}
+                      placeholder="State or Province" 
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="zip">Postal Code</Label>
+                    <Input 
+                      id="zip"
+                      name="zip"
+                      value={formData.zip}
+                      onChange={handleInputChange}
+                      placeholder="Postal Code" 
+                    />
+                  </div>
                 </div>
                 
                 <div className="space-y-2">
-                  <Label htmlFor="state">State/Province</Label>
-                  <Input 
-                    id="state"
-                    name="state"
-                    value={formData.state}
-                    onChange={handleInputChange}
-                    placeholder="State or Province" 
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="zip">Postal Code</Label>
-                  <Input 
-                    id="zip"
-                    name="zip"
-                    value={formData.zip}
-                    onChange={handleInputChange}
-                    placeholder="Postal Code" 
-                  />
-                </div>
-                
-                <div className="space-y-2 col-span-2">
                   <Label htmlFor="description">Description</Label>
                   <Textarea 
                     id="description"
@@ -755,12 +766,12 @@ const PropertyListings = ({ userPlan, isPremiumFeature }: PropertyListingsProps)
                   />
                 </div>
               </div>
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
-              <Button type="submit">{editingProperty ? "Update Property" : "Add Property"}</Button>
-            </DialogFooter>
-          </form>
+            </form>
+          </ScrollArea>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
+            <Button type="submit" form="property-form">{editingProperty ? "Update Property" : "Add Property"}</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -784,18 +795,21 @@ const PropertyListings = ({ userPlan, isPremiumFeature }: PropertyListingsProps)
         </DialogContent>
       </Dialog>
 
-      {/* CSV Import Preview Dialog */}
+      {/* CSV Import Preview Dialog - Updated with more information */}
       <Dialog open={isCsvDialogOpen} onOpenChange={setIsCsvDialogOpen}>
-        <DialogContent className="sm:max-w-[700px]">
+        <DialogContent className="sm:max-w-[700px] max-h-[90vh]">
           <DialogHeader>
             <DialogTitle>Import Properties from CSV</DialogTitle>
             <DialogDescription>
               Review the properties to be imported from your CSV file
             </DialogDescription>
           </DialogHeader>
-          <div className="max-h-[400px] overflow-y-auto border rounded-md">
+          
+          <CsvGuideInfo />
+          
+          <ScrollArea className="max-h-[400px] border rounded-md">
             <table className="min-w-full">
-              <thead className="bg-muted/50">
+              <thead className="bg-muted/50 sticky top-0 z-10">
                 <tr>
                   <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground tracking-wider">Title</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground tracking-wider">Price</th>
@@ -804,17 +818,26 @@ const PropertyListings = ({ userPlan, isPremiumFeature }: PropertyListingsProps)
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {csvParseResult.map((row, index) => (
-                  <tr key={index} className="hover:bg-muted/50">
-                    <td className="px-4 py-2 text-sm">{row.title || row.Title || "No title"}</td>
-                    <td className="px-4 py-2 text-sm">{row.price || row.Price || "0"}</td>
-                    <td className="px-4 py-2 text-sm">{row.type || row.Type || "Not specified"}</td>
-                    <td className="px-4 py-2 text-sm">{(row.city || row.City) ? `${row.city || row.City}, ${row.state || row.State || ''}` : "No location"}</td>
-                  </tr>
-                ))}
+                {csvParseResult.map((row, index) => {
+                  // Handle various column names for more flexible display
+                  const title = row.title || row.Title || row.name || row.Name || row.property_name || row["Property Name"] || "No title";
+                  const price = row.price || row.Price || row.cost || row.Cost || row.value || row.Value || "0";
+                  const type = row.type || row.Type || row.property_type || row["Property Type"] || "Not specified";
+                  const city = row.city || row.City || row.town || row.Town || "";
+                  const state = row.state || row.State || row.province || row.Province || "";
+                  
+                  return (
+                    <tr key={index} className="hover:bg-muted/50">
+                      <td className="px-4 py-2 text-sm">{title}</td>
+                      <td className="px-4 py-2 text-sm">{typeof price === 'number' ? price.toLocaleString() : price}</td>
+                      <td className="px-4 py-2 text-sm">{type}</td>
+                      <td className="px-4 py-2 text-sm">{city ? `${city}${state ? `, ${state}` : ''}` : "No location"}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
-          </div>
+          </ScrollArea>
           <p className="text-sm text-muted-foreground mt-2">
             {csvParseResult.length} properties found in CSV file.
           </p>
