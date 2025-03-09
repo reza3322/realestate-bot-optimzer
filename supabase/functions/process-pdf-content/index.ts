@@ -95,7 +95,7 @@ Deno.serve(async (req) => {
 
     console.log(`📝 Extracted ${extractedText.length} characters of text`);
 
-    // **✅ FINAL STRONGEST TEXT CLEANING FUNCTION**
+    // ✅ **STRONGEST Unicode Sanitization**
     extractedText = cleanText(extractedText);
 
     console.log("💾 Inserting extracted text into database...");
@@ -137,11 +137,12 @@ Deno.serve(async (req) => {
   }
 });
 
-// ✅ **FINAL Unicode & Null Byte Cleaning Function**
+// ✅ **FINAL STRONGEST TEXT CLEANING FUNCTION**
 function cleanText(text: string): string {
   return text
     .replace(/\u0000/g, "") // Remove null bytes
     .replace(/[\x00-\x1F\x7F-\x9F]/g, "") // Remove non-printable ASCII & control characters
+    .replace(/[\u2028\u2029]/g, "") // Remove Unicode line separators
     .replace(/[^\x20-\x7EäöüßÄÖÜéèàùç]/g, "") // Keep readable characters
     .replace(/\s+/g, " ") // Replace multiple spaces with a single space
     .normalize("NFC") // Normalize Unicode encoding
