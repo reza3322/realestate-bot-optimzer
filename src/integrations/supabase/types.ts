@@ -205,6 +205,42 @@ export type Database = {
         }
         Relationships: []
       }
+      chatbot_training_files: {
+        Row: {
+          category: string | null
+          content_type: string
+          created_at: string | null
+          extracted_text: string
+          id: string
+          priority: number | null
+          source_file: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          category?: string | null
+          content_type: string
+          created_at?: string | null
+          extracted_text: string
+          id?: string
+          priority?: number | null
+          source_file: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          category?: string | null
+          content_type?: string
+          created_at?: string | null
+          extracted_text?: string
+          id?: string
+          priority?: number | null
+          source_file?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       integrations: {
         Row: {
           active: boolean | null

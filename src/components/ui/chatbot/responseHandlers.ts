@@ -89,8 +89,8 @@ async function findRelevantTrainingData(
       console.log('User appears to be asking about file contents');
       // Get the most recent and highest priority file import
       const { data: fileImports, error: fileImportError } = await supabase
-        .from('chatbot_training_data')
-        .select('question, answer, priority, category')
+        .from('chatbot_training_files')
+        .select('source_file, extracted_text, priority, category')
         .eq('user_id', userId)
         .eq('category', 'File Import')
         .order('priority', { ascending: false })
@@ -100,7 +100,7 @@ async function findRelevantTrainingData(
       if (!fileImportError && fileImports && fileImports.length > 0) {
         console.log('Found file import data, returning directly');
         return {
-          answer: fileImports[0].answer,
+          answer: fileImports[0].extracted_text,
           source: 'training'
         };
       }
@@ -119,8 +119,8 @@ async function findRelevantTrainingData(
       
       // First, check file imports for keyword matches in the content
       const { data: fileMatches, error: fileMatchError } = await supabase
-        .from('chatbot_training_data')
-        .select('question, answer, priority, category')
+        .from('chatbot_training_files')
+        .select('source_file, extracted_text, priority, category')
         .eq('user_id', userId)
         .eq('category', 'File Import')
         .order('priority', { ascending: false })
@@ -131,7 +131,7 @@ async function findRelevantTrainingData(
         
         // For each file content, check if it contains the keywords
         for (const item of fileMatches) {
-          const lowerCaseAnswer = item.answer.toLowerCase();
+          const lowerCaseAnswer = item.extracted_text.toLowerCase();
           const matchingKeywords = keywords.filter(keyword => 
             lowerCaseAnswer.includes(keyword)
           );
@@ -140,7 +140,7 @@ async function findRelevantTrainingData(
           if (matchingKeywords.length >= 2 || (keywords.length === 1 && matchingKeywords.length === 1)) {
             console.log(`Found keyword matches in file data: ${matchingKeywords.join(', ')}`);
             return {
-              answer: item.answer,
+              answer: item.extracted_text,
               source: 'training'
             };
           }
@@ -185,7 +185,7 @@ async function findRelevantTrainingData(
       };
     }
     
-    // If no exact matches, try word-by-word matching
+    // If no exact matches, try word-by-word matching in both tables
     if (keywords.length >= 2) {
       // Build a query that looks for content containing these keywords
       const wordLikeConditions = keywords.map(word => `answer.ilike.%${word}%`).join(',');
@@ -203,9 +203,9 @@ async function findRelevantTrainingData(
         return null;
       }
       
-      // If we found word-based matches, prioritize File Import matches
+      // If we found word-based matches in the Q&A table
       if (wordMatches && wordMatches.length > 0) {
-        console.log(`Found ${wordMatches.length} word-based matches`);
+        console.log(`Found ${wordMatches.length} word-based matches in Q&A data`);
         
         // Prioritize File Import matches if possible
         const fileImportMatch = wordMatches.find(m => m.category === 'File Import');
@@ -219,6 +219,25 @@ async function findRelevantTrainingData(
         
         return {
           answer: wordMatches[0].answer,
+          source: 'training'
+        };
+      }
+      
+      // Check the file content table as well
+      const fileWordLikeConditions = keywords.map(word => `extracted_text.ilike.%${word}%`).join(',');
+      
+      const { data: fileWordMatches, error: fileWordMatchError } = await supabase
+        .from('chatbot_training_files')
+        .select('source_file, extracted_text, priority, category')
+        .eq('user_id', userId)
+        .or(fileWordLikeConditions)
+        .order('priority', { ascending: false })
+        .limit(3);
+      
+      if (!fileWordMatchError && fileWordMatches && fileWordMatches.length > 0) {
+        console.log(`Found ${fileWordMatches.length} word-based matches in file content`);
+        return {
+          answer: fileWordMatches[0].extracted_text,
           source: 'training'
         };
       }
