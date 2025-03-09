@@ -123,7 +123,8 @@ export const testChatbotResponse = async (
   
   try {
     // Extract potential lead information from message
-    const leadInfo = extractLeadInfo(message);
+    const extractedLeadInfo = extractLeadInfo(message);
+    const leadInfo = { ...extractedLeadInfo };
     console.log("Extracted lead info:", leadInfo);
     
     // For authenticated users, search for relevant training data
@@ -172,7 +173,7 @@ export const testChatbotResponse = async (
       // Continue without training data if there's an error
     }
     
-    // If this is a demo user or landing page interaction, use the AI chatbot
+    // If this is a demo user for the landing page, use special company info
     if (userId === 'demo-user' || !isValidUUID(userId)) {
       // Add company information for the landing page demo chatbot
       const companyInfo = `
@@ -190,6 +191,13 @@ export const testChatbotResponse = async (
       - Analytics dashboard
       
       The platform helps real estate professionals save time, increase conversion rates, and provide better customer service through automation and AI assistance.
+      
+      Pricing:
+      - Starter: $29/month - Basic chatbot with lead capture
+      - Pro: $79/month - Advanced chatbot with property recommendations
+      - Enterprise: Custom pricing - Full integration with CRM and website
+      
+      The RealHomeAI chatbot can be embedded on any real estate website with a simple script. Once installed, visitors can interact with the chatbot to ask questions about properties, schedule viewings, or get information about the real estate company.
       `;
       
       try {

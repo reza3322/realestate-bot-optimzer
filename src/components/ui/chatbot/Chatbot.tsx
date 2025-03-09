@@ -1,10 +1,11 @@
+
 import { useState, useRef, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import ChatHeader from './ChatHeader';
 import ChatMessage from './ChatMessage';
 import ChatInput from './ChatInput';
 import TypingIndicator from './TypingIndicator';
-import { getChatStyles, applyFontStyle } from './chatStyles';
+import { getChatStyles } from './chatStyles';
 import { Message, ChatTheme, LanguageCode, ChatStylesType, VisitorInfo } from './types';
 import { testChatbotResponse } from './responseHandlers';
 
@@ -133,31 +134,34 @@ const Chatbot = ({
     setError(null);
     setResponseSource(null);
     
+    // Determine whether we're in landing page mode (demo-user) or user chatbot mode
+    const isLandingPageMode = userId === 'demo-user';
+    console.log(`Chatbot mode: ${isLandingPageMode ? 'Landing Page Demo' : 'User Chatbot'}`);
+    
     try {
-      const { response, error, source, conversationId: newConversationId, leadInfo } = 
-        await testChatbotResponse(
-          message, 
-          userId, 
-          visitorInfo, 
-          conversationId,
-          messages
-        );
+      const result = await testChatbotResponse(
+        message, 
+        userId, 
+        visitorInfo, 
+        conversationId,
+        messages
+      );
       
-      if (error) {
-        console.error('Chatbot error:', error);
-        setError(`Error: ${error}`);
+      if (result.error) {
+        console.error('Chatbot error:', result.error);
+        setError(`Error: ${result.error}`);
       } else {
-        setMessages(prev => [...prev, { role: 'bot', content: response }]);
-        setResponseSource(source || null);
+        setMessages(prev => [...prev, { role: 'bot', content: result.response }]);
+        setResponseSource(result.source || null);
         
-        if (newConversationId && !conversationId) {
-          setConversationId(newConversationId);
+        if (result.conversationId && !conversationId) {
+          setConversationId(result.conversationId);
         }
         
-        if (leadInfo) {
+        if (result.leadInfo) {
           setVisitorInfo(prev => ({
             ...prev,
-            ...leadInfo
+            ...result.leadInfo
           }));
         }
       }

@@ -1,3 +1,4 @@
+
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
 
@@ -27,7 +28,8 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { message, userId, sessionId, trainingData, context } = await req.json();
+    const requestData = await req.json();
+    const { message, userId, sessionId, trainingData, context } = requestData;
     
     if (!message) {
       return new Response(
@@ -40,6 +42,9 @@ Deno.serve(async (req) => {
     console.log(`Message: ${message}`);
     console.log(`Has training data: ${!!trainingData}`);
     console.log(`Has context: ${Array.isArray(context) && context.length > 0}`);
+    
+    // Determine if this is the landing page demo chatbot or a user's chatbot
+    const isLandingPageChatbot = userId === 'demo-user';
     
     // Create Supabase client for storing conversations
     let supabase = null;
@@ -54,7 +59,7 @@ Deno.serve(async (req) => {
     }
 
     // Generate response using OpenAI with context from training data
-    const response = await generateChatbotResponse(message, trainingData, context);
+    const response = await generateChatbotResponse(message, trainingData, context, isLandingPageChatbot);
     
     // Store the conversation in the database if sessionId is provided
     if (supabase && sessionId && userId && userId !== 'demo-user') {
@@ -85,7 +90,12 @@ Deno.serve(async (req) => {
 });
 
 // Function to generate a response using OpenAI
-async function generateChatbotResponse(message: string, trainingData?: string, context?: any[]) {
+async function generateChatbotResponse(
+  message: string, 
+  trainingData?: string, 
+  context?: any[],
+  isLandingPageChatbot: boolean = false
+) {
   if (!OPENAI_API_KEY) {
     console.error("OpenAI API key is not configured");
     return "I'm sorry, but I'm not properly configured to respond right now. Please contact support.";
@@ -94,12 +104,14 @@ async function generateChatbotResponse(message: string, trainingData?: string, c
   try {
     console.log("Generating response with OpenAI");
     
-    // Create system prompt with context
-    const systemPrompt = `You are a helpful AI assistant that provides accurate and useful information about real estate and RealHomeAI. 
-Base your responses on the following knowledge base when relevant, and if the information isn't in the knowledge base, 
-provide a general helpful response without making up information about the specific business or services.
+    // Different system prompts for landing page chatbot vs. user chatbots
+    let systemPrompt = "";
+    
+    if (isLandingPageChatbot) {
+      systemPrompt = `You are the official AI assistant for RealHomeAI, a company that provides AI chatbot solutions for real estate professionals.
+Base your responses primarily on the following company information and be detailed and helpful about our services, pricing, and capabilities.
 
-KNOWLEDGE BASE:
+COMPANY INFORMATION:
 ${trainingData || `
 RealHomeAI is an AI-powered chatbot platform for real estate professionals. It helps real estate agents and companies qualify leads, engage customers, and recommend properties. The platform uses advanced AI to understand and respond to customer inquiries about real estate, provide property recommendations, and help with scheduling viewings.
 
@@ -113,10 +125,28 @@ Key features:
 - Analytics dashboard
 
 The platform helps real estate professionals save time, increase conversion rates, and provide better customer service through automation and AI assistance.
+
+Pricing:
+- Starter: $29/month - Basic chatbot with lead capture
+- Pro: $79/month - Advanced chatbot with property recommendations
+- Enterprise: Custom pricing - Full integration with CRM and website
+
+The RealHomeAI chatbot can be embedded on any real estate website with a simple script. Once installed, visitors can interact with the chatbot to ask questions about properties, schedule viewings, or get information about the real estate company.
 `}
+
+Be conversational, enthusiastic, and knowledgeable about RealHomeAI. If asked about something not related to our company or services, politely bring the conversation back to how we can help with real estate chatbot solutions.`;
+    } else {
+      // For user chatbots
+      systemPrompt = `You are a helpful AI assistant that provides accurate and useful information about real estate and the specific real estate business you're representing. 
+Base your responses on the following knowledge base when relevant, and if the information isn't in the knowledge base, 
+provide a general helpful response without making up information about the specific business or services.
+
+KNOWLEDGE BASE:
+${trainingData || "No specific training data provided for this real estate business yet."}
 
 Be conversational, helpful, and concise in your responses. If you're not sure about something related to the specific business, 
 just say you don't have that information rather than making it up.`;
+    }
 
     // Create the chat history array
     const messages = [{ role: "system", content: systemPrompt }];
