@@ -1,22 +1,19 @@
-import * as pdfjsLib from "https://esm.sh/pdfjs-dist@3.7.107/legacy/build/pdf.mjs";
+import { PDFDocument } from "https://deno.land/x/pdf@v1.2.0/mod.ts";
 
-// Replace with your test PDF file URL
-const pdfUrl = "https://your-pdf-url.com/sample.pdf";
+// Replace with your test PDF file path
+const pdfPath = "./sample.pdf"; // Change this to a valid local PDF file
 
-async function testPdfExtraction() {
+async function extractPdfText(pdfFilePath: string) {
   try {
-    console.log("🔍 Fetching PDF...");
-    const response = await fetch(pdfUrl);
-    const arrayBuffer = await response.arrayBuffer();
+    console.log("🔍 Reading PDF file...");
+    const pdfBytes = await Deno.readFile(pdfFilePath);
+    const pdfDoc = await PDFDocument.load(pdfBytes);
 
-    console.log("📄 Extracting text using pdfjs-dist...");
-    const pdfDoc = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) }).promise;
     let extractedText = "";
 
-    for (let i = 1; i <= pdfDoc.numPages; i++) {
-      const page = await pdfDoc.getPage(i);
-      const textContent = await page.getTextContent();
-      extractedText += textContent.items.map((item) => item.str).join(" ") + "\n\n";
+    for (let i = 0; i < pdfDoc.getPageCount(); i++) {
+      const page = pdfDoc.getPage(i);
+      extractedText += page.getText() + "\n\n"; // Preserve formatting
     }
 
     console.log("✅ Extracted Text:");
@@ -26,4 +23,5 @@ async function testPdfExtraction() {
   }
 }
 
-testPdfExtraction();
+// Run the test
+await extractPdfText(pdfPath);
