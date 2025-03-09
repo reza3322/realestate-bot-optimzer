@@ -224,7 +224,7 @@ export const testChatbotResponse = async (
           return {
             response: data.response,
             source: data.source || 'ai',
-            leadInfo,
+            leadInfo: leadInfo,  // Fixed: Using explicit property assignment instead of shorthand
             conversationId: data.session_id || conversationId || `conv_${uuidv4()}`
           };
         } else {
@@ -302,10 +302,12 @@ export const testChatbotResponse = async (
     }
   } catch (error) {
     console.error("Error in testChatbotResponse:", error);
+    // Make sure leadInfo is defined here
+    const errorLeadInfo = {}; // Define an empty leadInfo object for error case
     return {
       response: "I'm sorry, I encountered an error processing your request. Please try again later.",
       error: error.message,
-      leadInfo: leadInfo,  // Fixed: Using explicit property assignment instead of shorthand
+      leadInfo: errorLeadInfo,  // Fixed: Using a defined variable instead of undeclared leadInfo
       conversationId: conversationId || `conv_${uuidv4()}`
     };
   }
