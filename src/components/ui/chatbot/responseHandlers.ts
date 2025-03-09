@@ -250,7 +250,7 @@ export const testChatbotResponse = async (
         return {
           response: demoResponses[randomIndex],
           source: 'ai',
-          leadInfo,
+          leadInfo: leadInfo,  // Fixed: Using explicit property assignment instead of shorthand
           conversationId: conversationId || `conv_${uuidv4()}`
         };
       }
@@ -290,7 +290,7 @@ export const testChatbotResponse = async (
         return {
           response: data.response,
           source: data.source || 'ai',
-          leadInfo,
+          leadInfo: leadInfo,  // Fixed: Using explicit property assignment instead of shorthand
           conversationId: data.session_id || conversationId || `conv_${uuidv4()}`
         };
       } else {
@@ -305,8 +305,9 @@ export const testChatbotResponse = async (
     return {
       response: "I'm sorry, I encountered an error processing your request. Please try again later.",
       error: error.message,
-      leadInfo,
+      leadInfo: leadInfo,  // Fixed: Using explicit property assignment instead of shorthand
       conversationId: conversationId || `conv_${uuidv4()}`
     };
   }
 };
+
