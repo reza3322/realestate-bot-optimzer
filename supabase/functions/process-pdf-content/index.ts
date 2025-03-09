@@ -130,6 +130,9 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Sanitize text to remove problematic characters before inserting to database
+    extractedText = sanitizeTextForPostgres(extractedText);
+
     console.log(`🔍 Inserting into chatbot_training_files table...`);
 
     // Store File Metadata in chatbot_training_files Table
@@ -296,4 +299,29 @@ function cleanupText(text: string): string {
     .replace(/â€"/g, "—")
     .replace(/Â/g, "")
     .trim();
+}
+
+// Function to sanitize text for PostgreSQL storage
+// This removes null bytes and other problematic characters
+function sanitizeTextForPostgres(text: string): string {
+  if (!text) return "";
+  
+  // Remove null bytes (these cause the most issues with PostgreSQL)
+  let sanitized = text.replace(/\u0000/g, "");
+  
+  // Replace other potentially problematic control characters
+  sanitized = sanitized.replace(/[\u0001-\u0008\u000B-\u000C\u000E-\u001F]/g, "");
+  
+  // Handle cases where there might be UTF-16 surrogate pairs incorrectly decoded
+  sanitized = sanitized.replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]|[\uD800-\uDFFF]/g, "");
+  
+  // Limit length to prevent issues with very large texts
+  // PostgreSQL text fields have a limit of 1GB, but let's be conservative
+  const MAX_LENGTH = 500000; // 500KB
+  if (sanitized.length > MAX_LENGTH) {
+    console.log(`⚠️ Truncating extracted text from ${sanitized.length} to ${MAX_LENGTH} characters`);
+    sanitized = sanitized.substring(0, MAX_LENGTH);
+  }
+  
+  return sanitized;
 }
