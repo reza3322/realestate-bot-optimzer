@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import ChatHeader from './ChatHeader';
@@ -118,7 +117,6 @@ const Chatbot = ({
     }
   }, [messages]);
 
-  // Generate a visitor ID if not already set
   useEffect(() => {
     if (!visitorInfo.visitorId) {
       setVisitorInfo(prev => ({
@@ -135,60 +133,39 @@ const Chatbot = ({
     setError(null);
     setResponseSource(null);
     
-    if (useRealAPI) {
-      try {
-        const { response, error, source, conversationId: newConversationId, leadInfo } = 
-          await testChatbotResponse(
-            message, 
-            userId, 
-            visitorInfo, 
-            conversationId,
-            messages
-          );
+    try {
+      const { response, error, source, conversationId: newConversationId, leadInfo } = 
+        await testChatbotResponse(
+          message, 
+          userId, 
+          visitorInfo, 
+          conversationId,
+          messages
+        );
+      
+      if (error) {
+        console.error('Chatbot error:', error);
+        setError(`Error: ${error}`);
+      } else {
+        setMessages(prev => [...prev, { role: 'bot', content: response }]);
+        setResponseSource(source || null);
         
-        if (error) {
-          console.error('Chatbot error:', error);
-          setError(`Error: ${error}`);
-        } else {
-          setMessages(prev => [...prev, { role: 'bot', content: response }]);
-          setResponseSource(source || null);
-          
-          if (newConversationId && !conversationId) {
-            setConversationId(newConversationId);
-          }
-          
-          if (leadInfo) {
-            setVisitorInfo(prev => ({
-              ...prev,
-              ...leadInfo
-            }));
-          }
+        if (newConversationId && !conversationId) {
+          setConversationId(newConversationId);
         }
-      } catch (err) {
-        console.error('Chatbot exception:', err);
-        setError(`Unexpected error: ${err instanceof Error ? err.message : 'Unknown error'}`);
-      } finally {
-        setIsTyping(false);
+        
+        if (leadInfo) {
+          setVisitorInfo(prev => ({
+            ...prev,
+            ...leadInfo
+          }));
+        }
       }
-    } else {
-      setTimeout(async () => {
-        const demoResponses = [
-          "I'd be happy to help you find a property. What's your budget range?",
-          "Great! And what neighborhoods are you interested in?",
-          "I've found 3 properties that match your criteria. Would you like to schedule a viewing?",
-          "Perfect! I've notified your agent and scheduled a viewing for Saturday at 2pm.",
-          "Our agents specialize in luxury properties in downtown and suburban areas.",
-          "Yes, we have several properties with pools available right now.",
-          "The average price in that neighborhood has increased by 12% over the last year.",
-          "I can help you get pre-approved for a mortgage through our partner lenders."
-        ];
-        
-        const randomIndex = Math.floor(Math.random() * demoResponses.length);
-        const demoResponse = demoResponses[randomIndex];
-        
-        setIsTyping(false);
-        setMessages(prev => [...prev, { role: 'bot', content: demoResponse }]);
-      }, 1500);
+    } catch (err) {
+      console.error('Chatbot exception:', err);
+      setError(`Unexpected error: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      setIsTyping(false);
     }
   };
 
