@@ -1,9 +1,6 @@
-
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.36.0";
 import { corsHeaders } from "../_shared/cors.ts";
-
-// Using TextEncoder and TextDecoder from the global scope instead of importing
-// They are available in the Deno runtime by default
+import { PDFDocument } from "https://deno.land/x/pdf@v1.2.0/mod.ts"; // ✅ Proper PDF text extraction
 
 Deno.serve(async (req) => {
   console.log(`🔄 Request received: ${req.method}`);
@@ -31,7 +28,7 @@ Deno.serve(async (req) => {
     const body = await req.json();
     console.log("📥 Received Body:", body);
 
-    const { filePath, userId, fileName, priority = 5, contentType = "application/octet-stream" } = body;
+    const { filePath, userId, fileName, priority = 5, contentType = "" } = body;
 
     if (!filePath || !userId || !fileName) {
       return new Response(
@@ -41,7 +38,6 @@ Deno.serve(async (req) => {
     }
 
     console.log(`📄 Processing file: ${filePath} for user: ${userId}`);
-    console.log(`📄 Content Type: ${contentType}`);
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") || "",
@@ -71,39 +67,15 @@ Deno.serve(async (req) => {
     }
 
     console.log("✅ File downloaded successfully");
-    console.log("📂 File response type:", typeof fileResponse);
 
-    let fileData;
-    try {
-      // Handle different response types from storage API
-      if (fileResponse instanceof Uint8Array || fileResponse instanceof ArrayBuffer) {
-        fileData = fileResponse;
-      } else if (typeof fileResponse === 'object' && fileResponse !== null) {
-        // If it's a Response-like object or Blob
-        if ('arrayBuffer' in fileResponse && typeof fileResponse.arrayBuffer === 'function') {
-          fileData = await fileResponse.arrayBuffer();
-        } else if ('blob' in fileResponse && typeof fileResponse.blob === 'function') {
-          const blob = await fileResponse.blob();
-          fileData = await blob.arrayBuffer();
-        } else {
-          throw new Error(`Cannot process file data of type: ${typeof fileResponse}`);
-        }
-      } else {
-        throw new Error(`Unexpected file data format: ${typeof fileResponse}`);
-      }
-    } catch (error) {
-      console.error("❌ Error processing file data:", error);
-      return new Response(
-        JSON.stringify({ success: false, error: "Failed to process file data", details: error.message }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    // Convert Response to ArrayBuffer
+    const fileData = await fileResponse.arrayBuffer();
 
     let extractedText = "";
-    let finalContentType = contentType || "application/octet-stream"; // Ensure content type is not null
+    let finalContentType = contentType || "application/octet-stream";
 
-    // Determine content type based on file extension if not provided
-    if (!finalContentType || finalContentType === "application/octet-stream") {
+    // Determine content type based on file extension if not explicitly provided
+    if (finalContentType === "application/octet-stream") {
       if (fileName.toLowerCase().endsWith(".pdf")) {
         finalContentType = "application/pdf";
       } else if (fileName.toLowerCase().endsWith(".txt")) {
@@ -117,46 +89,13 @@ Deno.serve(async (req) => {
     if (finalContentType === "application/pdf") {
       console.log("📄 Processing PDF file");
       try {
-        if (fileData instanceof ArrayBuffer || ArrayBuffer.isView(fileData)) {
-          // For PDFs, we'll extract only readable text and filter out binary data
-          const decoder = new TextDecoder('utf-8');
-          const rawText = decoder.decode(fileData);
-          
-          // More aggressive cleaning of PDF content
-          // 1. Extract only text portions that might be readable
-          // 2. Remove special PDF markers and binary data
-          extractedText = rawText
-            .replace(/%PDF-[\d.]+[\s\S]*?(?=\w{2,})/g, '') // Remove PDF header
-            .replace(/endobj|endstream|stream[\s\S]*?endstream/g, ' ') // Remove PDF objects and streams
-            .replace(/<<[\s\S]*?>>/g, ' ') // Remove PDF dictionaries
-            .replace(/\d+ 0 obj[\s\S]*?endobj/g, ' ') // Remove object definitions
-            .replace(/\/([\w]+)(?=\W)/g, ' ') // Remove PDF operators
-            .replace(/\\([nrtfv\\()\])/g, ' ') // Handle escape sequences
-            .replace(/[^\x20-\x7E\n]/g, ' ') // Keep only ASCII printable chars
-            .replace(/\s+/g, ' ') // Normalize whitespace
-            .trim();
-          
-          // Fallback message if extraction fails
-          if (!extractedText || extractedText.trim().length < 50) {
-            console.log("⚠️ Minimal text extracted from PDF. Using fallback message.");
-            extractedText = "This PDF could not be properly extracted. It may be an image-based PDF or have security restrictions. Please upload a text version or try a different format.";
-          }
-        } else {
-          console.error("⚠️ File data is not in a decodable format:", typeof fileData);
-          extractedText = "PDF content extraction failed. Invalid file format.";
-        }
+        extractedText = await extractPdfText(fileData);
       } catch (pdfError) {
-        console.error("PDF extraction error:", pdfError);
-        extractedText = "PDF content extraction failed. Please upload a text version of this document.";
+        console.error("❌ PDF extraction error:", pdfError);
+        extractedText = "PDF content extraction failed. This may be an image-based PDF or have security restrictions. Please upload a text version.";
       }
     } else if (finalContentType === "text/plain") {
-      if (fileData instanceof ArrayBuffer || ArrayBuffer.isView(fileData)) {
-        const decoder = new TextDecoder('utf-8');
-        extractedText = decoder.decode(fileData);
-      } else {
-        console.error("⚠️ Text file data is not in a decodable format:", typeof fileData);
-        extractedText = "Text content extraction failed. Invalid file format.";
-      }
+      extractedText = new TextDecoder("utf-8").decode(fileData);
     } else {
       return new Response(
         JSON.stringify({ success: false, error: `Unsupported file type: ${fileName}` }),
@@ -177,16 +116,16 @@ Deno.serve(async (req) => {
     console.log(`🔍 Sample of extracted text: ${extractedText.substring(0, 100)}...`);
     console.log(`🔍 Inserting into chatbot_training_files table...`);
 
-    // ✅ Store File Metadata in chatbot_training_files Table, ensuring content_type is provided
+    // ✅ Store File Metadata in chatbot_training_files Table
     const { data: insertData, error: insertError } = await supabase
       .from("chatbot_training_files")
       .insert({
         user_id: userId,
         source_file: fileName,
-        extracted_text: extractedText,
+        extracted_text: extractedText.substring(0, 5000), // Limit to first 5000 characters
         category: "File Import",
         priority: parseInt(priority, 10) || 5,
-        content_type: finalContentType // Ensuring this value is set
+        content_type: finalContentType
       })
       .select();
 
@@ -219,3 +158,25 @@ Deno.serve(async (req) => {
     );
   }
 });
+
+// ✅ **New PDF Text Extraction Function**
+async function extractPdfText(pdfArrayBuffer: ArrayBuffer): Promise<string> {
+  try {
+    console.log("🔍 Extracting text from PDF...");
+
+    // Load PDF and extract text
+    const pdfDoc = await PDFDocument.load(new Uint8Array(pdfArrayBuffer));
+    let extractedText = "";
+
+    for (let i = 0; i < pdfDoc.getPageCount(); i++) {
+      const page = pdfDoc.getPage(i);
+      extractedText += page.getText() + "\n\n"; // Preserve formatting
+    }
+
+    console.log(`✅ Extracted ${extractedText.length} characters from PDF.`);
+    return extractedText.trim();
+  } catch (error) {
+    console.error("❌ Error extracting PDF text:", error);
+    throw error;
+  }
+}
