@@ -1,7 +1,15 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.36.0";
 import { corsHeaders } from "../_shared/cors.ts";
-import { PDFDocument } from "https://deno.land/x/pdf@v1.2.0/mod.ts"; // ✅ Fully Deno-compatible
+// The previous PDF library doesn't exist, switching to pdfjs which is Deno-compatible
+import * as pdfjs from "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.4.120/build/pdf.min.js";
+
+// Initialize PDF.js worker
+const pdfjsWorker = "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.4.120/build/pdf.worker.min.js";
+if (typeof globalThis.window === 'undefined') {
+  // Set up for non-browser environment
+  pdfjs.GlobalWorkerOptions.workerSrc = pdfjsWorker;
+}
 
 Deno.serve(async (req) => {
   console.log(`🔄 Request received: ${req.method}`);
@@ -137,20 +145,46 @@ Deno.serve(async (req) => {
 async function extractPdfText(pdfArrayBuffer: ArrayBuffer): Promise<string> {
   try {
     console.log("🔍 Extracting text from PDF...");
-
-    // Load PDF and extract text
-    const pdfDoc = await PDFDocument.load(new Uint8Array(pdfArrayBuffer));
+    
+    // Load the PDF file
+    const loadingTask = pdfjs.getDocument({ data: new Uint8Array(pdfArrayBuffer) });
+    const pdf = await loadingTask.promise;
+    
+    console.log(`📄 PDF loaded successfully with ${pdf.numPages} pages`);
+    
     let extractedText = "";
-
-    for (let i = 0; i < pdfDoc.getPageCount(); i++) {
-      const page = pdfDoc.getPage(i);
-      extractedText += page.getText() + "\n\n"; // Preserve formatting
+    
+    // Process each page
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const textContent = await page.getTextContent();
+      
+      // Extract text from the page
+      const pageText = textContent.items
+        .map((item: any) => item.str)
+        .join(" ");
+        
+      extractedText += pageText + "\n\n"; // Add double newline between pages
     }
-
+    
+    // Clean up the text
+    extractedText = cleanupPdfText(extractedText);
+    
     console.log(`✅ Extracted ${extractedText.length} characters from PDF.`);
     return extractedText.trim();
   } catch (error) {
     console.error("❌ Error extracting PDF text:", error);
     throw error;
   }
+}
+
+// Function to clean up text extracted from PDFs
+function cleanupPdfText(text: string): string {
+  if (!text) return "";
+  
+  return text
+    .replace(/(\r\n|\n|\r)/gm, " ") // Replace line breaks with spaces
+    .replace(/\s+/g, " ") // Normalize whitespace
+    .replace(/[^\x20-\x7E\s]/g, "") // Remove non-ASCII characters
+    .trim();
 }
