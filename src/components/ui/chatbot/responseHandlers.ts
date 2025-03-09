@@ -111,203 +111,113 @@ export const extractLeadInfo = (message: string): Partial<VisitorInfo> => {
 };
 
 // Function to generate response using AI or demo data
+import { createClient } from '@supabase/supabase-js';
+import OpenAI from 'openai';
+import { v4 as uuidv4 } from 'uuid';
+
+const supabase = createClient('YOUR_SUPABASE_URL', 'YOUR_SUPABASE_ANON_KEY');
+const openai = new OpenAI({ apiKey: 'YOUR_OPENAI_KEY' });
+
 export const testChatbotResponse = async (
-  message: string, 
-  userId: string,
-  visitorInfo: VisitorInfo = {},
-  conversationId?: string,
-  previousMessages: Message[] = []
+  message, 
+  userId, 
+  visitorInfo = {}, 
+  conversationId = `conv_${uuidv4()}`,
+  previousMessages = []
 ) => {
   console.log(`Processing message: "${message}" for user ${userId}`);
-  
+
   try {
-    // Extract potential lead information from message
+    // Extract potential lead information from message (if applicable)
     const extractedLeadInfo = extractLeadInfo(message);
     const leadInfo = { ...extractedLeadInfo };
     console.log("Extracted lead info:", leadInfo);
-    
-    // For authenticated users, search for relevant training data
+
     let relevantTrainingData = "";
-    let source: 'ai' | 'training' | null = null;
-    
-    try {
-      if (userId && userId !== 'demo-user' && isValidUUID(userId)) {
-        console.log("Searching for relevant training data...");
-        const trainingData = await findRelevantTrainingData(userId, message);
-        
-        // Process QA matches
-        if (trainingData.qaMatches && trainingData.qaMatches.length > 0) {
-          // If we have an exact match, use the answer directly
-          const exactMatch = trainingData.qaMatches.find(
-            qa => qa.question.toLowerCase() === message.toLowerCase()
-          );
-          
-          if (exactMatch) {
-            source = 'training';
-            return {
-              response: exactMatch.answer,
-              source,
-              leadInfo: leadInfo,
-              conversationId: conversationId || `conv_${uuidv4()}`
-            };
-          }
-          
-          // Otherwise, include relevant QA pairs as context
-          relevantTrainingData += "### Frequently Asked Questions\n\n";
-          trainingData.qaMatches.forEach(qa => {
-            relevantTrainingData += `Q: ${qa.question}\nA: ${qa.answer}\n\n`;
-          });
-        }
-        
-        // Process file content
-        if (trainingData.fileContent && trainingData.fileContent.length > 0) {
-          relevantTrainingData += "### Additional Knowledge\n\n";
-          trainingData.fileContent.forEach(file => {
-            relevantTrainingData += `Source: ${file.source_file}\n${file.extracted_text}\n\n`;
-          });
-        }
+    let source = null;
+
+    // Check if this is an authenticated user (real estate agency)
+    if (userId && isValidUUID(userId)) {
+      console.log("Searching for relevant training data...");
+      const { data: trainingData, error } = await supabase
+        .from('chatbot_knowledge')
+        .select('*')
+        .textSearch('question', message);
+
+      if (error) {
+        console.error("Error fetching training data:", error);
       }
-    } catch (error) {
-      console.error("Error in findRelevantTrainingData:", error);
-      // Continue without training data if there's an error
+
+      // If a direct match is found, return it immediately
+      if (trainingData && trainingData.length > 0) {
+        source = 'training';
+        return {
+          response: trainingData[0].answer,
+          source,
+          leadInfo,
+          conversationId,
+        };
+      }
+
+      // If no direct match, include other related data as context for AI
+      if (trainingData.length > 0) {
+        relevantTrainingData += "### Agency Knowledge Base\n\n";
+        trainingData.forEach(qa => {
+          relevantTrainingData += `Q: ${qa.question}\nA: ${qa.answer}\n\n`;
+        });
+      }
     }
-    
-    // If this is a demo user for the landing page, use special company info
-    if (userId === 'demo-user' || !isValidUUID(userId)) {
-      // Add company information for the landing page demo chatbot
-      const companyInfo = `
+
+    // If this is a landing page chatbot (demo mode)
+    const isDemoChat = !userId || !isValidUUID(userId);
+    if (isDemoChat) {
+      relevantTrainingData = `
       ### Company Information
-      
-      RealHomeAI is an AI-powered chatbot platform for real estate professionals. It helps real estate agents and companies qualify leads, engage customers, and recommend properties. The platform uses advanced AI to understand and respond to customer inquiries about real estate, provide property recommendations, and help with scheduling viewings.
-      
-      Key features:
-      - Lead qualification and capture
-      - Property recommendation
-      - 24/7 customer engagement
-      - Integration with real estate websites
-      - Customizable to match branding
-      - Training on company-specific information
-      - Analytics dashboard
-      
-      The platform helps real estate professionals save time, increase conversion rates, and provide better customer service through automation and AI assistance.
-      
+      RealHomeAI is an AI-powered chatbot platform for real estate professionals...
+      Features:
+      - Lead qualification
+      - Property recommendations
+      - 24/7 engagement
+      - CRM Integration
       Pricing:
-      - Starter: $29/month - Basic chatbot with lead capture
-      - Pro: $79/month - Advanced chatbot with property recommendations
-      - Enterprise: Custom pricing - Full integration with CRM and website
+      - Starter: $29/month
+      - Pro: $79/month
+      `;
+    }
+
+    // Call OpenAI with agency data (if available)
+    try {
+      const openaiPrompt = `
+      You are a real estate chatbot. Answer the user based on the following knowledge base:
+      ${relevantTrainingData}
       
-      The RealHomeAI chatbot can be embedded on any real estate website with a simple script. Once installed, visitors can interact with the chatbot to ask questions about properties, schedule viewings, or get information about the real estate company.
+      User: ${message}
+      Chatbot:
       `;
       
-      try {
-        // Call the Supabase Edge Function for demo mode
-        const { data, error } = await supabase.functions.invoke('ai-chatbot', {
-          body: {
-            message,
-            userId: 'demo-user',
-            sessionId: conversationId || `conv_${uuidv4()}`,
-            trainingData: companyInfo,
-            context: previousMessages.map(msg => ({
-              role: msg.role === 'user' ? 'user' : 'assistant',
-              content: msg.content
-            }))
-          }
-        });
-        
-        if (error) {
-          console.error("Error calling AI chatbot function:", error);
-          throw error;
-        }
-        
-        if (data && data.success) {
-          return {
-            response: data.response,
-            source: data.source || 'ai',
-            leadInfo: leadInfo,  // Fixed: Using explicit property assignment instead of shorthand
-            conversationId: data.session_id || conversationId || `conv_${uuidv4()}`
-          };
-        } else {
-          throw new Error(data?.error || "Unknown error occurred");
-        }
-      } catch (error) {
-        console.error("Error in demo mode:", error);
-        // Fallback to static responses if the API call fails
-        const demoResponses = [
-          "I'd be happy to help you find a property. What's your budget range?",
-          "Great! And what neighborhoods are you interested in?",
-          "I've found 3 properties that match your criteria. Would you like to schedule a viewing?",
-          "Perfect! I've notified your agent and scheduled a viewing for Saturday at 2pm.",
-          "Our agents specialize in luxury properties in downtown and suburban areas.",
-          "Yes, we have several properties with pools available right now.",
-          "The average price in that neighborhood has increased by 12% over the last year.",
-          "I can help you get pre-approved for a mortgage through our partner lenders.",
-          "Hi there! How can I assist with your real estate needs today?",
-          "I can definitely help you find information about rental properties in that area."
-        ];
-        
-        const randomIndex = Math.floor(Math.random() * demoResponses.length);
-        return {
-          response: demoResponses[randomIndex],
-          source: 'ai',
-          leadInfo: leadInfo,  // Fixed: Using explicit property assignment instead of shorthand
-          conversationId: conversationId || `conv_${uuidv4()}`
-        };
-      }
-    }
-    
-    // For authenticated users, call the AI chatbot function
-    try {
-      // Prepare the conversation context
-      const context = previousMessages.map(msg => ({
-        role: msg.role === 'user' ? 'user' : 'assistant',
-        content: msg.content
-      }));
-      
-      // Add the current message
-      context.push({
-        role: 'user',
-        content: message
+      const response = await openai.completions.create({
+        model: "gpt-4",
+        prompt: openaiPrompt,
+        max_tokens: 300,
       });
-      
-      // Call the Supabase Edge Function
-      const { data, error } = await supabase.functions.invoke('ai-chatbot', {
-        body: {
-          message,
-          userId,
-          sessionId: conversationId,
-          trainingData: relevantTrainingData,
-          context
-        }
-      });
-      
-      if (error) {
-        console.error("Error calling AI chatbot function:", error);
-        throw new Error(`Failed to generate response: ${error.message}`);
-      }
-      
-      if (data && data.success) {
-        return {
-          response: data.response,
-          source: data.source || 'ai',
-          leadInfo: leadInfo,  // Fixed: Using explicit property assignment instead of shorthand
-          conversationId: data.session_id || conversationId || `conv_${uuidv4()}`
-        };
-      } else {
-        throw new Error(data?.error || "Unknown error occurred");
-      }
+
+      return {
+        response: response.choices[0].text,
+        source: 'ai',
+        leadInfo,
+        conversationId,
+      };
     } catch (error) {
-      console.error("Error in testChatbotResponse:", error);
-      throw error;
+      console.error("OpenAI error:", error);
+      throw new Error("AI response generation failed");
     }
   } catch (error) {
     console.error("Error in testChatbotResponse:", error);
-    // Make sure leadInfo is defined here
-    const errorLeadInfo = {}; // Define an empty leadInfo object for error case
     return {
-      response: "I'm sorry, I encountered an error processing your request. Please try again later.",
-      error: error.message,
-      leadInfo: errorLeadInfo,  // Fixed: Using a defined variable instead of undeclared leadInfo
-      conversationId: conversationId || `conv_${uuidv4()}`
+      response: "I'm sorry, I encountered an error processing your request.",
+      source: 'error',
+      leadInfo: {},
+      conversationId,
     };
   }
 };
