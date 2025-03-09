@@ -75,10 +75,11 @@ serve(async (req) => {
           .insert({
             user_id: userId,
             source_file: `Webpage: ${pageUrl}`,
-            source_type: 'web_crawler',
+            // Remove the source_type field which doesn't exist
             extracted_text: sanitizedContent,
             priority: 5, // Default priority
-            category: 'Website Content'
+            category: 'Website Content',
+            content_type: 'text/html' // Add content_type field which does exist
           })
         
         if (insertError) {
