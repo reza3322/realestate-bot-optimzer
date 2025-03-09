@@ -1,4 +1,3 @@
-
 import { supabase } from '@/lib/supabase';
 import { Message, VisitorInfo } from './types';
 import { v4 as uuidv4 } from 'uuid';
@@ -148,7 +147,7 @@ export const testChatbotResponse = async (
             return {
               response: exactMatch.answer,
               source,
-              leadInfo,
+              leadInfo: leadInfo,
               conversationId: conversationId || `conv_${uuidv4()}`
             };
           }
@@ -312,4 +311,3 @@ export const testChatbotResponse = async (
     };
   }
 };
-

@@ -134,7 +134,11 @@ Pricing:
 The RealHomeAI chatbot can be embedded on any real estate website with a simple script. Once installed, visitors can interact with the chatbot to ask questions about properties, schedule viewings, or get information about the real estate company.
 `}
 
-Be conversational, enthusiastic, and knowledgeable about RealHomeAI. If asked about something not related to our company or services, politely bring the conversation back to how we can help with real estate chatbot solutions.`;
+You should respond in the same language the user is using. Be conversational, enthusiastic, and knowledgeable about RealHomeAI and real estate topics in general. You can answer general real estate questions even if the specific information isn't in your knowledge base.
+
+If asked about properties or listings, you should explain that you can help real estate professionals set up chatbots that can recommend properties from their inventory.
+
+If the user asks a question in any language other than English, respond in that same language.`;
     } else {
       // For user chatbots
       systemPrompt = `You are a helpful AI assistant that provides accurate and useful information about real estate and the specific real estate business you're representing. 
@@ -145,7 +149,9 @@ KNOWLEDGE BASE:
 ${trainingData || "No specific training data provided for this real estate business yet."}
 
 Be conversational, helpful, and concise in your responses. If you're not sure about something related to the specific business, 
-just say you don't have that information rather than making it up.`;
+just say you don't have that information rather than making it up.
+
+Always respond in the same language the user is using. You are fluent in all languages.`;
     }
 
     // Create the chat history array
