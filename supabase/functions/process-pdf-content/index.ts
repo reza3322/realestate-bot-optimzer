@@ -81,30 +81,38 @@ Deno.serve(async (req) => {
       try {
         // Get file as ArrayBuffer
         const buffer = await fileData.arrayBuffer();
-        const bytes = new Uint8Array(buffer);
         
-        // Convert PDF to text using a more robust approach
-        extractedText = await extractTextFromPdf(bytes);
+        // First attempt: try to extract text from PDF using a more robust approach
+        let textContent = await extractPdfTextImproved(buffer);
         
-        if (!extractedText || extractedText.trim().length < 100) {
-          console.log("⚠️ Primary extraction yielded little text, trying alternative method");
-          // Try alternative extraction if the first method didn't yield much
-          extractedText = await extractTextAlternativeMethod(bytes);
+        // Check if extraction was successful and meaningful
+        if (textContent && textContent.length > 100 && !isProbablyBinary(textContent)) {
+          extractedText = textContent;
+          console.log("✅ Successfully extracted text with primary method");
+        } else {
+          console.log("⚠️ Primary extraction yielded little text or binary content, trying alternative method");
+          
+          // Second attempt with alternative method
+          textContent = await extractTextAlternativeMethod(buffer);
+          
+          if (textContent && textContent.length > 100 && !isProbablyBinary(textContent)) {
+            extractedText = textContent;
+            console.log("✅ Successfully extracted text with alternative method");
+          } else {
+            console.log("⚠️ All extraction methods failed to get readable text");
+            extractedText = "This document appears to be a scanned, encrypted, or image-based PDF. The system could not extract text content. For best results, please upload a text-based PDF or a text file.";
+          }
         }
         
         console.log(`📝 Extracted text length: ${extractedText?.length || 0} characters`);
         if (extractedText && extractedText.length > 0) {
-          console.log(`📝 Sample text: ${extractedText.substring(0, 150)}...`);
-        }
-        
-        // If we still couldn't extract meaningful text
-        if (!extractedText || extractedText.length < 50) {
-          console.log("⚠️ Could not extract meaningful text from PDF");
-          extractedText = "This document appears to be a scanned or image-based PDF. The system could not extract text content. For best results, please upload a text-based PDF or a text file.";
+          const sampleText = extractedText.substring(0, 150);
+          console.log(`📝 Sample text: ${sampleText}`);
+          console.log(`📝 Contains binary characters: ${isProbablyBinary(sampleText)}`);
         }
       } catch (pdfError) {
         console.error("❌ Error extracting PDF text:", pdfError);
-        extractedText = "Error extracting text from PDF. The file may be corrupt or in an unsupported format.";
+        extractedText = "Error extracting text from PDF. The file may be corrupt, encrypted, or in an unsupported format.";
       }
     } else if (fileType === 'txt') {
       // For text files, simply decode the content
@@ -178,107 +186,125 @@ Deno.serve(async (req) => {
   }
 });
 
-// Improved PDF text extraction function
-async function extractTextFromPdf(pdfBytes: Uint8Array): Promise<string> {
-  const decoder = new TextDecoder('utf-8');
-  const pdfText = decoder.decode(pdfBytes);
+// Function to check if text is likely binary content rather than readable text
+function isProbablyBinary(text: string): boolean {
+  // Count non-printable characters
+  let nonPrintableCount = 0;
+  const sampleSize = Math.min(text.length, 500); // Check first 500 chars
   
-  // Look for text objects in the PDF
-  const textObjects = [];
-  
-  // Pattern matching for PDF text extraction
-  // Find text blocks between BT and ET (Begin Text and End Text)
-  let index = 0;
-  while (true) {
-    const btIndex = pdfText.indexOf('BT', index);
-    if (btIndex === -1) break;
-    
-    const etIndex = pdfText.indexOf('ET', btIndex);
-    if (etIndex === -1) break;
-    
-    textObjects.push(pdfText.substring(btIndex, etIndex + 2));
-    index = etIndex + 2;
+  for (let i = 0; i < sampleSize; i++) {
+    const code = text.charCodeAt(i);
+    // Count characters outside normal readable range
+    // and special Unicode characters that often appear in binary data conversion
+    if (
+      (code < 32 && code !== 9 && code !== 10 && code !== 13) || // Not tab, LF, CR
+      (code >= 0xD800 && code <= 0xDFFF) || // Surrogate pairs
+      code === 0xFFFD // Replacement character
+    ) {
+      nonPrintableCount++;
+    }
   }
   
-  // Extract text from text objects
-  let extractedText = '';
-  for (const textObj of textObjects) {
-    // Extract text from within parentheses or angle brackets (PDF encoding formats)
-    const textMatches = textObj.match(/\((.*?)\)|<([0-9A-Fa-f]+)>/g);
-    if (textMatches) {
-      for (const match of textMatches) {
-        if (match.startsWith('(')) {
-          // Handle parenthesized text
-          const text = match.substring(1, match.length - 1)
-            .replace(/\\r/g, '\r')
-            .replace(/\\n/g, '\n')
-            .replace(/\\t/g, '\t')
-            .replace(/\\\\/g, '\\')
-            .replace(/\\\(/g, '(')
-            .replace(/\\\)/g, ')');
-          extractedText += text + ' ';
-        } else if (match.startsWith('<')) {
-          // Handle hex-encoded text
-          try {
-            const hexString = match.substring(1, match.length - 1);
-            // Convert every two hex characters to a byte, then decode as UTF-16BE (PDF standard)
-            const bytes = new Uint8Array(hexString.length / 2);
-            for (let i = 0; i < hexString.length; i += 2) {
-              bytes[i / 2] = parseInt(hexString.substr(i, 2), 16);
+  // If more than 5% of characters are non-printable, consider it binary
+  const ratio = nonPrintableCount / sampleSize;
+  console.log(`Binary detection: ${nonPrintableCount} non-printable chars out of ${sampleSize}, ratio: ${ratio}`);
+  return ratio > 0.05;
+}
+
+// Improved PDF text extraction function
+async function extractPdfTextImproved(pdfBytes: ArrayBuffer): Promise<string> {
+  // First try with UTF-8 decoding to see if it's plain text
+  try {
+    const decoder = new TextDecoder('utf-8');
+    const pdfText = decoder.decode(pdfBytes);
+    
+    // Use more robust regex patterns to extract text content
+    let extractedText = "";
+    
+    // Extract text between common PDF text markers
+    const textObjectRegex = /BT\s*([^]*?)\s*ET/g;
+    const textMatches = [...pdfText.matchAll(textObjectRegex)];
+    
+    for (const match of textMatches) {
+      if (match[1]) {
+        // Look for text within parentheses or hex strings
+        const contentRegex = /\(([^)]*)\)|<([0-9A-Fa-f]+)>/g;
+        let contentMatch;
+        
+        while ((contentMatch = contentRegex.exec(match[1])) !== null) {
+          if (contentMatch[1]) { // Text in parentheses
+            extractedText += contentMatch[1] + " ";
+          } else if (contentMatch[2]) { // Hex-encoded text
+            try {
+              // Convert hex to text
+              let hexText = "";
+              for (let i = 0; i < contentMatch[2].length; i += 2) {
+                const hex = contentMatch[2].substr(i, 2);
+                hexText += String.fromCharCode(parseInt(hex, 16));
+              }
+              extractedText += hexText + " ";
+            } catch (e) {
+              // Ignore conversion errors
             }
-            extractedText += decoder.decode(bytes) + ' ';
-          } catch (e) {
-            console.warn("Error decoding hex text:", e);
           }
         }
       }
     }
+    
+    // If we found meaningful text
+    if (extractedText.length > 100) {
+      return cleanupText(extractedText);
+    }
+    
+    // If minimal text was found, this approach could be insufficient
+    // Fall back to a simpler extraction method for plain text content
+    const textContentRegex = /\(\s*([^)]+)\s*\)\s*Tj/g;
+    const simpleMatches = [...pdfText.matchAll(textContentRegex)];
+    
+    if (simpleMatches.length > 0) {
+      extractedText = simpleMatches.map(m => m[1] || "").join(" ");
+      return cleanupText(extractedText);
+    }
+    
+    return extractedText;
+  } catch (e) {
+    console.error("Error in primary PDF extraction:", e);
+    return "";
   }
-  
-  // Clean up the extracted text
-  return cleanupText(extractedText);
 }
 
 // Alternative method for text extraction
-async function extractTextAlternativeMethod(pdfBytes: Uint8Array): Promise<string> {
-  const decoder = new TextDecoder('utf-8');
-  const pdfText = decoder.decode(pdfBytes);
-  
-  // Method 1: Look for Tj and TJ operators (text showing operators)
-  const tjMatches = pdfText.match(/\([^\)]+\)\s*(Tj|TJ)/g) || [];
-  let tjText = tjMatches.map(match => {
-    const contentMatch = match.match(/\(([^\)]+)\)/);
-    return contentMatch ? contentMatch[1] : '';
-  }).join(' ');
-  
-  // Method 2: Look for text between parentheses followed by specific PDF operators
-  const textBlockRegex = /\(([^\)]+)\)\s*[A-Za-z']{1,3}/g;
-  let blockMatches = [];
-  let match;
-  while ((match = textBlockRegex.exec(pdfText)) !== null) {
-    if (match[1] && match[1].trim().length > 0) {
-      blockMatches.push(match[1]);
+async function extractTextAlternativeMethod(pdfBytes: ArrayBuffer): Promise<string> {
+  try {
+    const decoder = new TextDecoder('utf-8');
+    const pdfText = decoder.decode(pdfBytes);
+    
+    // This method tries to capture any readable text regardless of PDF structure
+    let extractedText = "";
+    
+    // Find all readable text strings (at least 3 letters) within the PDF
+    const textRegex = /[\p{L}\p{N}\p{P}\p{Z}]{3,}/gu;
+    const matches = pdfText.match(textRegex) || [];
+    
+    if (matches.length > 0) {
+      extractedText = matches.join(" ");
     }
-  }
-  let blockText = blockMatches.join(' ');
-  
-  // Choose the method that extracted more text
-  let extractedText = tjText.length > blockText.length ? tjText : blockText;
-  
-  // If both methods failed, try a simpler approach
-  if (extractedText.trim().length < 100) {
-    // Just extract all text between parentheses that might be visible text
-    const simpleTextRegex = /\(([^\)]{2,})\)/g;
-    const simpleMatches = [];
-    while ((match = simpleTextRegex.exec(pdfText)) !== null) {
-      if (match[1] && /[a-zA-Z0-9]{2,}/.test(match[1])) {
-        simpleMatches.push(match[1]);
+    
+    // As a last resort, try to extract anything that looks like words
+    if (extractedText.length < 100) {
+      const wordRegex = /[a-zA-Z]{2,}/g;
+      const wordMatches = pdfText.match(wordRegex) || [];
+      
+      if (wordMatches.length > 10) { // Only use if we found enough words
+        extractedText = wordMatches.join(" ");
       }
     }
-    extractedText = simpleMatches.join(' ');
+    
+    return cleanupText(extractedText);
+  } catch (e) {
+    console.error("Error in alternative PDF extraction:", e);
+    return "";
   }
-  
-  return cleanupText(extractedText);
 }
 
 // Helper function to clean up the extracted text
@@ -314,6 +340,9 @@ function sanitizeTextForPostgres(text: string): string {
   
   // Handle cases where there might be UTF-16 surrogate pairs incorrectly decoded
   sanitized = sanitized.replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]|[\uD800-\uDFFF]/g, "");
+  
+  // Filter out any characters that are likely binary data
+  sanitized = sanitized.replace(/[^\p{L}\p{N}\p{P}\p{Z}\p{S}\p{M}\n\r\t]/gu, "");
   
   // Limit length to prevent issues with very large texts
   // PostgreSQL text fields have a limit of 1GB, but let's be conservative
