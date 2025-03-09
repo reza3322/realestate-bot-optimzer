@@ -1,7 +1,8 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.36.0";
 import { corsHeaders } from "../_shared/cors.ts";
-import { createPDFReader } from "https://deno.land/x/pdfium_wasm@v0.0.3/mod.ts";
+import pdf from "https://deno.land/x/pdf@1.1.0/mod.ts";
+
  // ✅ Proper PDF text extraction
 
 Deno.serve(async (req) => {
@@ -198,30 +199,19 @@ Deno.serve(async (req) => {
 // ✅ **PDF Text Extraction Function**
 async function extractPdfText(pdfArrayBuffer: ArrayBuffer): Promise<string> {
   try {
-    console.log("🔍 Extracting text from PDF...");
+    console.log("🔍 Extracting text from PDF using deno-pdf...");
 
-    const pdfReader = await createPDFReader();
-    const pdfDocument = await pdfReader.loadDocument(new Uint8Array(pdfArrayBuffer));
-
-    let extractedText = "";
-    const pageCount = pdfDocument.getPageCount();
-
-    for (let i = 0; i < pageCount; i++) {
-      const page = pdfDocument.getPage(i);
-      extractedText += page.getText() + "\n\n";
-      page.delete();
-    }
-
-    pdfDocument.delete();
-    pdfReader.delete();
+    const uint8Array = new Uint8Array(pdfArrayBuffer);
+    const extractedText = await pdf(uint8Array);
 
     console.log(`✅ Extracted ${extractedText.length} characters from PDF.`);
     return extractedText.trim();
   } catch (error) {
     console.error("❌ Error extracting PDF text:", error);
-    throw error;
+    return "PDF content extraction failed. Please upload a text version of this document.";
   }
 }
+
 
 
 =======
