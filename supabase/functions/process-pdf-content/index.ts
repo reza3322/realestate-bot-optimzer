@@ -95,7 +95,11 @@ Deno.serve(async (req) => {
 
     console.log(`📝 Extracted ${extractedText.length} characters of text`);
 
+<<<<<<< HEAD
+    // ✅ **STRONG Unicode Sanitization**
+=======
     // Clean the extracted text to remove problematic characters
+>>>>>>> d42f90220bb90287afee451ec2c45c91f21d0cc7
     extractedText = cleanText(extractedText);
     
     // Break down the content into meaningful chunks
@@ -120,6 +124,24 @@ Deno.serve(async (req) => {
           })
           .select();
 
+<<<<<<< HEAD
+    console.log("💾 Storing extracted text in the correct table...");
+
+    // ✅ **Insert training data into the correct table**
+    const tableName = contentType === "faq" ? "chatbot_training_data" : "chatbot_training_files";
+
+    const { data: insertData, error: insertError } = await supabase
+      .from(tableName)
+      .insert({
+        user_id: userId,
+        content_type: contentType,
+        source_file: fileName, // Store file name instead of using it as a question
+        extracted_text: extractedText.substring(0, 5000),
+        category: "File Import",
+        priority: parseInt(priority, 10) || 5
+      })
+      .select();
+=======
         if (insertError) {
           console.error("❌ DATABASE ERROR for chunk:", insertError);
         } else {
@@ -129,6 +151,7 @@ Deno.serve(async (req) => {
         console.error("❌ Error inserting chunk:", chunkError);
       }
     }
+>>>>>>> d42f90220bb90287afee451ec2c45c91f21d0cc7
 
     if (insertedCount === 0) {
       return new Response(
@@ -155,19 +178,29 @@ Deno.serve(async (req) => {
   }
 });
 
+<<<<<<< HEAD
+// ✅ Clean text function
+=======
 // Clean text to remove problematic Unicode characters
+>>>>>>> d42f90220bb90287afee451ec2c45c91f21d0cc7
 function cleanText(text: string): string {
   return text
     .replace(/\u0000/g, "") // Remove null bytes
+<<<<<<< HEAD
+    .replace(/[\x00-\x1F\x7F-\x9F]/g, "") // Remove control characters
+    .replace(/\s+/g, " ") // Replace multiple spaces
+=======
     .replace(/[\x00-\x1F\x7F-\x9F]/g, "") // Remove non-printable ASCII & control characters
     .replace(/[\u2028\u2029]/g, "") // Remove Unicode line separators
     .replace(/[^\x20-\x7E\u00A0-\u00FF\u0100-\u017F\u0180-\u024F\u0300-\u036F\u1E00-\u1EFF\u2000-\u206F]/g, "") // Keep basic Latin, Latin-1 Supplement, and common extensions
     .replace(/\s+/g, " ") // Replace multiple spaces with a single space
     .normalize("NFC") // Normalize Unicode encoding
+>>>>>>> d42f90220bb90287afee451ec2c45c91f21d0cc7
     .trim();
 }
 
 // Extract text from PDF
+>>>>>>> d42f90220bb90287afee451ec2c45c91f21d0cc7
 async function extractPdfText(pdfArrayBuffer: ArrayBuffer): Promise<string> {
   try {
     console.log("🔍 Extracting text from PDF...");
@@ -189,19 +222,16 @@ async function extractPdfText(pdfArrayBuffer: ArrayBuffer): Promise<string> {
   }
 }
 
+<<<<<<< HEAD
+// ✅ OCR function for scanned PDFs
+=======
 // OCR Function for Scanned PDFs
+>>>>>>> d42f90220bb90287afee451ec2c45c91f21d0cc7
 async function extractTextWithOCR(pdfArrayBuffer: ArrayBuffer): Promise<string> {
   try {
     console.log("📸 Running OCR on PDF...");
     const image = new Uint8Array(pdfArrayBuffer);
     const text = await recognize(image, "eng");
-
-    if (!text.trim()) {
-      console.log("⚠️ OCR extracted no text. Returning fallback message.");
-      return "OCR could not extract text. The PDF may be too complex for automated text extraction.";
-    }
-
-    console.log("✅ OCR Extraction Successful!");
     return text.trim();
   } catch (error) {
     console.error("❌ OCR Extraction Failed:", error);
