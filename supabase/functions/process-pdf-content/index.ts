@@ -1,6 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.36.0";
 import { corsHeaders } from "../_shared/cors.ts";
-import { PDFDocument } from "https://deno.land/x/pdf@v1.2.0/mod.ts"; // ✅ Proper PDF text extraction
+import { getDocument } from "https://esm.sh/pdfjs-dist@3.7.107/build/pdf.mjs"; // ✅ Correct PDF parser
 
 Deno.serve(async (req) => {
   console.log(`🔄 Request received: ${req.method}`);
@@ -182,18 +182,17 @@ Deno.serve(async (req) => {
   }
 });
 
-// ✅ **New PDF Text Extraction Function**
+// ✅ **Proper PDF Text Extraction Function**
 async function extractPdfText(pdfArrayBuffer: ArrayBuffer): Promise<string> {
   try {
-    console.log("🔍 Extracting text from PDF...");
-
-    // Load PDF and extract text
-    const pdfDoc = await PDFDocument.load(new Uint8Array(pdfArrayBuffer));
+    console.log("🔍 Extracting text from PDF using pdfjs-dist...");
+    const pdfDoc = await getDocument({ data: new Uint8Array(pdfArrayBuffer) }).promise;
     let extractedText = "";
 
-    for (let i = 0; i < pdfDoc.getPageCount(); i++) {
-      const page = pdfDoc.getPage(i);
-      extractedText += (await page.getText()) + "\n\n";
+    for (let i = 1; i <= pdfDoc.numPages; i++) {
+      const page = await pdfDoc.getPage(i);
+      const textContent = await page.getTextContent();
+      extractedText += textContent.items.map((item) => item.str).join(" ") + "\n\n";
     }
 
     console.log(`✅ Extracted ${extractedText.length} characters from PDF.`);
