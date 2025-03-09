@@ -1,4 +1,3 @@
-
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.36.0";
 import { corsHeaders } from "../_shared/cors.ts";
 
@@ -61,12 +60,19 @@ Deno.serve(async (req) => {
     console.log("✅ File downloaded successfully");
 
     let extractedText = "";
+    let contentType = "";
+
     if (fileName.toLowerCase().endsWith(".pdf")) {
       console.log("📄 Processing PDF file");
+      contentType = "application/pdf";
       try {
+<<<<<<< HEAD
+        extractedText = await extractPdfText(fileData);
+=======
         // Use a simple text extraction method for PDF files
         extractedText = await extractSimpleText(fileData);
 
+>>>>>>> 7ed44b24f12f1687a3051682557661db2a022a99
         if (!extractedText.trim()) {
           console.log("⚠️ No text found in PDF. Returning fallback.");
           extractedText = "This PDF could not be processed automatically. Please consider uploading a text file version.";
@@ -79,6 +85,7 @@ Deno.serve(async (req) => {
         );
       }
     } else if (fileName.toLowerCase().endsWith(".txt")) {
+      contentType = "text/plain";
       extractedText = await fileData.text();
     } else {
       return new Response(
@@ -97,7 +104,7 @@ Deno.serve(async (req) => {
     console.log(`📝 Extracted ${extractedText.length} characters of text`);
     console.log(`🔍 Inserting into chatbot_training_files table...`);
 
-    // ✅ Store File Metadata in chatbot_training_files Table - EXPLICITLY using this table
+    // ✅ Store File Metadata in chatbot_training_files Table
     const { data: insertData, error: insertError } = await supabase
       .from("chatbot_training_files")
       .insert({
@@ -105,7 +112,12 @@ Deno.serve(async (req) => {
         source_file: fileName,
         extracted_text: extractedText.substring(0, 5000),
         category: "File Import",
+<<<<<<< HEAD
+        priority: parseInt(priority, 10) || 5,
+        content_type: contentType // ✅ Fix: Adding missing content_type
+=======
         priority: parseInt(String(priority), 10) || 5
+>>>>>>> 7ed44b24f12f1687a3051682557661db2a022a99
       })
       .select();
 
@@ -126,11 +138,10 @@ Deno.serve(async (req) => {
         message: "File processed successfully",
         entriesCreated: 1,
         priority: priority,
-        table: "chatbot_training_files" // Adding this for debugging
+        table: "chatbot_training_files"
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-
   } catch (error) {
     console.error("Unexpected error:", error);
     return new Response(
@@ -143,6 +154,20 @@ Deno.serve(async (req) => {
 // Simple text extraction function as a fallback
 async function extractSimpleText(pdfArrayBuffer: ArrayBuffer): Promise<string> {
   try {
+
+    console.log("🔍 Extracting text from PDF...");
+    const pdfReader = await createPDFReader();
+    const pdfDocument = await pdfReader.loadDocument(new Uint8Array(pdfArrayBuffer));
+
+    let extractedText = "";
+    const pageCount = pdfDocument.getPageCount();
+
+    for (let i = 0; i < pageCount; i++) {
+      const page = pdfDocument.getPage(i);
+      const text = page.getText();
+      extractedText += text + " ";
+      page.delete();
+=======
     console.log("🔍 Extracting text from PDF using simple method...");
     
     // Convert ArrayBuffer to string - this is a very basic approach
@@ -156,6 +181,7 @@ async function extractSimpleText(pdfArrayBuffer: ArrayBuffer): Promise<string> {
     } catch (error) {
       console.log("Basic text extraction failed, using fallback");
       text = "PDF content extraction failed. Please upload a text version of this document.";
+>>>>>>> 7ed44b24f12f1687a3051682557661db2a022a99
     }
     
     // Clean up the text - remove non-printable characters
