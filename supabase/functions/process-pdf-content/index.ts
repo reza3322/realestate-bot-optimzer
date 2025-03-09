@@ -204,18 +204,23 @@ async function extractPdfText(pdfArrayBuffer: ArrayBuffer): Promise<string> {
   try {
     console.log("🔍 Extracting text from PDF using `pdf-lib`...");
 
-    // Load the PDF
-    const pdfDoc = await PDFDocument.load(new Uint8Array(pdfArrayBuffer));
+    // Convert ArrayBuffer to Uint8Array
+    const uint8Array = new Uint8Array(pdfArrayBuffer);
+
+    // Load the PDF document
+    const pdfDoc = await PDFDocument.load(uint8Array);
+
     let extractedText = "";
 
-    // Loop through each page and extract text
-    for (let i = 0; i < pdfDoc.getPageCount(); i++) {
-      const page = pdfDoc.getPage(i);
-      extractedText += page.getText() + "\n\n"; // Keep formatting with line breaks
+    // Extract text from all pages
+    for (const page of pdfDoc.getPages()) {
+      const { text } = await page.getTextContent();
+      extractedText += text.map(t => t.str).join(" ") + "\n\n"; // Preserve spaces and newlines
     }
 
     console.log(`✅ Extracted ${extractedText.length} characters from PDF.`);
-    
+
+    // If no meaningful text was extracted, return a warning
     if (!extractedText.trim()) {
       console.warn("⚠️ No text extracted. This PDF might be an image-based PDF.");
       return "PDF text extraction failed. This might be an image-based PDF. Try uploading a text-based PDF.";
@@ -227,6 +232,7 @@ async function extractPdfText(pdfArrayBuffer: ArrayBuffer): Promise<string> {
     return "PDF content extraction failed. This might be an image-based PDF or have security restrictions.";
   }
 }
+
 
 
 
