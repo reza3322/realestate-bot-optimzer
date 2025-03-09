@@ -112,6 +112,7 @@ Deno.serve(async (req) => {
       .select();
 
     if (insertError) {
+      console.error("❌ DATABASE ERROR:", insertError);
       return new Response(
         JSON.stringify({ success: false, error: "Failed to store training data", details: insertError }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -136,7 +137,7 @@ Deno.serve(async (req) => {
   }
 });
 
-// ✅ Strongest Unicode Sanitization Fix
+// ✅ FINAL Unicode Sanitization Function
 function cleanText(text: string): string {
   return text
     .replace(/\u0000/g, "") // Remove null bytes
