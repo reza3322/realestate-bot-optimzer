@@ -83,23 +83,34 @@ Deno.serve(async (req) => {
       console.log("📄 Processing PDF file");
       try {
         // Simple extraction for PDF (without pdfium_wasm)
-        const decoder = new TextDecoder('utf-8');
-        const text = decoder.decode(fileData);
-        
-        // Extract text content from PDF
-        extractedText = text.replace(/[^\x20-\x7E\n]/g, '');
-        
-        if (!extractedText.trim()) {
-          console.log("⚠️ No text found in PDF. Returning fallback.");
-          extractedText = "PDF content extraction failed. Please upload a text version of this document.";
+        // We need to ensure we have an ArrayBuffer to decode
+        if (fileData instanceof ArrayBuffer || ArrayBuffer.isView(fileData)) {
+          const decoder = new TextDecoder('utf-8');
+          const text = decoder.decode(fileData);
+          
+          // Extract text content from PDF
+          extractedText = text.replace(/[^\x20-\x7E\n]/g, '');
+          
+          if (!extractedText.trim()) {
+            console.log("⚠️ No text found in PDF. Returning fallback.");
+            extractedText = "PDF content extraction failed. Please upload a text version of this document.";
+          }
+        } else {
+          console.error("⚠️ File data is not in a decodable format:", typeof fileData);
+          extractedText = "PDF content extraction failed. Invalid file format.";
         }
       } catch (pdfError) {
         console.error("PDF extraction error:", pdfError);
         extractedText = "PDF content extraction failed. Please upload a text version of this document.";
       }
     } else if (finalContentType === "text/plain") {
-      const decoder = new TextDecoder('utf-8');
-      extractedText = decoder.decode(fileData);
+      if (fileData instanceof ArrayBuffer || ArrayBuffer.isView(fileData)) {
+        const decoder = new TextDecoder('utf-8');
+        extractedText = decoder.decode(fileData);
+      } else {
+        console.error("⚠️ Text file data is not in a decodable format:", typeof fileData);
+        extractedText = "Text content extraction failed. Invalid file format.";
+      }
     } else {
       return new Response(
         JSON.stringify({ success: false, error: `Unsupported file type: ${fileName}` }),
