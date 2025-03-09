@@ -1,7 +1,8 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.36.0";
 import { corsHeaders } from "../_shared/cors.ts";
-import { PDFDocument } from "https://deno.land/x/pdf@v1.2.0/mod.ts"; // ✅ Proper PDF text extraction
+import { createPDFReader } from "https://deno.land/x/pdfium_wasm@v0.0.3/mod.ts";
+ // ✅ Proper PDF text extraction
 
 Deno.serve(async (req) => {
   console.log(`🔄 Request received: ${req.method}`);
@@ -199,14 +200,20 @@ async function extractPdfText(pdfArrayBuffer: ArrayBuffer): Promise<string> {
   try {
     console.log("🔍 Extracting text from PDF...");
 
-    // Load PDF and extract text
-    const pdfDoc = await PDFDocument.load(new Uint8Array(pdfArrayBuffer));
-    let extractedText = "";
+    const pdfReader = await createPDFReader();
+    const pdfDocument = await pdfReader.loadDocument(new Uint8Array(pdfArrayBuffer));
 
-    for (let i = 0; i < pdfDoc.getPageCount(); i++) {
-      const page = pdfDoc.getPage(i);
-      extractedText += page.getText() + "\n\n"; // Preserve formatting
+    let extractedText = "";
+    const pageCount = pdfDocument.getPageCount();
+
+    for (let i = 0; i < pageCount; i++) {
+      const page = pdfDocument.getPage(i);
+      extractedText += page.getText() + "\n\n";
+      page.delete();
     }
+
+    pdfDocument.delete();
+    pdfReader.delete();
 
     console.log(`✅ Extracted ${extractedText.length} characters from PDF.`);
     return extractedText.trim();
@@ -216,6 +223,8 @@ async function extractPdfText(pdfArrayBuffer: ArrayBuffer): Promise<string> {
   }
 }
 
+
+=======
 // ✅ **Clean up the extracted PDF text to make it more readable**
 function cleanupPdfText(text: string): string {
   try {
@@ -247,3 +256,5 @@ function cleanupPdfText(text: string): string {
     return text; // Return original if cleaning fails
   }
 }
+
+>>>>>>> ab88cfe0d75b384fab9b7c4064d0e7b32e52b20c
