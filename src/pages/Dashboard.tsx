@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '@/components/layout/Navbar';
@@ -36,7 +35,6 @@ const Dashboard = () => {
   const [activities, setActivities] = useState([]);
   const navigate = useNavigate();
 
-  // Set up real-time subscriptions
   useEffect(() => {
     let leadsSubscription;
     let conversationsSubscription;
@@ -46,7 +44,6 @@ const Dashboard = () => {
     const setupRealtimeSubscriptions = async () => {
       if (!user) return;
 
-      // Subscribe to leads changes
       leadsSubscription = supabase
         .channel('leads-changes')
         .on('postgres_changes', 
@@ -55,7 +52,6 @@ const Dashboard = () => {
         )
         .subscribe();
 
-      // Subscribe to chatbot_conversations changes  
       conversationsSubscription = supabase
         .channel('conversations-changes')
         .on('postgres_changes', 
@@ -67,7 +63,6 @@ const Dashboard = () => {
         )
         .subscribe();
 
-      // Subscribe to properties changes
       propertiesSubscription = supabase
         .channel('properties-changes')
         .on('postgres_changes', 
@@ -76,7 +71,6 @@ const Dashboard = () => {
         )
         .subscribe();
         
-      // Subscribe to training data changes
       trainingDataSubscription = supabase
         .channel('training-data-changes')
         .on('postgres_changes', 
@@ -90,7 +84,6 @@ const Dashboard = () => {
       setupRealtimeSubscriptions();
     }
 
-    // Clean up subscriptions on unmount
     return () => {
       if (leadsSubscription) supabase.removeChannel(leadsSubscription);
       if (conversationsSubscription) supabase.removeChannel(conversationsSubscription);
@@ -147,10 +140,8 @@ const Dashboard = () => {
     try {
       console.log("Fetching updated stats...");
       
-      // Get leads
       const { data: leadsData } = await getLeads();
       
-      // Get property-related chatbot questions as potential leads
       const { count: chatLeadsCount, error: chatLeadsError } = await supabase
         .from('chatbot_conversations')
         .select('*', { count: 'exact', head: true })
@@ -161,10 +152,8 @@ const Dashboard = () => {
         console.error('Error fetching chat leads:', chatLeadsError);
       }
       
-      // Get properties
       const { data: propertiesData } = await getProperties();
       
-      // Get chatbot interactions - count unique conversations
       const { data: conversationsData, error: conversationsError } = await supabase
         .from('chatbot_conversations')
         .select('conversation_id')
@@ -174,7 +163,6 @@ const Dashboard = () => {
         console.error('Error fetching conversations:', conversationsError);
       }
       
-      // Count total messages for interaction count
       const { count: totalInteractions, error: countError } = await supabase
         .from('chatbot_conversations')
         .select('*', { count: 'exact', head: true })
@@ -184,7 +172,6 @@ const Dashboard = () => {
         console.error('Error counting interactions:', countError);
       }
       
-      // Count unique conversation IDs for active conversations
       const uniqueConversations = conversationsData ? 
         [...new Set(conversationsData.map(c => c.conversation_id))].length : 0;
       
@@ -214,7 +201,6 @@ const Dashboard = () => {
   
   const fetchActivities = async (userId) => {
     try {
-      // Get real activities from the database
       const { data: activitiesData, error: activitiesError } = await supabase
         .from('activities')
         .select('*')
@@ -227,7 +213,6 @@ const Dashboard = () => {
         return;
       }
       
-      // If no activities found, check for recent chatbot conversations
       if (!activitiesData || activitiesData.length === 0) {
         const { data: chatData, error: chatError } = await supabase
           .from('chatbot_conversations')
@@ -242,7 +227,6 @@ const Dashboard = () => {
           return;
         }
         
-        // Convert chat data to activity format
         const chatActivities = chatData?.map(chat => ({
           id: chat.id,
           type: 'message',
@@ -416,7 +400,7 @@ const Dashboard = () => {
             </TabsContent>
             
             <TabsContent value="properties">
-              <PropertyListings userPlan={userPlan} isPremiumFeature={isPremiumFeature} />
+              <PropertyListings userId={user?.id} userPlan={userPlan} isPremiumFeature={isPremiumFeature} />
             </TabsContent>
             
             <TabsContent value="leads">

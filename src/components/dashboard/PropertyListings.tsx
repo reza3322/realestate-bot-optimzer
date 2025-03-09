@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -20,7 +19,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { supabase } from "@/lib/supabase";
 import Papa from 'papaparse';
 
-const PropertyListings = ({ userId, isPremiumFeature }) => {
+const PropertyListings = ({ userId, userPlan, isPremiumFeature }) => {
   const [activeTab, setActiveTab] = useState("all");
   const [properties, setProperties] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -69,7 +68,6 @@ const PropertyListings = ({ userId, isPremiumFeature }) => {
   const handleFilter = () => {
     let filtered = [...properties];
     
-    // Filter by search
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(
@@ -81,12 +79,10 @@ const PropertyListings = ({ userId, isPremiumFeature }) => {
       );
     }
     
-    // Filter by tab
     if (activeTab !== "all") {
       filtered = filtered.filter(property => property.status === activeTab);
     }
     
-    // Sort
     filtered.sort((a, b) => {
       if (a[sortConfig.key] < b[sortConfig.key]) {
         return sortConfig.direction === "asc" ? -1 : 1;
@@ -132,11 +128,9 @@ const PropertyListings = ({ userId, isPremiumFeature }) => {
     setIsImporting(true);
     setImportStatus("Importing properties...");
     
-    // Add additional debugging information
     console.log("Importing data:", JSON.stringify(parsedData.slice(0, 2)));
     
     try {
-      // Call the Supabase Edge Function to import properties
       const { data, error } = await supabase.functions.invoke("import-properties", {
         body: {
           userId,
@@ -166,7 +160,6 @@ const PropertyListings = ({ userId, isPremiumFeature }) => {
       
       setImportStatus(`Import completed. ${data.properties_imported} imported, ${data.properties_failed} failed.`);
       
-      // Close the dialog after successful import with slight delay
       if (data.properties_imported > 0) {
         setTimeout(() => {
           setImportDialogOpen(false);
@@ -188,7 +181,6 @@ const PropertyListings = ({ userId, isPremiumFeature }) => {
     setImportResult(null);
     
     if (file) {
-      // Preview the uploaded file
       Papa.parse(file, {
         header: true,
         skipEmptyLines: true,
@@ -219,13 +211,11 @@ const PropertyListings = ({ userId, isPremiumFeature }) => {
   
   const handleAddProperty = async () => {
     try {
-      // Basic validation
       if (!newProperty.title || !newProperty.price) {
         toast.error("Title and price are required");
         return;
       }
       
-      // Ensure numeric fields are actually numbers
       const propertyToAdd = {
         ...newProperty,
         price: parseFloat(newProperty.price) || 0,
@@ -247,7 +237,6 @@ const PropertyListings = ({ userId, isPremiumFeature }) => {
       toast.success("Property added successfully");
       fetchProperties();
       
-      // Reset form
       setNewProperty({
         title: "",
         description: "",
@@ -480,7 +469,6 @@ const PropertyListings = ({ userId, isPremiumFeature }) => {
         </Card>
       </div>
 
-      {/* Add Property Dialog */}
       <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
         <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
@@ -652,7 +640,6 @@ const PropertyListings = ({ userId, isPremiumFeature }) => {
         </DialogContent>
       </Dialog>
       
-      {/* Import CSV Dialog */}
       <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
         <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
@@ -732,11 +719,11 @@ const PropertyListings = ({ userId, isPremiumFeature }) => {
             )}
             
             {importResult && (
-              <Alert variant={importResult.properties_failed > 0 ? "warning" : "default"}>
+              <Alert variant={importResult.properties_failed > 0 ? "destructive" : "default"}>
                 <div className="flex flex-col">
                   <div className="flex items-center">
                     {importResult.properties_failed > 0 ? (
-                      <AlertTriangle className="h-4 w-4 mr-2 text-warning" />
+                      <AlertTriangle className="h-4 w-4 mr-2 text-destructive" />
                     ) : (
                       <Check className="h-4 w-4 mr-2 text-success" />
                     )}
@@ -748,7 +735,7 @@ const PropertyListings = ({ userId, isPremiumFeature }) => {
                         {importResult.properties_imported} properties imported successfully
                       </div>
                       {importResult.properties_failed > 0 && (
-                        <div className="text-sm text-warning">
+                        <div className="text-sm text-destructive">
                           {importResult.properties_failed} properties failed to import
                         </div>
                       )}
