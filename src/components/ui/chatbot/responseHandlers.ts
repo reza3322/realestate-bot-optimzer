@@ -1,3 +1,4 @@
+
 import { supabase } from '@/lib/supabase';
 import { Message, VisitorInfo } from './types';
 import { v4 as uuidv4 } from 'uuid';
@@ -111,112 +112,41 @@ export const extractLeadInfo = (message: string): Partial<VisitorInfo> => {
 };
 
 // Function to generate response using AI or demo data
-import { createClient } from '@supabase/supabase-js';
-import OpenAI from 'openai';
-import { v4 as uuidv4 } from 'uuid';
-
-const supabase = createClient('YOUR_SUPABASE_URL', 'YOUR_SUPABASE_ANON_KEY');
-const openai = new OpenAI({ apiKey: 'YOUR_OPENAI_KEY' });
-
 export const testChatbotResponse = async (
-  message, 
-  userId, 
+  message: string, 
+  userId: string, 
   visitorInfo = {}, 
-  conversationId = `conv_${uuidv4()}`,
-  previousMessages = []
+  conversationId?: string,
+  previousMessages: Message[] = []
 ) => {
   console.log(`Processing message: "${message}" for user ${userId}`);
 
   try {
-    // Extract potential lead information from message (if applicable)
-    const extractedLeadInfo = extractLeadInfo(message);
-    const leadInfo = { ...extractedLeadInfo };
-    console.log("Extracted lead info:", leadInfo);
-
-    let relevantTrainingData = "";
-    let source = null;
-
-    // Check if this is an authenticated user (real estate agency)
-    if (userId && isValidUUID(userId)) {
-      console.log("Searching for relevant training data...");
-      const { data: trainingData, error } = await supabase
-        .from('chatbot_knowledge')
-        .select('*')
-        .textSearch('question', message);
-
-      if (error) {
-        console.error("Error fetching training data:", error);
-      }
-
-      // If a direct match is found, return it immediately
-      if (trainingData && trainingData.length > 0) {
-        source = 'training';
-        return {
-          response: trainingData[0].answer,
-          source,
-          leadInfo,
-          conversationId,
-        };
-      }
-
-      // If no direct match, include other related data as context for AI
-      if (trainingData.length > 0) {
-        relevantTrainingData += "### Agency Knowledge Base\n\n";
-        trainingData.forEach(qa => {
-          relevantTrainingData += `Q: ${qa.question}\nA: ${qa.answer}\n\n`;
-        });
-      }
-    }
-
-    // If this is a landing page chatbot (demo mode)
-    const isDemoChat = !userId || !isValidUUID(userId);
-    if (isDemoChat) {
-      relevantTrainingData = `
-      ### Company Information
-      RealHomeAI is an AI-powered chatbot platform for real estate professionals...
-      Features:
-      - Lead qualification
-      - Property recommendations
-      - 24/7 engagement
-      - CRM Integration
-      Pricing:
-      - Starter: $29/month
-      - Pro: $79/month
-      `;
-    }
-
-    // Call OpenAI with agency data (if available)
-    try {
-      const openaiPrompt = `
-      You are a real estate chatbot. Answer the user based on the following knowledge base:
-      ${relevantTrainingData}
-      
-      User: ${message}
-      Chatbot:
-      `;
-      
-      const response = await openai.completions.create({
-        model: "gpt-4",
-        prompt: openaiPrompt,
-        max_tokens: 300,
-      });
-
-      return {
-        response: response.choices[0].text,
-        source: 'ai',
-        leadInfo,
+    // Call our Edge Function
+    const response = await supabase.functions.invoke('ai-chatbot', {
+      body: {
+        message,
+        userId,
+        visitorInfo,
         conversationId,
-      };
-    } catch (error) {
-      console.error("OpenAI error:", error);
-      throw new Error("AI response generation failed");
+        previousMessages
+      }
+    });
+    
+    if (response.error) {
+      console.error("Error calling AI Chatbot Edge Function:", response.error);
+      throw new Error(response.error.message || "AI response generation failed");
     }
+    
+    console.log("AI Chatbot response:", response.data);
+    return response.data;
   } catch (error) {
     console.error("Error in testChatbotResponse:", error);
+    const errorLeadInfo = {}; // Initialize empty object for leadInfo in error case
     return {
       response: "I'm sorry, I encountered an error processing your request.",
       source: 'error',
-      leadInfo: {},
+      leadInfo: errorLeadInfo,
       conversationId,
     };
   }
