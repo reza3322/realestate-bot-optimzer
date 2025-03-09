@@ -1,7 +1,9 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.36.0";
 import { corsHeaders } from "../_shared/cors.ts";
-import { TextEncoder, TextDecoder } from "https://deno.land/std/encoding/mod.ts";
+
+// Using TextEncoder and TextDecoder from the global scope instead of importing
+// They are available in the Deno runtime by default
 
 Deno.serve(async (req) => {
   console.log(`🔄 Request received: ${req.method}`);
