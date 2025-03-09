@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Globe, Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Globe, Loader2, AlertCircle, CheckCircle2, ExternalLink } from "lucide-react";
 import { Label } from "@/components/ui/label";
 
 interface WebsiteCrawlerProps {
@@ -107,23 +107,43 @@ const WebsiteCrawler = ({ userId, onCrawlComplete }: WebsiteCrawlerProps) => {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-lg">Crawl Your Website</CardTitle>
+        <CardTitle className="text-lg flex items-center">
+          <Globe className="mr-2 h-5 w-5 text-primary" />
+          Crawl Your Website
+        </CardTitle>
         <CardDescription>
-          Enter your website URL to crawl and extract content for chatbot training
+          Enter your website URL to extract content for chatbot training. 
+          Your chatbot will learn from your website content and provide more relevant responses.
         </CardDescription>
       </CardHeader>
 
       <CardContent className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor="website-url">Website URL</Label>
-          <Input
-            id="website-url"
-            type="url"
-            placeholder="https://yourdomain.com"
-            value={websiteUrl}
-            onChange={(e) => setWebsiteUrl(e.target.value)}
-            disabled={isProcessing}
-          />
+          <div className="flex gap-2">
+            <Input
+              id="website-url"
+              type="url"
+              placeholder="https://yourdomain.com"
+              value={websiteUrl}
+              onChange={(e) => setWebsiteUrl(e.target.value)}
+              disabled={isProcessing}
+              className="flex-1"
+            />
+            <Button
+              onClick={() => window.open(
+                websiteUrl.startsWith('http') ? websiteUrl : `https://${websiteUrl}`, 
+                '_blank'
+              )}
+              variant="outline"
+              size="icon"
+              type="button"
+              disabled={!websiteUrl}
+              title="Open website in new tab"
+            >
+              <ExternalLink className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
 
         {(status || progress > 0) && (
@@ -131,8 +151,9 @@ const WebsiteCrawler = ({ userId, onCrawlComplete }: WebsiteCrawlerProps) => {
             {progress > 0 && (
               <Progress value={progress} className="h-2" />
             )}
-            <div className="text-sm text-muted-foreground">
-              Status: {status}
+            <div className="text-sm text-muted-foreground flex items-center">
+              {isProcessing && <Loader2 className="mr-2 h-3 w-3 animate-spin" />}
+              <span>Status: {status}</span>
             </div>
           </div>
         )}
@@ -172,9 +193,9 @@ const WebsiteCrawler = ({ userId, onCrawlComplete }: WebsiteCrawlerProps) => {
           )}
         </Button>
 
-        <div className="text-xs text-muted-foreground mt-2">
-          <p>For best results:</p>
-          <ul className="list-disc pl-5 space-y-1 mt-1">
+        <div className="text-xs text-muted-foreground mt-2 bg-muted/40 p-3 rounded-md border">
+          <p className="font-medium mb-1">For best results:</p>
+          <ul className="list-disc pl-5 space-y-1">
             <li>Make sure your website is publicly accessible</li>
             <li>The crawler will only extract content from HTML pages</li>
             <li>Only pages on the same domain will be crawled</li>
