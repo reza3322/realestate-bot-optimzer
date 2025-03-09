@@ -1,202 +1,140 @@
-// ✅ Full Fixed FileUpload Component
-import { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { toast } from "sonner";
-import { supabase } from "@/lib/supabase";
-import { FilePlus, FileText, Upload, Loader2, AlertCircle, CheckCircle2, FileX, FileSearch, Trash2 } from "lucide-react";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Slider } from "@/components/ui/slider";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.36.0";
+import { corsHeaders } from "../_shared/cors.ts";
+import { createPDFReader } from "https://deno.land/x/pdfium_wasm@v0.0.3/mod.ts";
 
-interface FileUploadProps {
-  userId: string;
-  onUploadComplete?: (success: boolean) => void;
-}
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, {
+      headers: {
+        ...corsHeaders,
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Max-Age": "86400",
+      },
+      status: 204,
+    });
+  }
 
-interface UploadedFile {
-  id: string;
-  name: string;
-  path: string;
-  size: number;
-  type: string;
-  status: 'uploading' | 'processing' | 'completed' | 'error';
-  error?: string;
-  contentType: string;
-  priority?: number;
-  createdAt: Date;
-}
-
-const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [contentType, setContentType] = useState<string>("faqs");
-  const [priority, setPriority] = useState<number>(5);
-  const [isUploading, setIsUploading] = useState<boolean>(false);
-  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
-  const [isLoadingFiles, setIsLoadingFiles] = useState<boolean>(true);
-  const [isDeletingFile, setIsDeletingFile] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetchUploadedFiles();
-  }, []);
-
-  // ✅ Fetch files from 'chatbot_training_files'
-  const fetchUploadedFiles = async () => {
-    setIsLoadingFiles(true);
-    try {
-      const { data, error } = await supabase
-        .storage
-        .from('chatbot_training_files')
-        .list(`${userId}`);
-      
-      if (error) {
-        console.error('Error fetching uploaded files:', error);
-        toast.error('Failed to load uploaded files');
-      } else if (data) {
-        const files: UploadedFile[] = data.map(item => ({
-          id: item.id,
-          name: item.name,
-          path: `${userId}/${item.name}`,
-          size: item.metadata?.size || 0,
-          type: item.metadata?.mimetype || 'unknown',
-          status: 'completed',
-          contentType: 'unknown',
-          createdAt: new Date(item.created_at)
-        }));
-        
-        setUploadedFiles(files);
-      }
-    } catch (error) {
-      console.error('Error in fetchUploadedFiles:', error);
-    } finally {
-      setIsLoadingFiles(false);
+  try {
+    if (req.method !== "POST") {
+      return new Response(
+        JSON.stringify({ error: `Unsupported method: ${req.method}` }),
+        { status: 405, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
-  };
 
-  // ✅ Handles file selection
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (files && files.length > 0) {
-      const file = files[0];
-      if (file.type === 'application/pdf' || file.type === 'text/plain') {
-        setSelectedFile(file);
-      } else {
-        toast.error('Only PDF and text files are supported');
-        e.target.value = '';
-      }
+    const body = await req.json();
+    const { filePath, userId, fileName, priority = 5 } = body;
+
+    if (!filePath || !userId || !fileName) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Missing required fields", received: body }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
-  };
 
-  // ✅ Processes the uploaded file (calls Edge Function)
-  const processPdfContent = async (filePath: string, fileName: string, fileId: string, priority: number = 5) => {
-    setUploadedFiles(prev => prev.map(file => file.id === fileId ? { ...file, status: 'processing' } : file));
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL") || "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || ""
+    );
 
-    try {
-      console.log(`Processing file ${fileName} with path ${filePath}`);
-      
-      const response = await supabase.functions.invoke('process-pdf-content', {
-        body: {
-          filePath,
-          userId,
-          contentType,
-          fileName,
-          priority
+    const { data: fileData, error: downloadError } = await supabase
+      .storage
+      .from("chatbot_training_files")
+      .download(filePath);
+
+    if (downloadError) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Failed to download file", details: downloadError }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    let extractedText = "";
+    if (fileName.toLowerCase().endsWith(".pdf")) {
+      try {
+        extractedText = await extractPdfText(fileData);
+        if (!extractedText.trim()) {
+          extractedText = "This PDF could not be processed automatically. Please consider uploading a text file version.";
         }
-      });
-
-      if (!response.data?.success) {
-        throw new Error(response.data?.error || 'Failed to process file');
+      } catch (pdfError) {
+        return new Response(
+          JSON.stringify({ success: false, error: `Failed to extract text from PDF: ${pdfError.message}` }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
-
-      setUploadedFiles(prev => prev.map(file => file.id === fileId ? { ...file, status: 'completed', priority } : file));
-      toast.success('File processed successfully');
-
-    } catch (error) {
-      setUploadedFiles(prev => prev.map(file => file.id === fileId ? { ...file, status: 'error', error: error.message } : file));
-      toast.error(`Failed to process file: ${error.message || 'Unknown error'}`);
+    } else if (fileName.toLowerCase().endsWith(".txt")) {
+      extractedText = await fileData.text();
+    } else {
+      return new Response(
+        JSON.stringify({ success: false, error: `Unsupported file type: ${fileName}` }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
-  };
 
-  // ✅ Upload file to Supabase Storage
-  const uploadFile = async () => {
-    if (!selectedFile || !userId) return;
-    
-    setIsUploading(true);
-    
-    const fileName = `${Date.now()}_${selectedFile.name}`;
-    const filePath = `${userId}/${fileName}`;
-    
-    const newFile: UploadedFile = {
-      id: Date.now().toString(),
-      name: selectedFile.name,
-      path: filePath,
-      size: selectedFile.size,
-      type: selectedFile.type,
-      status: 'uploading',
-      contentType,
-      priority,
-      createdAt: new Date()
-    };
-    
-    setUploadedFiles(prev => [newFile, ...prev]);
-
-    try {
-      const { error } = await supabase
-        .storage
-        .from('chatbot_training_files')  // ✅ Ensuring files go to correct table
-        .upload(filePath, selectedFile);
-
-      if (error) throw error;
-
-      setUploadedFiles(prev => prev.map(file => file.id === newFile.id ? { ...file, status: 'completed' } : file));
-      toast.success('File uploaded successfully.');
-
-      await processPdfContent(filePath, selectedFile.name, newFile.id, priority);
-      
-      setSelectedFile(null);
-      if (onUploadComplete) onUploadComplete(true);
-      
-    } catch (error) {
-      setUploadedFiles(prev => prev.map(file => file.id === newFile.id ? { ...file, status: 'error', error: error.message } : file));
-      toast.error('Failed to upload file: ' + error.message);
-      if (onUploadComplete) onUploadComplete(false);
-    } finally {
-      setIsUploading(false);
+    if (!extractedText || extractedText.trim().length === 0) {
+      return new Response(
+        JSON.stringify({ success: false, error: "No text was extracted from the file" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
-  };
 
-  return (
-    <Card className="w-full">
-      <CardHeader>
-        <CardTitle className="text-lg">Upload Training Files</CardTitle>
-        <CardDescription>Upload PDF or text files to train your chatbot.</CardDescription>
-      </CardHeader>
+    // Insert into chatbot_training_files table
+    const { data: insertData, error: insertError } = await supabase
+      .from("chatbot_training_files")
+      .insert({
+        user_id: userId,
+        source_file: fileName,
+        extracted_text: extractedText.substring(0, 5000),
+        category: "File Import",
+        priority: parseInt(priority, 10) || 5
+      })
+      .select();
 
-      <CardContent className="space-y-4">
-        <Input type="file" accept=".pdf,.txt" onChange={handleFileChange} />
+    if (insertError) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Failed to store file data", details: insertError }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
-        <Slider value={[priority]} min={0} max={10} step={1} onValueChange={([v]) => setPriority(v)} />
+    return new Response(
+      JSON.stringify({
+        success: true,
+        message: "File processed successfully",
+        entriesCreated: 1,
+        priority: priority
+      }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
 
-        <Button onClick={uploadFile} disabled={!selectedFile || isUploading}>
-          {isUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
-          Upload
-        </Button>
+  } catch (error) {
+    return new Response(
+      JSON.stringify({ success: false, error: error.message }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+});
 
-        <ScrollArea className="mt-6 h-[200px]">
-          {uploadedFiles.map(file => (
-            <div key={file.id} className="p-2 border rounded-md flex items-center justify-between">
-              <span>{file.name}</span>
-              {file.status === 'completed' ? <CheckCircle2 className="text-green-500" /> : <FileSearch className="text-blue-500" />}
-            </div>
-          ))}
-        </ScrollArea>
-      </CardContent>
-    </Card>
-  );
-};
+async function extractPdfText(pdfArrayBuffer: ArrayBuffer): Promise<string> {
+  try {
+    const pdfReader = await createPDFReader();
+    const pdfDocument = await pdfReader.loadDocument(new Uint8Array(pdfArrayBuffer));
 
-export default FileUpload;
+    let extractedText = "";
+    const pageCount = pdfDocument.getPageCount();
+
+    for (let i = 0; i < pageCount; i++) {
+      const page = pdfDocument.getPage(i);
+      const text = page.getText();
+      extractedText += text + " ";
+      page.delete();
+    }
+
+    pdfDocument.delete();
+    pdfReader.delete();
+
+    return extractedText.trim();
+  } catch (error) {
+    throw error;
+  }
+}
