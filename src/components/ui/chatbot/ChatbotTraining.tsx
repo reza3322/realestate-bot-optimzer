@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
-import { AlertCircle, FileText, FileUp } from "lucide-react";
+import { AlertCircle, FileText } from "lucide-react";
 import FileUpload from "./FileUpload";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";

@@ -20,7 +20,7 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
   const [isUploading, setIsUploading] = useState<boolean>(false);
   const [fileStatus, setFileStatus] = useState<string>("");
 
-  // ✅ Upload file to Supabase Storage
+  // Handle file upload to Supabase Storage
   const uploadFile = async () => {
     if (!selectedFile || !userId) {
       toast.error("Please select a file first");
@@ -44,26 +44,13 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
       
       setFileStatus("Processing file content...");
       
-      // Determine content type based on file extension
-      let contentType = "application/octet-stream"; // Default
-      if (selectedFile.name.toLowerCase().endsWith(".pdf")) {
-        contentType = "application/pdf";
-      } else if (selectedFile.name.toLowerCase().endsWith(".txt")) {
-        contentType = "text/plain";
-      } else {
-        contentType = selectedFile.type || "application/octet-stream";
-      }
-      
-      console.log("Content Type being sent:", contentType);
-      
       // Step 2: Process the file content
       const { data, error: processError } = await supabase.functions.invoke("process-pdf-content", {
         body: {
           filePath,
           userId,
           fileName: selectedFile.name,
-          priority,
-          contentType: contentType // Explicitly passing content type
+          priority
         },
       });
 
@@ -86,7 +73,7 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
     }
   };
 
-  // ✅ Handles file selection
+  // Handles file selection
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {

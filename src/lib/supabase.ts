@@ -1,3 +1,4 @@
+
 import { createClient } from '@supabase/supabase-js';
 import { toast } from 'sonner';
 
@@ -414,13 +415,15 @@ export const processPdfContent = async (filePath: string, userId: string, fileNa
       contentType = "text/plain";
     }
     
+    console.log("Content Type being sent:", contentType);
+    
     const { data, error } = await supabase.functions.invoke('process-pdf-content', {
       body: {
         filePath,
         userId,
         fileName,
         priority,
-        contentType // Ensure this is passed to the edge function
+        contentType
       }
     });
     
