@@ -78,85 +78,24 @@ Deno.serve(async (req) => {
     console.log(`📄 File type detected: ${fileType}`);
     
     if (fileType === 'pdf') {
-      // For PDFs, use a more robust text extraction approach
       try {
-        // Convert ArrayBuffer to Uint8Array if needed
-        let fileBytes;
-        if (fileData instanceof ArrayBuffer) {
-          fileBytes = new Uint8Array(fileData);
-        } else if (ArrayBuffer.isView(fileData)) {
-          fileBytes = new Uint8Array(fileData.buffer);
-        } else if (typeof fileData.arrayBuffer === 'function') {
-          // Handle Response or Blob type
-          const buffer = await fileData.arrayBuffer();
-          fileBytes = new Uint8Array(buffer);
-        } else {
-          throw new Error(`Unsupported file data type: ${typeof fileData}`);
+        // Get file as ArrayBuffer
+        const buffer = await fileData.arrayBuffer();
+        const bytes = new Uint8Array(buffer);
+        
+        // Convert PDF to text using a more robust approach
+        extractedText = await extractTextFromPdf(bytes);
+        
+        if (!extractedText || extractedText.trim().length < 100) {
+          console.log("⚠️ Primary extraction yielded little text, trying alternative method");
+          // Try alternative extraction if the first method didn't yield much
+          extractedText = await extractTextAlternativeMethod(bytes);
         }
         
-        // Simple PDF text extraction using byte patterns
-        // This is a basic approach that looks for text objects in the PDF
-        const pdfText = new TextDecoder().decode(fileBytes);
-        
-        // Extract text content between BT (Begin Text) and ET (End Text) markers
-        const textMarkers = [];
-        let startIndex = 0;
-        
-        while ((startIndex = pdfText.indexOf('BT', startIndex)) !== -1) {
-          const endIndex = pdfText.indexOf('ET', startIndex);
-          if (endIndex === -1) break;
-          
-          textMarkers.push({
-            start: startIndex,
-            end: endIndex + 2, // +2 to include 'ET'
-            content: pdfText.substring(startIndex, endIndex + 2)
-          });
-          
-          startIndex = endIndex + 2;
+        console.log(`📝 Extracted text length: ${extractedText?.length || 0} characters`);
+        if (extractedText && extractedText.length > 0) {
+          console.log(`📝 Sample text: ${extractedText.substring(0, 150)}...`);
         }
-        
-        // Process text blocks to extract readable content
-        let cleanText = "";
-        for (const marker of textMarkers) {
-          // Extract text between parentheses which often contains the actual content
-          const matches = marker.content.match(/\((.*?)\)/g);
-          if (matches) {
-            for (const match of matches) {
-              // Remove the parentheses and handle basic PDF escape sequences
-              let text = match.substring(1, match.length - 1)
-                .replace(/\\r/g, '\r')
-                .replace(/\\n/g, '\n')
-                .replace(/\\t/g, '\t')
-                .replace(/\\\\/g, '\\')
-                .replace(/\\\(/g, '(')
-                .replace(/\\\)/g, ')');
-              
-              cleanText += text + ' ';
-            }
-          }
-        }
-        
-        // If the extraction above didn't yield much, try a fallback method
-        if (cleanText.trim().length < 100) {
-          console.log("⚠️ Primary extraction yielded little text, trying fallback method");
-          
-          // Look for text following Tj or TJ operators which display text in PDFs
-          const tjMatches = pdfText.match(/\([^\)]+\)\s*(Tj|TJ)/g);
-          if (tjMatches) {
-            cleanText = tjMatches.map(match => {
-              // Extract just the text part without the Tj/TJ operator
-              return match.match(/\(([^\)]+)\)/)?.[1] || '';
-            }).join(' ');
-          }
-        }
-        
-        // Final cleanup
-        extractedText = cleanText
-          .replace(/\s+/g, ' ')  // Replace multiple spaces with a single space
-          .trim();
-        
-        console.log(`📝 Extracted text length: ${extractedText.length} characters`);
-        console.log(`📝 Sample text: ${extractedText.substring(0, 150)}...`);
         
         // If we still couldn't extract meaningful text
         if (!extractedText || extractedText.length < 50) {
@@ -170,16 +109,8 @@ Deno.serve(async (req) => {
     } else if (fileType === 'txt') {
       // For text files, simply decode the content
       try {
-        if (fileData instanceof ArrayBuffer || ArrayBuffer.isView(fileData)) {
-          const decoder = new TextDecoder('utf-8');
-          extractedText = decoder.decode(fileData);
-        } else if (typeof fileData.text === 'function') {
-          // Handle Response type
-          extractedText = await fileData.text();
-        } else {
-          throw new Error(`Unsupported text file data type: ${typeof fileData}`);
-        }
-        
+        const decoder = new TextDecoder('utf-8');
+        extractedText = decoder.decode(await fileData.arrayBuffer());
         console.log(`📝 Extracted ${extractedText.length} characters of text from TXT file`);
       } catch (txtError) {
         console.error("❌ Error extracting text from TXT file:", txtError);
@@ -243,3 +174,126 @@ Deno.serve(async (req) => {
     );
   }
 });
+
+// Improved PDF text extraction function
+async function extractTextFromPdf(pdfBytes: Uint8Array): Promise<string> {
+  const decoder = new TextDecoder('utf-8');
+  const pdfText = decoder.decode(pdfBytes);
+  
+  // Look for text objects in the PDF
+  const textObjects = [];
+  
+  // Pattern matching for PDF text extraction
+  // Find text blocks between BT and ET (Begin Text and End Text)
+  let index = 0;
+  while (true) {
+    const btIndex = pdfText.indexOf('BT', index);
+    if (btIndex === -1) break;
+    
+    const etIndex = pdfText.indexOf('ET', btIndex);
+    if (etIndex === -1) break;
+    
+    textObjects.push(pdfText.substring(btIndex, etIndex + 2));
+    index = etIndex + 2;
+  }
+  
+  // Extract text from text objects
+  let extractedText = '';
+  for (const textObj of textObjects) {
+    // Extract text from within parentheses or angle brackets (PDF encoding formats)
+    const textMatches = textObj.match(/\((.*?)\)|<([0-9A-Fa-f]+)>/g);
+    if (textMatches) {
+      for (const match of textMatches) {
+        if (match.startsWith('(')) {
+          // Handle parenthesized text
+          const text = match.substring(1, match.length - 1)
+            .replace(/\\r/g, '\r')
+            .replace(/\\n/g, '\n')
+            .replace(/\\t/g, '\t')
+            .replace(/\\\\/g, '\\')
+            .replace(/\\\(/g, '(')
+            .replace(/\\\)/g, ')');
+          extractedText += text + ' ';
+        } else if (match.startsWith('<')) {
+          // Handle hex-encoded text
+          try {
+            const hexString = match.substring(1, match.length - 1);
+            // Convert every two hex characters to a byte, then decode as UTF-16BE (PDF standard)
+            const bytes = new Uint8Array(hexString.length / 2);
+            for (let i = 0; i < hexString.length; i += 2) {
+              bytes[i / 2] = parseInt(hexString.substr(i, 2), 16);
+            }
+            extractedText += decoder.decode(bytes) + ' ';
+          } catch (e) {
+            console.warn("Error decoding hex text:", e);
+          }
+        }
+      }
+    }
+  }
+  
+  // Clean up the extracted text
+  return cleanupText(extractedText);
+}
+
+// Alternative method for text extraction
+async function extractTextAlternativeMethod(pdfBytes: Uint8Array): Promise<string> {
+  const decoder = new TextDecoder('utf-8');
+  const pdfText = decoder.decode(pdfBytes);
+  
+  // Method 1: Look for Tj and TJ operators (text showing operators)
+  const tjMatches = pdfText.match(/\([^\)]+\)\s*(Tj|TJ)/g) || [];
+  let tjText = tjMatches.map(match => {
+    const contentMatch = match.match(/\(([^\)]+)\)/);
+    return contentMatch ? contentMatch[1] : '';
+  }).join(' ');
+  
+  // Method 2: Look for text between parentheses followed by specific PDF operators
+  const textBlockRegex = /\(([^\)]+)\)\s*[A-Za-z']{1,3}/g;
+  let blockMatches = [];
+  let match;
+  while ((match = textBlockRegex.exec(pdfText)) !== null) {
+    if (match[1] && match[1].trim().length > 0) {
+      blockMatches.push(match[1]);
+    }
+  }
+  let blockText = blockMatches.join(' ');
+  
+  // Choose the method that extracted more text
+  let extractedText = tjText.length > blockText.length ? tjText : blockText;
+  
+  // If both methods failed, try a simpler approach
+  if (extractedText.trim().length < 100) {
+    // Just extract all text between parentheses that might be visible text
+    const simpleTextRegex = /\(([^\)]{2,})\)/g;
+    const simpleMatches = [];
+    while ((match = simpleTextRegex.exec(pdfText)) !== null) {
+      if (match[1] && /[a-zA-Z0-9]{2,}/.test(match[1])) {
+        simpleMatches.push(match[1]);
+      }
+    }
+    extractedText = simpleMatches.join(' ');
+  }
+  
+  return cleanupText(extractedText);
+}
+
+// Helper function to clean up the extracted text
+function cleanupText(text: string): string {
+  return text
+    .replace(/\\n/g, '\n')
+    .replace(/\\r/g, '')
+    .replace(/\\t/g, ' ')
+    .replace(/\\\\/g, '\\')
+    .replace(/\\\(/g, '(')
+    .replace(/\\\)/g, ')')
+    .replace(/\s+/g, ' ')
+    .replace(/^\s+|\s+$/g, '')
+    // Replace common encoding artifacts
+    .replace(/â€œ/g, '"')
+    .replace(/â€/g, '"')
+    .replace(/â€™/g, "'")
+    .replace(/â€"/g, "—")
+    .replace(/Â/g, "")
+    .trim();
+}

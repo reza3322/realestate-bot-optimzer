@@ -5,9 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
-import { Upload, Loader2 } from "lucide-react";
+import { Upload, Loader2, AlertCircle } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface FileUploadProps {
   userId: string;
@@ -19,6 +20,7 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
   const [priority, setPriority] = useState<number>(5);
   const [isUploading, setIsUploading] = useState<boolean>(false);
   const [fileStatus, setFileStatus] = useState<string>("");
+  const [error, setError] = useState<string>("");
 
   // Handle file upload to Supabase Storage
   const uploadFile = async () => {
@@ -29,6 +31,7 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
 
     setIsUploading(true);
     setFileStatus("Uploading file...");
+    setError("");
 
     const fileName = `${Date.now()}_${selectedFile.name}`;
     const filePath = `${userId}/${fileName}`;
@@ -54,8 +57,17 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
         },
       });
 
-      if (processError || !data?.success) {
-        throw new Error(processError?.message || data?.error || "Failed to process file");
+      if (processError) {
+        throw new Error(processError.message || "Failed to process file");
+      }
+      
+      if (!data?.success) {
+        throw new Error(data?.error || "Failed to process file content");
+      }
+
+      // Check if the response contains an error message about scanned PDFs
+      if (data.message?.includes("scanned or image-based PDF")) {
+        setError("This appears to be a scanned or image-based PDF. The text could not be extracted properly.");
       }
 
       setFileStatus("File processed successfully!");
@@ -65,6 +77,7 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
 
     } catch (error: any) {
       console.error("Upload error:", error);
+      setError(error.message || "Unknown error occurred");
       toast.error(`Failed to upload file: ${error.message || "Unknown error"}`);
       setFileStatus("Upload failed. Please try again.");
       if (onUploadComplete) onUploadComplete(false);
@@ -81,6 +94,7 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
       if (file.type === "application/pdf" || file.type === "text/plain") {
         setSelectedFile(file);
         setFileStatus("");
+        setError("");
       } else {
         toast.error("Only PDF and text files are supported");
         e.target.value = "";
@@ -130,6 +144,13 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
           <div className="text-sm text-muted-foreground">
             Status: {fileStatus}
           </div>
+        )}
+
+        {error && (
+          <Alert variant="destructive" className="mt-2">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
         )}
 
         <Button 
