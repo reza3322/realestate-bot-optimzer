@@ -1,7 +1,5 @@
-
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.36.0";
 import { corsHeaders } from "../_shared/cors.ts";
-import { DOMParser } from "https://deno.land/x/deno_dom@v0.1.38/deno-dom-wasm.ts";
 import { createPDFReader } from "https://deno.land/x/pdfium_wasm@v0.0.3/mod.ts";
 
 Deno.serve(async (req) => {
@@ -30,16 +28,16 @@ Deno.serve(async (req) => {
     const body = await req.json();
     console.log("📥 Received Body:", body);
 
-    const { filePath, userId, contentType, fileName, priority = 5 } = body;
+    const { filePath, userId, fileName, priority = 5 } = body;
 
-    if (!filePath || !userId || !contentType || !fileName) {
+    if (!filePath || !userId || !fileName) {
       return new Response(
         JSON.stringify({ success: false, error: "Missing required fields", received: body }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    console.log(`📄 Processing file: ${filePath} for user: ${userId}, content type: ${contentType}`);
+    console.log(`📄 Processing file: ${filePath} for user: ${userId}`);
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") || "",
@@ -66,9 +64,9 @@ Deno.serve(async (req) => {
       console.log("📄 Processing PDF file");
       try {
         extractedText = await extractPdfText(fileData);
-        
+
         if (!extractedText.trim()) {
-          console.log("⚠️ No text found in PDF. Attempting simpler extraction...");
+          console.log("⚠️ No text found in PDF. Returning fallback.");
           extractedText = "This PDF could not be processed automatically. Please consider uploading a text file version.";
         }
       } catch (pdfError) {
@@ -96,17 +94,11 @@ Deno.serve(async (req) => {
 
     console.log(`📝 Extracted ${extractedText.length} characters of text`);
 
-    // Strong Unicode Sanitization
-    extractedText = cleanText(extractedText);
-
-    console.log("💾 Storing extracted text in the chatbot_training_files table...");
-
-    // Always store file content in the chatbot_training_files table regardless of contentType
+    // ✅ Store File Metadata in chatbot_training_files Table
     const { data: insertData, error: insertError } = await supabase
       .from("chatbot_training_files")
       .insert({
         user_id: userId,
-        content_type: contentType,
         source_file: fileName,
         extracted_text: extractedText.substring(0, 5000),
         category: "File Import",
@@ -117,7 +109,7 @@ Deno.serve(async (req) => {
     if (insertError) {
       console.error("❌ DATABASE ERROR:", insertError);
       return new Response(
-        JSON.stringify({ success: false, error: "Failed to store training data", details: insertError }),
+        JSON.stringify({ success: false, error: "Failed to store file data", details: insertError }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -141,37 +133,27 @@ Deno.serve(async (req) => {
   }
 });
 
-// Clean text function
-function cleanText(text: string): string {
-  return text
-    .replace(/\u0000/g, "") // Remove null bytes
-    .replace(/[\x00-\x1F\x7F-\x9F]/g, "") // Remove control characters
-    .replace(/\s+/g, " ") // Replace multiple spaces
-    .trim();
-}
-
-// Extract text from PDF function
+// ✅ Extract text from PDF function
 async function extractPdfText(pdfArrayBuffer: ArrayBuffer): Promise<string> {
   try {
-    console.log("🔍 Extracting text from PDF using pdfium_wasm...");
+    console.log("🔍 Extracting text from PDF...");
     
-    // Use pdfium_wasm to process PDF
     const pdfReader = await createPDFReader();
     const pdfDocument = await pdfReader.loadDocument(new Uint8Array(pdfArrayBuffer));
-    
+
     let extractedText = "";
     const pageCount = pdfDocument.getPageCount();
-    
+
     for (let i = 0; i < pageCount; i++) {
       const page = pdfDocument.getPage(i);
       const text = page.getText();
       extractedText += text + " ";
       page.delete();
     }
-    
+
     pdfDocument.delete();
     pdfReader.delete();
-    
+
     return extractedText.trim();
   } catch (error) {
     console.error("❌ Error extracting PDF text:", error);
