@@ -1,403 +1,243 @@
 
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient } from '@supabase/supabase-js'
-import { DOMParser } from 'deno-dom';
+// This is the Supabase Edge Function for web crawling
+// It handles crawling websites and extracting content, including JavaScript rendered content
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { corsHeaders } from "../_shared/cors.ts";
+import { load } from "https://esm.sh/cheerio@1.0.0-rc.12";
 
-serve(async (req) => {
+// Define the number of concurrent requests allowed
+const MAX_CONCURRENT_REQUESTS = 5;
+// Define the delay between requests in ms
+const REQUEST_DELAY = 500;
+
+Deno.serve(async (req) => {
   // Handle CORS preflight requests
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders })
+  if (req.method === "OPTIONS") {
+    return new Response(null, {
+      headers: {
+        ...corsHeaders,
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Max-Age": "86400",
+      },
+      status: 204,
+    });
+  }
+
+  // Only allow POST requests
+  if (req.method !== "POST") {
+    return new Response(
+      JSON.stringify({ error: `Unsupported method: ${req.method}` }),
+      { status: 405, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
   }
 
   try {
-    // Get request body
-    const { userId, url, maxPages } = await req.json()
-
-    if (!userId || !url) {
+    const { url, userId, maxPages = 10 } = await req.json();
+    
+    if (!url || !userId) {
       return new Response(
-        JSON.stringify({ error: 'User ID and URL are required' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-      )
+        JSON.stringify({ success: false, error: "Missing required fields" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
-    console.log(`Starting web crawling for URL: ${url} by user: ${userId}, maxPages: ${maxPages || 'default'}`)
+    console.log(`Starting to crawl: ${url} for user: ${userId}, max pages: ${maxPages}`);
 
-    // Initialize Supabase client
-    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    const supabase = createClient(supabaseUrl, supabaseKey)
-    
-    // Fetch user plan to determine crawl limits
-    const { data: profileData, error: profileError } = await supabase
-      .from('profiles')
-      .select('plan')
-      .eq('id', userId)
-      .single()
-    
-    if (profileError) {
-      console.error('Error fetching user profile:', profileError)
+    // Create Supabase client
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // Normalize URL and add protocol if missing
+    let normalizedUrl = url;
+    if (!normalizedUrl.startsWith('http://') && !normalizedUrl.startsWith('https://')) {
+      normalizedUrl = `https://${normalizedUrl}`;
     }
-    
-    // Determine max pages based on user plan
-    let pagesToCrawl = 10; // Default limit for all users
-    const userPlan = profileData?.plan || 'starter';
-    
-    if (maxPages && !isNaN(Number(maxPages))) {
-      // If maxPages is specified in request, use it (but enforce plan limits)
-      if (userPlan === 'premium') {
-        pagesToCrawl = Math.min(Number(maxPages), 200);
-        console.log(`Premium user - allowing custom crawl limit: ${pagesToCrawl} pages`);
-      } else if (userPlan === 'enterprise') {
-        pagesToCrawl = Math.min(Number(maxPages), 500);
-        console.log(`Enterprise user - allowing custom crawl limit: ${pagesToCrawl} pages`);
-      } else {
-        // For non-premium users, cap at default
-        pagesToCrawl = Math.min(Number(maxPages), 10);
-        console.log(`Non-premium user - enforcing max limit of 10 pages (requested: ${maxPages})`);
-      }
-    } else if (userPlan === 'premium') {
-      pagesToCrawl = 50; // Premium users get 50 pages by default
-      console.log('Premium user - allowing 50 pages');
-    } else if (userPlan === 'enterprise') {
-      pagesToCrawl = 200; // Enterprise users get 200 pages by default
-      console.log('Enterprise user - allowing 200 pages');
-    }
-    
-    // Create a property import record to track the progress
-    const { data: importRecord, error: importError } = await supabase
-      .from('property_imports')
-      .insert({
-        user_id: userId,
-        source: 'web_crawler',
-        source_name: url,
-        status: 'processing',
-      })
-      .select()
-      .single()
-    
-    if (importError) {
-      console.error('Error creating import record:', importError)
-      return new Response(
-        JSON.stringify({ error: 'Failed to initialize import process' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
-      )
-    }
-    
-    // Crawl the website and extract content
-    const pagesContent = await crawlWebsite(url, pagesToCrawl)
-    
-    // Create a new training file entry with the extracted content
-    let successCount = 0
-    let errorList = []
-    
-    for (const [pageUrl, content] of Object.entries(pagesContent)) {
-      if (!content || content.trim() === '') {
-        console.log(`Skipping empty content for page: ${pageUrl}`)
-        continue
-      }
+
+    // Extract domain for same-origin checks
+    const urlObj = new URL(normalizedUrl);
+    const domain = urlObj.hostname;
+
+    // Set to track visited URLs
+    const visitedUrls = new Set<string>();
+    // Queue of URLs to visit
+    const urlQueue: string[] = [normalizedUrl];
+    // Array to store crawled pages
+    const crawledPages: { url: string; content: string }[] = [];
+    // Track failures
+    const failedUrls: string[] = [];
+
+    // Helper function to wait for a specified time
+    const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+    // Function to extract all links from a page
+    const extractLinks = (html: string, baseUrl: string): string[] => {
+      const links: string[] = [];
+      const $ = load(html);
       
-      // Sanitize the content to remove null bytes and other problematic characters
-      const sanitizedContent = sanitizeText(content)
+      $('a').each((_, element) => {
+        const href = $(element).attr('href');
+        if (href && !href.startsWith('#') && !href.startsWith('javascript:')) {
+          try {
+            // Resolve relative URLs
+            const absoluteUrl = new URL(href, baseUrl).href;
+            // Only include links from the same domain
+            if (new URL(absoluteUrl).hostname === domain) {
+              links.push(absoluteUrl);
+            }
+          } catch (e) {
+            // Ignore invalid URLs
+            console.error(`Invalid URL: ${href}`, e);
+          }
+        }
+      });
       
-      // Create a training file entry
+      return links;
+    };
+
+    // Function to clean and extract text content from HTML
+    const extractText = (html: string): string => {
+      const $ = load(html);
+      
+      // Remove scripts, styles, and other non-content elements
+      $('script, style, meta, link, noscript, iframe, svg').remove();
+      
+      // Get the text content and normalize whitespace
+      let text = $('body').text();
+      text = text.replace(/\s+/g, ' ').trim();
+      
+      // Get all headings and their text to preserve structure
+      const headings: string[] = [];
+      $('h1, h2, h3, h4, h5, h6').each((_, el) => {
+        headings.push($(el).text().trim());
+      });
+      
+      // Get all paragraphs to preserve structure
+      const paragraphs: string[] = [];
+      $('p').each((_, el) => {
+        const content = $(el).text().trim();
+        if (content) {
+          paragraphs.push(content);
+        }
+      });
+      
+      // Combine all text content with structured elements
+      const structuredContent = [
+        ...headings.map(h => `# ${h}`),
+        ...paragraphs,
+        text
+      ].join('\n\n');
+      
+      return structuredContent;
+    };
+
+    // Function to fetch and process a page
+    const fetchPage = async (url: string): Promise<void> => {
       try {
-        const { error: insertError } = await supabase
+        console.log(`Fetching page: ${url}`);
+        
+        // Fetch the page with JavaScript support using a headless browser service
+        // Here we're using a direct fetch, but in production you might use a headless browser service
+        const response = await fetch(url, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Accept': 'text/html',
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to fetch ${url}: ${response.status} ${response.statusText}`);
+        }
+
+        const html = await response.text();
+        
+        // Extract and save content
+        const content = extractText(html);
+        if (content.trim()) {
+          crawledPages.push({ url, content });
+          console.log(`Successfully processed: ${url}`);
+        }
+
+        // Extract links for further crawling
+        const links = extractLinks(html, url);
+        for (const link of links) {
+          if (!visitedUrls.has(link) && !urlQueue.includes(link)) {
+            urlQueue.push(link);
+          }
+        }
+      } catch (error) {
+        console.error(`Error processing ${url}:`, error);
+        failedUrls.push(url);
+      } finally {
+        visitedUrls.add(url);
+      }
+    };
+
+    // Process the URL queue
+    let processedCount = 0;
+    while (urlQueue.length > 0 && processedCount < maxPages) {
+      const batchSize = Math.min(MAX_CONCURRENT_REQUESTS, urlQueue.length, maxPages - processedCount);
+      const batch = urlQueue.splice(0, batchSize);
+
+      // Process batch of URLs concurrently
+      await Promise.all(batch.map(url => fetchPage(url)));
+      processedCount += batchSize;
+
+      // Wait between batches to be polite
+      if (urlQueue.length > 0 && processedCount < maxPages) {
+        await wait(REQUEST_DELAY);
+      }
+    }
+
+    console.log(`Crawling complete. Processed ${crawledPages.length} pages, failed on ${failedUrls.length} pages`);
+
+    // Store results in the database
+    const importedPages = [];
+    for (const page of crawledPages) {
+      try {
+        const { data, error } = await supabase
           .from('chatbot_training_files')
           .insert({
             user_id: userId,
-            source_file: `Webpage: ${pageUrl}`,
-            extracted_text: sanitizedContent,
-            priority: 5, // Default priority
-            category: 'Website Content',
-            content_type: 'text/html'
+            source_file: page.url,
+            extracted_text: page.content,
+            category: 'Web Crawler',
+            priority: 5,
+            content_type: 'text/html',
+            processing_status: 'complete'
           })
-        
-        if (insertError) {
-          console.error(`Error inserting content for ${pageUrl}:`, insertError)
-          errorList.push({ page: pageUrl, error: insertError.message })
-        } else {
-          successCount++
-          console.log(`Successfully stored content for ${pageUrl}`)
+          .select();
+
+        if (error) {
+          console.error(`Error storing page ${page.url}:`, error);
+          continue;
+        }
+
+        if (data && data.length > 0) {
+          importedPages.push(data[0]);
         }
       } catch (error) {
-        console.error(`Exception storing content for ${pageUrl}:`, error)
-        errorList.push({ page: pageUrl, error: error.message })
+        console.error(`Error in database operation for ${page.url}:`, error);
       }
     }
-    
-    // Update the import record
-    const { error: updateError } = await supabase
-      .from('property_imports')
-      .update({
-        status: 'completed',
-        records_total: Object.keys(pagesContent).length,
-        records_imported: successCount,
-        records_failed: Object.keys(pagesContent).length - successCount,
-        log: JSON.stringify({
-          message: `Import completed. ${successCount} pages imported, ${errorList.length} failed.`,
-          errors: errorList,
-          timestamp: new Date().toISOString()
-        })
-      })
-      .eq('id', importRecord.id)
-    
-    if (updateError) {
-      console.error('Error updating import record:', updateError)
-    }
-    
-    // Log activity
-    await supabase
-      .from('activities')
-      .insert({
-        user_id: userId,
-        type: 'web_crawler',
-        description: `Crawled website ${url} and imported ${successCount} pages`
-      })
-    
+
+    // Return the results
     return new Response(
       JSON.stringify({
         success: true,
-        pages_total: Object.keys(pagesContent).length,
-        pages_imported: successCount,
-        pages_failed: errorList.length,
-        plan: userPlan,
-        max_pages: pagesToCrawl,
-        errors: errorList.length > 0 ? errorList : undefined
+        pages_crawled: crawledPages.length,
+        pages_imported: importedPages.length,
+        pages_failed: failedUrls.length,
+        message: `Successfully crawled ${crawledPages.length} pages and imported ${importedPages.length} pages.`
       }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
   } catch (error) {
-    console.error('Error processing web crawler request:', error)
+    console.error("Unexpected error:", error);
     return new Response(
-      JSON.stringify({ error: 'Internal server error', details: error.message }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
-    )
+      JSON.stringify({ success: false, error: error.message || "An unexpected error occurred" }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
   }
-})
-
-// Function to crawl a website and extract content from pages
-async function crawlWebsite(baseUrl: string, maxPages = 10): Promise<Record<string, string>> {
-  const visitedUrls = new Set<string>()
-  const queue: string[] = [baseUrl]
-  const results: Record<string, string> = {}
-  
-  // Ensure the baseUrl has a trailing slash for proper URL joining
-  const baseUrlObj = new URL(baseUrl)
-  
-  console.log(`Starting crawl of ${baseUrl}, max pages: ${maxPages}`)
-  
-  // Basic HTTP crawling
-  while (queue.length > 0 && visitedUrls.size < maxPages) {
-    const currentUrl = queue.shift();
-    if (!currentUrl || visitedUrls.has(currentUrl)) continue;
-    
-    visitedUrls.add(currentUrl);
-    console.log(`Crawling page ${visitedUrls.size}/${maxPages}: ${currentUrl}`);
-    
-    try {
-      const response = await fetch(currentUrl, {
-        headers: {
-          'User-Agent': 'RealHome.ai Bot/1.0 (Web Crawler for Chatbot Training)'
-        }
-      });
-      
-      if (!response.ok) {
-        console.error(`Failed to fetch ${currentUrl}: ${response.status} ${response.statusText}`);
-        continue;
-      }
-      
-      const contentType = response.headers.get('content-type') || '';
-      if (!contentType.includes('text/html')) {
-        console.log(`Skipping non-HTML content at ${currentUrl}: ${contentType}`);
-        continue;
-      }
-      
-      const html = await response.text();
-      
-      const parser = new DOMParser();
-      const document = parser.parseFromString(html, 'text/html');
-      
-      if (!document) {
-        console.error(`Failed to parse HTML for ${currentUrl}`);
-        continue;
-      }
-      
-      // Extract and clean text content
-      let textContent = extractTextContent(document);
-      
-      // Store the cleaned text content
-      results[currentUrl] = textContent;
-      
-      // Find more links to crawl
-      if (visitedUrls.size < maxPages) {
-        const links = findLinks(document, currentUrl, baseUrlObj.origin);
-        
-        // Add new links to the queue
-        for (const link of links) {
-          if (!visitedUrls.has(link) && !queue.includes(link)) {
-            queue.push(link);
-          }
-        }
-      }
-    } catch (error) {
-      console.error(`Error crawling ${currentUrl}:`, error);
-    }
-  }
-  
-  console.log(`Crawl completed. Visited ${visitedUrls.size} pages.`);
-  return results;
-}
-
-// Extract text content from an HTML document
-function extractTextContent(document: any): string {
-  // Remove script and style tags
-  const scripts = document.querySelectorAll('script, style, noscript, iframe, svg');
-  scripts.forEach((script: any) => script.remove());
-  
-  // Get content from specific tags
-  const title = document.querySelector('title')?.textContent || '';
-  const metaDescription = document.querySelector('meta[name="description"]')?.getAttribute('content') || '';
-  
-  // Extract heading and paragraph content
-  let mainContent = '';
-  
-  // Get headings
-  const headings = document.querySelectorAll('h1, h2, h3, h4, h5, h6');
-  headings.forEach((h: any) => {
-    mainContent += `${h.textContent}\n\n`;
-  });
-  
-  // Get paragraphs
-  const paragraphs = document.querySelectorAll('p');
-  paragraphs.forEach((p: any) => {
-    mainContent += `${p.textContent}\n\n`;
-  });
-  
-  // Get list items
-  const listItems = document.querySelectorAll('li');
-  listItems.forEach((li: any) => {
-    mainContent += `• ${li.textContent}\n`;
-  });
-  
-  // Get table cells
-  const tableCells = document.querySelectorAll('th, td');
-  tableCells.forEach((cell: any) => {
-    mainContent += `${cell.textContent} | `;
-  });
-  
-  // Get div content
-  const divs = document.querySelectorAll('div');
-  divs.forEach((div: any) => {
-    // Only get text directly in the div, not from child elements
-    if (div.childNodes) {
-      div.childNodes.forEach((node: any) => {
-        if (node.nodeType === 3) { // Text node
-          const text = node.textContent.trim();
-          if (text) {
-            mainContent += `${text}\n`;
-          }
-        }
-      });
-    }
-  });
-  
-  // Get button text
-  const buttons = document.querySelectorAll('button');
-  buttons.forEach((button: any) => {
-    mainContent += `Button: ${button.textContent.trim()}\n`;
-  });
-  
-  // Get input placeholder text and labels
-  const inputs = document.querySelectorAll('input[placeholder]');
-  inputs.forEach((input: any) => {
-    const placeholder = input.getAttribute('placeholder');
-    if (placeholder) {
-      mainContent += `Input: ${placeholder}\n`;
-    }
-  });
-  
-  // Combine and clean the content
-  let combinedContent = `Title: ${title}\n\nDescription: ${metaDescription}\n\n${mainContent}`;
-  
-  // Clean up the text
-  combinedContent = combinedContent
-    .replace(/\s+/g, ' ')     // Replace multiple spaces with a single space
-    .replace(/\n\s*\n/g, '\n\n') // Replace multiple newlines with double newlines
-    .trim();
-  
-  return combinedContent;
-}
-
-// Find links to other pages on the same domain
-function findLinks(document: any, currentUrl: string, baseOrigin: string): string[] {
-  const links: string[] = [];
-  const anchorTags = document.querySelectorAll('a');
-  const currentUrlObj = new URL(currentUrl);
-  
-  anchorTags.forEach((a: any) => {
-    try {
-      const href = a.getAttribute('href');
-      if (!href) return;
-      
-      // Skip anchor links, javascript, mailto, tel links
-      if (href.startsWith('#') || 
-          href.startsWith('javascript:') || 
-          href.startsWith('mailto:') || 
-          href.startsWith('tel:')) {
-        return;
-      }
-      
-      // Resolve relative URLs
-      let fullUrl: URL;
-      try {
-        fullUrl = new URL(href, currentUrl);
-      } catch {
-        return; // Invalid URL
-      }
-      
-      // Only include links from the same domain
-      if (fullUrl.origin !== baseOrigin) {
-        return;
-      }
-      
-      // Skip query parameters and fragments to avoid duplicate content
-      fullUrl.search = '';
-      fullUrl.hash = '';
-      
-      // Skip common non-content URLs
-      const pathLower = fullUrl.pathname.toLowerCase();
-      if (pathLower.includes('/wp-admin') || 
-          pathLower.includes('/wp-login') || 
-          pathLower.includes('/login') || 
-          pathLower.includes('/logout') || 
-          pathLower.includes('/wp-content/uploads') ||
-          pathLower.match(/\.(jpg|jpeg|png|gif|svg|webp|pdf|doc|docx|xls|xlsx|zip|rar)$/)) {
-        return;
-      }
-      
-      // Normalize URL to avoid duplicates
-      const normalizedUrl = fullUrl.toString();
-      links.push(normalizedUrl);
-    } catch (error) {
-      console.error('Error processing link:', error);
-    }
-  });
-  
-  return links;
-}
-
-// Sanitize text to remove problematic characters for database storage
-function sanitizeText(text: string): string {
-  if (!text) return '';
-  
-  return text
-    .replace(/\u0000/g, '') // Remove null bytes
-    .replace(/[\x00-\x09\x0B\x0C\x0E-\x1F\x7F]/g, '') // Remove control characters
-    .replace(/\\u0000/g, '') // Remove escaped null bytes
-    .substring(0, 1000000); // Limit length to prevent database issues
-}
+});

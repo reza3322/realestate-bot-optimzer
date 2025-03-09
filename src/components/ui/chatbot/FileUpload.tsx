@@ -1,10 +1,11 @@
+
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
-import { Upload, Loader2, AlertCircle, FileText, FileWarning } from "lucide-react";
+import { Upload, Loader2, AlertCircle, FileText } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -23,7 +24,6 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
   const [error, setError] = useState<string>("");
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [stage, setStage] = useState<string>("");
-  const [isScannedOrBinary, setIsScannedOrBinary] = useState<boolean>(false);
 
   const uploadFile = async () => {
     if (!selectedFile || !userId) {
@@ -36,7 +36,6 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
     setFileStatus("Uploading file to storage...");
     setUploadProgress(10);
     setError("");
-    setIsScannedOrBinary(false);
 
     const fileName = `${Date.now()}_${selectedFile.name}`;
     const filePath = `${userId}/${fileName}`;
@@ -53,45 +52,62 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
       setStage("processing");
       setFileStatus("Processing file content...");
       
-      const { data, error: processError } = await supabase.functions.invoke("process-pdf-content", {
-        body: {
-          filePath,
-          userId,
-          fileName: selectedFile.name,
-          priority
-        },
-      });
+      // For text files, we'll process directly
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        try {
+          const fileContent = event.target?.result as string;
+          
+          // Store text content directly in the database
+          const { error: insertError } = await supabase
+            .from("chatbot_training_files")
+            .insert({
+              user_id: userId,
+              source_file: selectedFile.name,
+              extracted_text: fileContent,
+              category: "File Import",
+              priority: priority,
+              content_type: "text/plain",
+              processing_status: "complete"
+            });
 
-      if (processError) {
-        throw new Error(processError.message || "Failed to process file");
-      }
-      
-      if (!data?.success) {
-        throw new Error(data?.error || "Failed to process file content");
-      }
+          if (insertError) throw insertError;
+          
+          setUploadProgress(100);
+          setStage("complete");
+          setFileStatus("File processed successfully!");
+          toast.success("File uploaded and processed successfully!");
+          
+          setSelectedFile(null);
+          
+          setTimeout(() => {
+            setUploadProgress(0);
+            setStage("");
+          }, 3000);
+          
+          if (onUploadComplete) onUploadComplete(true);
+        } catch (error: any) {
+          console.error("Processing error:", error);
+          setError(error.message || "Failed to process file");
+          setStage("error");
+          setUploadProgress(0);
+          toast.error(`Failed to process file: ${error.message || "Unknown error"}`);
+          if (onUploadComplete) onUploadComplete(false);
+        } finally {
+          setIsUploading(false);
+        }
+      };
 
-      setUploadProgress(100);
-      setStage("complete");
-      
-      if (data.isScannedOrBinary) {
-        setIsScannedOrBinary(true);
-        setFileStatus("File processed with limited text extraction");
-        setError("This appears to be a scanned or image-based PDF. Text extraction was limited or unsuccessful.");
-        toast.warning("PDF processed, but appears to be a scanned document with limited text extraction");
-      } else {
-        setFileStatus("File processed successfully!");
-        toast.success("File uploaded and processed successfully!");
-      }
-      
-      setSelectedFile(null);
-      
-      setTimeout(() => {
+      reader.onerror = () => {
+        setError("Failed to read file content");
+        setStage("error");
         setUploadProgress(0);
-        setStage("");
-      }, 3000);
-      
-      if (onUploadComplete) onUploadComplete(true);
+        setIsUploading(false);
+        toast.error("Failed to read file content");
+        if (onUploadComplete) onUploadComplete(false);
+      };
 
+      reader.readAsText(selectedFile);
     } catch (error: any) {
       console.error("Upload error:", error);
       setError(error.message || "Unknown error occurred");
@@ -99,9 +115,8 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
       setFileStatus("Upload failed. Please try again.");
       setStage("error");
       setUploadProgress(0);
-      if (onUploadComplete) onUploadComplete(false);
-    } finally {
       setIsUploading(false);
+      if (onUploadComplete) onUploadComplete(false);
     }
   };
 
@@ -109,15 +124,14 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
     const files = e.target.files;
     if (files && files.length > 0) {
       const file = files[0];
-      if (file.type === "application/pdf" || file.type === "text/plain") {
+      if (file.type === "text/plain") {
         setSelectedFile(file);
         setFileStatus("");
         setError("");
         setStage("");
         setUploadProgress(0);
-        setIsScannedOrBinary(false);
       } else {
-        toast.error("Only PDF and text files are supported");
+        toast.error("Only text files are supported at this time");
         e.target.value = "";
       }
     }
@@ -127,16 +141,16 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
     <Card>
       <CardHeader>
         <CardTitle className="text-lg">Upload Training Files</CardTitle>
-        <CardDescription>Upload PDF or text files to train your chatbot</CardDescription>
+        <CardDescription>Upload text files to train your chatbot</CardDescription>
       </CardHeader>
 
       <CardContent className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="file-upload">Select File (PDF or TXT)</Label>
+          <Label htmlFor="file-upload">Select File (TXT only)</Label>
           <Input 
             id="file-upload" 
             type="file" 
-            accept=".pdf,.txt" 
+            accept=".txt" 
             onChange={handleFileChange} 
             disabled={isUploading}
           />
@@ -178,20 +192,7 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
           </div>
         )}
 
-        {isScannedOrBinary && (
-          <Alert 
-            variant="default" 
-            className="mt-2 border-amber-500 bg-amber-50 text-amber-800 dark:bg-amber-900/30 dark:text-amber-500"
-          >
-            <FileWarning className="h-4 w-4" />
-            <AlertDescription>
-              This appears to be a scanned or image-based PDF. The system could not extract proper text content.
-              For best results, please upload text-based PDFs rather than scanned documents.
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {error && !isScannedOrBinary && (
+        {error && (
           <Alert variant="destructive" className="mt-2">
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>{error}</AlertDescription>
@@ -221,10 +222,9 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
         <div className="text-xs text-muted-foreground mt-2">
           <p>For best results:</p>
           <ul className="list-disc pl-5 space-y-1 mt-1">
-            <li>Use text-based PDFs rather than scanned documents</li>
+            <li>Upload plain text (.txt) files</li>
             <li>Ensure text is clearly formatted and readable</li>
-            <li>Avoid password-protected or encrypted files</li>
-            <li>For scanned documents, consider using OCR software first</li>
+            <li>Use multiple smaller files rather than one large file</li>
           </ul>
         </div>
       </CardContent>
