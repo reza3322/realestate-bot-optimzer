@@ -118,15 +118,28 @@ Deno.serve(async (req) => {
       console.log("📄 Processing PDF file");
       try {
         if (fileData instanceof ArrayBuffer || ArrayBuffer.isView(fileData)) {
+          // For PDFs, we'll extract only readable text and filter out binary data
           const decoder = new TextDecoder('utf-8');
-          const text = decoder.decode(fileData);
+          const rawText = decoder.decode(fileData);
           
-          // Extract text content from PDF
-          extractedText = text.replace(/[^\x20-\x7E\n]/g, '');
+          // More aggressive cleaning of PDF content
+          // 1. Extract only text portions that might be readable
+          // 2. Remove special PDF markers and binary data
+          extractedText = rawText
+            .replace(/%PDF-[\d.]+[\s\S]*?(?=\w{2,})/g, '') // Remove PDF header
+            .replace(/endobj|endstream|stream[\s\S]*?endstream/g, ' ') // Remove PDF objects and streams
+            .replace(/<<[\s\S]*?>>/g, ' ') // Remove PDF dictionaries
+            .replace(/\d+ 0 obj[\s\S]*?endobj/g, ' ') // Remove object definitions
+            .replace(/\/([\w]+)(?=\W)/g, ' ') // Remove PDF operators
+            .replace(/\\([nrtfv\\()\])/g, ' ') // Handle escape sequences
+            .replace(/[^\x20-\x7E\n]/g, ' ') // Keep only ASCII printable chars
+            .replace(/\s+/g, ' ') // Normalize whitespace
+            .trim();
           
-          if (!extractedText.trim()) {
-            console.log("⚠️ No text found in PDF. Returning fallback.");
-            extractedText = "PDF content extraction failed. Please upload a text version of this document.";
+          // Fallback message if extraction fails
+          if (!extractedText || extractedText.trim().length < 50) {
+            console.log("⚠️ Minimal text extracted from PDF. Using fallback message.");
+            extractedText = "This PDF could not be properly extracted. It may be an image-based PDF or have security restrictions. Please upload a text version or try a different format.";
           }
         } else {
           console.error("⚠️ File data is not in a decodable format:", typeof fileData);
@@ -161,6 +174,7 @@ Deno.serve(async (req) => {
     }
 
     console.log(`📝 Extracted ${extractedText.length} characters of text`);
+    console.log(`🔍 Sample of extracted text: ${extractedText.substring(0, 100)}...`);
     console.log(`🔍 Inserting into chatbot_training_files table...`);
 
     // ✅ Store File Metadata in chatbot_training_files Table, ensuring content_type is provided
@@ -169,7 +183,7 @@ Deno.serve(async (req) => {
       .insert({
         user_id: userId,
         source_file: fileName,
-        extracted_text: extractedText.substring(0, 5000),
+        extracted_text: extractedText,
         category: "File Import",
         priority: parseInt(priority, 10) || 5,
         content_type: finalContentType // Ensuring this value is set
