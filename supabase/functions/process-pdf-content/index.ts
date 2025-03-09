@@ -96,16 +96,14 @@ Deno.serve(async (req) => {
 
     console.log(`📝 Extracted ${extractedText.length} characters of text`);
 
-    // ✅ Fully sanitize extracted text before inserting into PostgreSQL
+    // ✅ Advanced Cleaning (Fully sanitize extracted text)
     extractedText = extractedText
       .replace(/\u0000/g, "") // Remove null characters
-      .replace(/[\x00-\x1F\x7F]/g, "") // Remove all control characters
+      .replace(/[\x00-\x1F\x7F]/g, "") // Remove all non-printable characters
       .replace(/[^\x20-\x7EäöüßÄÖÜéèàù]/g, "") // Keep common characters
       .replace(/\s+/g, " ") // Normalize spaces
       .normalize("NFC") // Ensure proper UTF-8 encoding
       .trim();
-
-    console.log(`🔢 Using priority level: ${priority}`);
 
     console.log("💾 Inserting extracted text into database...");
     const { data: insertData, error: insertError } = await supabase
@@ -185,4 +183,3 @@ async function extractPdfText(pdfArrayBuffer: ArrayBuffer): Promise<string> {
     throw new Error(`Failed to extract text from PDF: ${error.message}`);
   }
 }
-
