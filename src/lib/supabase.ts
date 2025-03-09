@@ -402,17 +402,25 @@ export const getSystemLogs = async () => {
 };
 
 // Add a new function to process files and extract content for the chatbot
-export const processPdfContent = async (filePath: string, userId: string, contentType: string, fileName: string, priority: number = 5) => {
+export const processPdfContent = async (filePath: string, userId: string, fileName: string, priority: number = 5) => {
   try {
     console.log(`Processing file: ${filePath} for table: chatbot_training_files`);
+    
+    // Determine content type based on file extension
+    let contentType = "application/octet-stream"; // Default
+    if (fileName.toLowerCase().endsWith(".pdf")) {
+      contentType = "application/pdf";
+    } else if (fileName.toLowerCase().endsWith(".txt")) {
+      contentType = "text/plain";
+    }
     
     const { data, error } = await supabase.functions.invoke('process-pdf-content', {
       body: {
         filePath,
         userId,
-        contentType,
         fileName,
-        priority
+        priority,
+        contentType // Ensure this is passed to the edge function
       }
     });
     

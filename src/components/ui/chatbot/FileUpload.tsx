@@ -1,29 +1,17 @@
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
-import { FilePlus, Upload, Loader2, FileSearch } from "lucide-react";
+import { Upload, Loader2 } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
 
 interface FileUploadProps {
   userId: string;
   onUploadComplete?: (success: boolean) => void;
-}
-
-interface UploadedFile {
-  id: string;
-  name: string;
-  path: string;
-  size: number;
-  type: string;
-  status: "uploading" | "processing" | "completed" | "error";
-  error?: string;
-  priority?: number;
-  createdAt: Date;
 }
 
 const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
@@ -56,6 +44,14 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
       
       setFileStatus("Processing file content...");
       
+      // Determine content type based on file extension
+      let contentType = "application/octet-stream"; // Default
+      if (selectedFile.name.toLowerCase().endsWith(".pdf")) {
+        contentType = "application/pdf";
+      } else if (selectedFile.name.toLowerCase().endsWith(".txt")) {
+        contentType = "text/plain";
+      }
+      
       // Step 2: Process the file content
       const { data, error: processError } = await supabase.functions.invoke("process-pdf-content", {
         body: {
@@ -63,6 +59,7 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
           userId,
           fileName: selectedFile.name,
           priority,
+          contentType // Explicitly passing content type
         },
       });
 
