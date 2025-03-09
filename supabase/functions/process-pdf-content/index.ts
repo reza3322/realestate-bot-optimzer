@@ -1,8 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.36.0";
 import { corsHeaders } from "../_shared/cors.ts";
 import { PdfReader } from "https://deno.land/x/pdfreader@v1.1.1/mod.ts";
-
-// ✅ Import OCR library for scanned PDFs
 import { recognize } from "https://deno.land/x/tesseract@v1.0.0/mod.ts";
 
 Deno.serve(async (req) => {
@@ -171,10 +169,16 @@ async function extractTextWithOCR(pdfArrayBuffer: ArrayBuffer): Promise<string> 
     console.log("📸 Running OCR on PDF...");
     const image = new Uint8Array(pdfArrayBuffer);
     const text = await recognize(image, "eng");
+
+    if (!text.trim()) {
+      console.log("⚠️ OCR extracted no text. Returning fallback message.");
+      return "OCR could not extract text. The PDF may be too complex for automated text extraction.";
+    }
+
     console.log("✅ OCR Extraction Successful!");
     return text.trim();
   } catch (error) {
     console.error("❌ OCR Extraction Failed:", error);
-    return "";
+    return "OCR failed to extract text from this PDF.";
   }
 }
