@@ -99,17 +99,15 @@ Deno.serve(async (req) => {
     // Strong Unicode Sanitization
     extractedText = cleanText(extractedText);
 
-    console.log("💾 Storing extracted text in the correct table...");
+    console.log("💾 Storing extracted text in the chatbot_training_files table...");
 
-    // Insert training data into the correct table
-    const tableName = contentType === "faq" ? "chatbot_training_data" : "chatbot_training_files";
-
+    // Always store file content in the chatbot_training_files table regardless of contentType
     const { data: insertData, error: insertError } = await supabase
-      .from(tableName)
+      .from("chatbot_training_files")
       .insert({
         user_id: userId,
         content_type: contentType,
-        source_file: fileName, // Store file name instead of using it as a question
+        source_file: fileName,
         extracted_text: extractedText.substring(0, 5000),
         category: "File Import",
         priority: parseInt(priority, 10) || 5
