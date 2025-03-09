@@ -1,3 +1,4 @@
+
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.36.0';
 import { OpenAI } from 'https://esm.sh/openai@4.11.1';
 import { corsHeaders } from "../_shared/cors.ts";
@@ -52,6 +53,7 @@ Deno.serve(async (req) => {
     let shouldCollectLeadInfo = false;
     let isQualifyingConversation = false;
     let relevantTrainingData = [];
+    let propertyRecommendation = false;
     
     // Step 1: Find relevant training data for this user
     if (userId) {
@@ -92,9 +94,17 @@ Deno.serve(async (req) => {
               if (questionTerms.includes(term)) {
                 matchScore += 1;
               }
-              // Extra points for key real estate terms
-              if (['property', 'house', 'price', 'buy', 'sell', 'rent', 'mortgage', 'bedroom', 'bathroom'].includes(term)) {
-                matchScore += 0.5;
+              
+              // Extra points for key real estate and lead capture terms
+              const realEstateTerms = ['property', 'house', 'price', 'buy', 'sell', 'rent', 'mortgage', 'bedroom', 'bathroom', 'condo', 'apartment'];
+              const leadCaptureTerms = ['contact', 'email', 'phone', 'schedule', 'viewing', 'tour', 'visit', 'details', 'more information'];
+              
+              if (realEstateTerms.includes(term)) {
+                matchScore += 0.8; // Boosted weight for real estate terms
+              }
+              
+              if (leadCaptureTerms.includes(term)) {
+                matchScore += 1.0; // Higher weight for lead capture terms
               }
             }
             
@@ -111,11 +121,23 @@ Deno.serve(async (req) => {
               }
             }
             
+            // Apply category-specific boosts
+            let categoryBoost = 1.0;
+            if (item.category && 
+                (item.category.toLowerCase().includes('property') || 
+                 item.category.toLowerCase().includes('listing'))) {
+              categoryBoost = 1.3; // Higher priority for property listings
+            } else if (item.category && 
+                      (item.category.toLowerCase().includes('lead') || 
+                       item.category.toLowerCase().includes('contact'))) {
+              categoryBoost = 1.2; // Higher priority for lead capture content
+            }
+            
             // Apply the priority multiplier from the training data
             const priorityMultiplier = 1 + (item.priority || 0) / 10;
             
-            // Final score calculation
-            const finalScore = (matchScore + exactPhraseBonus) * priorityMultiplier;
+            // Final score calculation with category boost
+            const finalScore = (matchScore + exactPhraseBonus) * priorityMultiplier * categoryBoost;
             
             return {
               ...item,
@@ -148,6 +170,15 @@ Deno.serve(async (req) => {
                 if (extractedText.includes(term)) {
                   matchScore += 0.5; // Lower weight per term than exact QA matches
                 }
+                
+                // Boost property and lead capture terms
+                const propertyTerms = ['property', 'house', 'condo', 'apartment', 'bedroom', 'bathroom', 'pool', 'garage'];
+                const locationTerms = ['location', 'city', 'neighborhood', 'area', 'miami', 'new york', 'los angeles'];
+                const priceTerms = ['price', 'budget', '$', 'dollar', 'cost', 'afford'];
+                
+                if (propertyTerms.includes(term)) matchScore += 0.7;
+                if (locationTerms.includes(term)) matchScore += 0.7;
+                if (priceTerms.includes(term)) matchScore += 0.8;
               }
               
               // Check for exact phrase match
@@ -175,6 +206,56 @@ Deno.serve(async (req) => {
                 source: 'file'
               };
             });
+            
+            // Check for property listings separately if they exist
+            const containsPropertySearchTerms = messageTerms.some(term => 
+              ['property', 'house', 'condo', 'apartment', 'home', 'bedroom'].includes(term)
+            );
+            
+            // Check for location terms
+            const locationTerms = ['in', 'near', 'around', 'at'];
+            const containsLocationTerms = messageTerms.some(term => locationTerms.includes(term));
+            
+            // Check for price/budget terms
+            const priceTerms = ['under', 'below', 'above', 'over', 'between', 'affordable', 'luxury', 'budget'];
+            const containsPriceTerms = messageTerms.some(term => priceTerms.includes(term));
+            
+            if (containsPropertySearchTerms || containsLocationTerms || containsPriceTerms) {
+              // This is likely a property search query
+              console.log('🏠 Detected property search intent');
+              propertyRecommendation = true;
+              
+              // Try to find properties in the training data that match the query
+              // This would normally be a more sophisticated function to search the properties table
+              // For example:
+              try {
+                // Simple proof of concept - in a real system this would be more sophisticated
+                const { data: properties, error: propertiesError } = await supabase
+                  .from('properties')
+                  .select('*')
+                  .eq('user_id', userId)
+                  .limit(3);
+                
+                if (propertiesError) {
+                  console.error('❌ Error fetching properties:', propertiesError);
+                } else if (properties && properties.length > 0) {
+                  console.log(`✅ Found ${properties.length} properties to recommend`);
+                  
+                  // Format properties for inclusion in the AI prompt
+                  const propertyDescriptions = properties.map(property => {
+                    return `${property.title} - $${property.price} - ${property.bedrooms} BR, ${property.bathrooms} Bath - ${property.city}, ${property.state}`;
+                  }).join('\n');
+                  
+                  // Add this to the relevant training data with high priority
+                  relevantTrainingData.unshift({
+                    question: "What properties do you have available?",
+                    answer: "Here are some properties you might be interested in:\n" + propertyDescriptions
+                  });
+                }
+              } catch (propertiesError) {
+                console.error('❌ Exception during property search:', propertiesError);
+              }
+            }
             
             // Combine both types of matches
             const allScoredMatches = [...scoredMatches, ...scoredFileMatches];
@@ -212,62 +293,140 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Check if this is a qualifying conversation to collect lead info
+    // Enhanced lead qualification logic - more triggers for lead collection
     if (previousMessages && Array.isArray(previousMessages)) {
-      // Check for qualifying keywords in the conversation
-      const qualifyingKeywords = ['buy', 'purchase', 'looking for', 'interested in', 'property', 'house', 'apartment', 'home'];
+      // Check for qualifying keywords in the conversation - expanded list
+      const qualifyingKeywords = [
+        'buy', 'purchase', 'looking for', 'interested in', 'property', 'house', 'apartment', 'home',
+        'send details', 'more information', 'tell me about', 'pricing', 'schedule', 'viewing',
+        'tour', 'visit', 'availability', 'when can I see', 'contact', 'agent', 'broker', 'realtor'
+      ];
       
       // Check user messages for qualifying keywords
       const containsQualifyingKeywords = previousMessages
         .filter(msg => msg.role === 'user')
         .some(msg => qualifyingKeywords.some(keyword => msg.content.toLowerCase().includes(keyword)));
       
-      if (containsQualifyingKeywords) {
+      // Also check current message
+      const currentMessageHasQualifyingKeywords = qualifyingKeywords.some(keyword => 
+        message.toLowerCase().includes(keyword)
+      );
+      
+      if (containsQualifyingKeywords || currentMessageHasQualifyingKeywords) {
         isQualifyingConversation = true;
         
         // Check if we have already collected contact info
         const hasName = leadInfo.name || previousMessages.some(msg => msg.role === 'bot' && msg.content.includes('name'));
         const hasEmail = leadInfo.email || previousMessages.some(msg => msg.role === 'bot' && msg.content.includes('email'));
+        const hasPhone = leadInfo.phone || previousMessages.some(msg => msg.role === 'bot' && msg.content.includes('phone'));
         const hasBudget = leadInfo.budget || previousMessages.some(msg => msg.role === 'bot' && msg.content.includes('budget'));
         
-        shouldCollectLeadInfo = !hasName || !hasEmail || !hasBudget;
+        // More refined logic for when to collect lead info
+        shouldCollectLeadInfo = !hasEmail || (!hasPhone && Math.random() > 0.5) || (!hasName && Math.random() > 0.7) || (!hasBudget && propertyRecommendation);
         
         console.log('📊 Lead qualification check:', { 
           isQualifyingConversation, 
           shouldCollectLeadInfo,
           hasName,
           hasEmail,
-          hasBudget
+          hasPhone,
+          hasBudget,
+          propertyRecommendation
         });
       }
     }
 
-    // Extract lead info from the current message
+    // Enhanced lead info extraction from the current message
     if (isQualifyingConversation) {
-      // Extract email
-      const emailRegex = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/;
-      const emailMatch = message.match(emailRegex);
-      if (emailMatch && !leadInfo.email) {
-        leadInfo.email = emailMatch[0];
+      // Extract email with improved regex
+      const emailRegex = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g;
+      const emailMatches = message.match(emailRegex);
+      if (emailMatches && !leadInfo.email) {
+        leadInfo.email = emailMatches[0];
         console.log('📧 Extracted email from message:', leadInfo.email);
       }
       
-      // Extract budget
-      const budgetRegex = /\b(\$|€|£)?(\d{1,3}(,\d{3})*(\.\d+)?|\d+)(k|K|thousand|million|M)?\b/;
+      // Enhanced phone extraction with international formats
+      const phoneRegex = /\b(\+\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b|\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b/g;
+      const phoneMatches = message.match(phoneRegex);
+      if (phoneMatches && !leadInfo.phone) {
+        leadInfo.phone = phoneMatches[0];
+        console.log('📱 Extracted phone from message:', leadInfo.phone);
+      }
+      
+      // Improved name extraction
+      const namePatterns = [
+        /(?:my name is|i am|i'm|this is) ([A-Z][a-z]+(?: [A-Z][a-z]+)?)/i,
+        /([A-Z][a-z]+(?: [A-Z][a-z]+)?) here/i,
+        /^([A-Z][a-z]+(?: [A-Z][a-z]+)?)$/i  // Message is just a name
+      ];
+      
+      for (const pattern of namePatterns) {
+        const nameMatch = message.match(pattern);
+        if (nameMatch && nameMatch[1] && !leadInfo.name) {
+          leadInfo.name = nameMatch[1];
+          console.log('👤 Extracted name from message:', leadInfo.name);
+          break;
+        }
+      }
+      
+      // Enhanced budget extraction
+      const budgetRegex = /(?:budget|afford|looking to spend|price range|under|up to|max|maximum)[^\d]*(\$?[\d,]+(?:[\d,.]+k)?(?:\s*-\s*\$?[\d,]+(?:[\d,.]+k)?)?)/i;
       const budgetMatch = message.match(budgetRegex);
-      if (budgetMatch && !leadInfo.budget) {
-        leadInfo.budget = budgetMatch[0];
+      if (budgetMatch && budgetMatch[1] && !leadInfo.budget) {
+        leadInfo.budget = budgetMatch[1];
         console.log('💰 Extracted budget from message:', leadInfo.budget);
       }
       
-      // Check for name if the bot previously asked for it
-      const nameCheck = previousMessages && previousMessages.length > 0 && 
-                        previousMessages[previousMessages.length - 1].role === 'bot' && 
-                        previousMessages[previousMessages.length - 1].content.includes('name');
+      // Enhanced property interest detection
+      const propertyTypeTerms = {
+        'house': 'House',
+        'home': 'House',
+        'condo': 'Condo',
+        'apartment': 'Apartment',
+        'townhouse': 'Townhouse',
+        'duplex': 'Duplex',
+        'penthouse': 'Penthouse',
+        'studio': 'Studio',
+        'loft': 'Loft'
+      };
       
-      if (nameCheck && !leadInfo.name && message.length < 50) {
-        leadInfo.name = message;
-        console.log('👤 Extracted name from message:', leadInfo.name);
+      const interestTypeTerms = {
+        'buy': 'Buying',
+        'buying': 'Buying',
+        'purchase': 'Buying',
+        'invest': 'Buying',
+        'sell': 'Selling',
+        'selling': 'Selling',
+        'rent': 'Renting',
+        'renting': 'Renting',
+        'lease': 'Renting'
+      };
+      
+      // Detect property type interest
+      for (const [term, value] of Object.entries(propertyTypeTerms)) {
+        if (message.toLowerCase().includes(term) && !leadInfo.propertyType) {
+          leadInfo.propertyType = value;
+          console.log('🏠 Extracted property type interest:', leadInfo.propertyType);
+          break;
+        }
+      }
+      
+      // Detect buying/selling/renting interest
+      for (const [term, value] of Object.entries(interestTypeTerms)) {
+        if (message.toLowerCase().includes(term) && !leadInfo.propertyInterest) {
+          leadInfo.propertyInterest = value;
+          console.log('🔑 Extracted property interest type:', leadInfo.propertyInterest);
+          break;
+        }
+      }
+      
+      // Extract location interest
+      const locationRegex = /(?:in|near|around|at) ([A-Z][a-z]+(?: [A-Z][a-z]+)?)/i;
+      const locationMatch = message.match(locationRegex);
+      if (locationMatch && locationMatch[1] && !leadInfo.location) {
+        leadInfo.location = locationMatch[1];
+        console.log('📍 Extracted location interest:', leadInfo.location);
       }
     }
 
@@ -276,26 +435,92 @@ Deno.serve(async (req) => {
       console.log('🤖 Generating enhanced response with OpenAI');
       
       try {
-        // Create system message with lead qualification instructions if needed
-        let systemPrompt = "You are a helpful AI assistant for a real estate business. ";
+        // Create system message with enhanced lead qualification and property recommendation instructions
+        let systemPrompt = "";
         
-        if (isQualifyingConversation && shouldCollectLeadInfo) {
-          systemPrompt += "Your primary goal is to collect the following visitor information in a conversational way: name, email, phone (if possible), property interest, and budget. ";
-          systemPrompt += "Ask for only ONE piece of missing information at a time. ";
-          systemPrompt += "Also evaluate their interest level and urgency to buy or sell on a scale from 1-10 based on their responses. ";
-          systemPrompt += "Be natural and friendly, not robotic or formulaic. ";
-        } else {
-          systemPrompt += "Provide helpful, concise, and friendly responses about real estate. ";
+        // Different system prompts based on whether it's demo mode or real user chatbot
+        if (userId === 'demo-user') {
+          // DEMO MODE SYSTEM PROMPT - Focused on explaining RealHomeAI product
+          systemPrompt = `You are an AI chatbot representing RealHomeAI, a SaaS product for real estate professionals. 
           
+Your primary goal is to explain the RealHomeAI product features, answer real estate industry questions, and engage with potential customers in a friendly, conversational way.
+
+RealHomeAI is an AI-powered chatbot for real estate professionals.
+It helps real estate agents capture leads, answer questions, and recommend properties.
+
+Key Features:
+- 24/7 AI chatbot for real estate websites
+- Customizable training for each agency
+- Lead qualification & automated follow-ups
+- Integration with real estate CRMs
+- Analytics dashboard for tracking conversations
+
+Pricing:
+- Starter: $29/month - Basic chatbot with lead capture
+- Pro: $79/month - AI chatbot with property recommendations
+- Enterprise: Custom pricing - Full integration with CRM and website
+
+IMPORTANT BEHAVIORS:
+1. ONLY answer questions related to real estate industry, SaaS products, or the RealHomeAI product itself. 
+2. If asked about unrelated topics (politics, jokes, etc.), politely steer the conversation back to real estate.
+3. Be friendly, helpful, and conversational in tone. Sound like a knowledgeable real estate tech consultant.
+4. Always try to highlight how RealHomeAI solves problems for real estate professionals.
+5. When appropriate, ask for the visitor's email to "send more information about RealHomeAI" - but don't be pushy.
+
+For any questions about how to use RealHomeAI, explain that agencies can customize their own chatbot with their own data and it will engage with website visitors 24/7.`;
+        } else {
+          // REAL USER CHATBOT SYSTEM PROMPT - Focused on lead generation and property recommendations
+          systemPrompt = `You are a friendly, conversational real estate assistant for a property agency. Your goal is to help potential clients find properties, answer questions, and ultimately connect them with a real estate agent.
+
+IMPORTANT BEHAVIORS:
+1. Always sound natural, friendly, and helpful - like a real estate agent who genuinely wants to help.
+2. When users express interest in properties or ask about real estate, look for opportunities to recommend specific properties.
+3. If the user expresses interest in a property or area, offer to "send more details" or "share some options" with them.
+4. After offering to send details, ask how they would prefer to receive them (email or phone), making it a natural part of the conversation.
+5. If a user mentions a specific property feature, location, or budget, always suggest available listings that match.
+6. When recommending properties, describe them in an engaging, conversational way (not just listing facts).
+7. Always try to move the conversation toward scheduling a viewing when appropriate - frame it as a helpful next step.
+8. Extract useful lead information (name, email, phone, budget, location preferences) through natural conversation.
+9. Focus on being helpful first - lead capture should feel natural and beneficial to the user.
+10. Ask follow-up questions to maintain a natural conversation flow and learn more about their needs.`;
+
           // Add relevant training data to the system prompt
           if (relevantTrainingData.length > 0) {
-            systemPrompt += "\n\nHere is some specific information provided by the real estate agent that you should prioritize in your answers:\n\n";
+            systemPrompt += "\n\nHere is some specific information provided by the real estate agency that you should prioritize in your answers:\n\n";
             
             for (const item of relevantTrainingData) {
               systemPrompt += `Question: ${item.question}\nAnswer: ${item.answer}\n\n`;
             }
             
             systemPrompt += "When the user's question relates to the information above, make sure to incorporate those details into your response. If their question isn't related to the above information, you can provide general real estate knowledge.";
+          }
+          
+          // If we detected property intent, add specific instructions
+          if (propertyRecommendation) {
+            systemPrompt += "\n\nThe user appears to be looking for property recommendations. Make sure to:\n";
+            systemPrompt += "1. Suggest specific properties that match their criteria when possible.\n";
+            systemPrompt += "2. Ask follow-up questions about their preferences (location, size, amenities, etc.).\n";
+            systemPrompt += "3. Offer to send them more property details, and then naturally ask for their contact information.\n";
+            systemPrompt += "4. Suggest a viewing or consultation with an agent as a helpful next step.\n";
+          }
+          
+          // If we need to collect lead info, add specific guidance
+          if (shouldCollectLeadInfo) {
+            systemPrompt += "\n\nThis conversation has potential for lead capture. Without being pushy:\n";
+            
+            if (!leadInfo.email && !leadInfo.phone) {
+              systemPrompt += "- After providing helpful information, offer to send more details and ask how they prefer to receive them (email or phone).\n";
+            } else if (leadInfo.email && !leadInfo.name) {
+              systemPrompt += "- Try to naturally ask for their name in the conversation flow.\n";
+            } else if (leadInfo.name && !leadInfo.propertyInterest) {
+              systemPrompt += "- Try to determine what type of property they're interested in and whether they're looking to buy, sell, or rent.\n";
+            }
+            
+            if (propertyRecommendation && !leadInfo.budget) {
+              systemPrompt += "- When appropriate, ask about their budget or price range to help find suitable properties.\n";
+            }
+            
+            systemPrompt += "Remember: Always provide value first, then ask for information as a way to better help them.";
           }
         }
         
@@ -364,7 +589,7 @@ Deno.serve(async (req) => {
         }
         
         // If we have collected enough lead info, create a lead
-        if (leadInfo.email && (leadInfo.name || leadInfo.phone || leadInfo.budget)) {
+        if (leadInfo.email || leadInfo.phone) {
           console.log('👥 Creating or updating lead with info:', leadInfo);
           
           // Check if lead already exists
@@ -372,7 +597,7 @@ Deno.serve(async (req) => {
             .from('leads')
             .select('*')
             .eq('user_id', userId)
-            .eq('email', leadInfo.email);
+            .or(`email.eq.${leadInfo.email},phone.eq.${leadInfo.phone}`);
             
           if (findError) {
             console.error('❌ Error checking for existing lead:', findError);
@@ -390,6 +615,7 @@ Deno.serve(async (req) => {
               }
             }
             
+            if (leadInfo.email && !existingLead.email) updates.email = leadInfo.email;
             if (leadInfo.phone && !existingLead.phone) updates.phone = leadInfo.phone;
             if (leadInfo.budget && !existingLead.budget) {
               // Convert budget string to number if possible
@@ -397,6 +623,20 @@ Deno.serve(async (req) => {
               if (!isNaN(budgetNum)) updates.budget = budgetNum;
             }
             if (leadInfo.propertyInterest && !existingLead.property_interest) updates.property_interest = leadInfo.propertyInterest;
+            
+            // Add location to notes if available
+            if (leadInfo.location) {
+              updates.notes = existingLead.notes 
+                ? `${existingLead.notes}\nInterested in: ${leadInfo.location}`
+                : `Interested in: ${leadInfo.location}`;
+            }
+            
+            // Add property type to notes if available
+            if (leadInfo.propertyType) {
+              updates.notes = updates.notes || existingLead.notes || '';
+              if (updates.notes) updates.notes += '\n';
+              updates.notes += `Property type: ${leadInfo.propertyType}`;
+            }
             
             // Only update if we have new information
             if (Object.keys(updates).length > 0) {
@@ -430,16 +670,22 @@ Deno.serve(async (req) => {
               if (isNaN(budgetNum)) budgetNum = null;
             }
             
+            // Prepare notes with additional lead info
+            let notes = '';
+            if (leadInfo.location) notes += `Interested in: ${leadInfo.location}\n`;
+            if (leadInfo.propertyType) notes += `Property type: ${leadInfo.propertyType}\n`;
+            
             const { error: insertLeadError } = await supabase
               .from('leads')
               .insert({
                 user_id: userId,
                 ...nameData,
-                email: leadInfo.email,
+                email: leadInfo.email || null,
                 phone: leadInfo.phone || null,
                 source: 'AI Chatbot',
                 property_interest: leadInfo.propertyInterest || null,
                 budget: budgetNum,
+                notes: notes || null,
                 conversation_id: chatConversationId,
                 status: 'new'
               });

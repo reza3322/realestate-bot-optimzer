@@ -17,14 +17,12 @@ export const findRelevantTrainingData = async (userId: string, message: string) 
       };
     }
     
-    // Find Q&A matches
+    // Find Q&A matches with improved property and lead-capture focused matching
     const { data: qaMatches, error: qaError } = await supabase
-      .from('chatbot_training_data')
-      .select('question, answer, priority, category')
-      .eq('user_id', userId)
-      .or(`question.ilike.%${message}%,answer.ilike.%${message}%`)
-      .order('priority', { ascending: false })
-      .limit(5);
+      .rpc('search_training_data', {
+        user_id_param: userId,
+        query_text: message
+      });
       
     if (qaError) {
       console.error("Error searching training data:", qaError);
@@ -63,49 +61,81 @@ const isValidUUID = (str: string) => {
   return uuidRegex.test(str);
 };
 
-// Function to extract lead information from user message
+// Enhanced function to extract lead information from user message
 export const extractLeadInfo = (message: string): Partial<VisitorInfo> => {
   const leadInfo: Partial<VisitorInfo> = {};
   
-  // Extract email
+  // Extract email - improved regex
   const emailRegex = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g;
   const emailMatches = message.match(emailRegex);
   if (emailMatches && emailMatches.length > 0) {
     leadInfo.email = emailMatches[0];
   }
   
-  // Extract phone number (simple pattern)
-  const phoneRegex = /\b(\+\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b/g;
+  // Extract phone number - enhanced pattern for multiple formats
+  const phoneRegex = /\b(\+\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b|\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b/g;
   const phoneMatches = message.match(phoneRegex);
   if (phoneMatches && phoneMatches.length > 0) {
     leadInfo.phone = phoneMatches[0];
   }
   
-  // Extract name patterns (simple approach)
-  const nameRegex = /(?:my name is|i am|i'm) ([A-Z][a-z]+(?: [A-Z][a-z]+)?)/i;
-  const nameMatch = message.match(nameRegex);
-  if (nameMatch && nameMatch[1]) {
-    leadInfo.name = nameMatch[1];
+  // Extract name patterns - multiple patterns for better detection
+  const namePatterns = [
+    /(?:my name is|i am|i'm|this is) ([A-Z][a-z]+(?: [A-Z][a-z]+)?)/i,
+    /([A-Z][a-z]+(?: [A-Z][a-z]+)?) here/i,
+    /^([A-Z][a-z]+(?: [A-Z][a-z]+)?)$/i  // Message is just a name
+  ];
+  
+  for (const pattern of namePatterns) {
+    const nameMatch = message.match(pattern);
+    if (nameMatch && nameMatch[1]) {
+      leadInfo.name = nameMatch[1];
+      break;
+    }
   }
   
-  // Extract budget
-  const budgetRegex = /(?:budget|afford|looking to spend|price range)[^\d]*(\$?[\d,]+(?:[\d,.]+k)?(?:\s*-\s*\$?[\d,]+(?:[\d,.]+k)?)?)/i;
+  // Extract budget - enhanced pattern
+  const budgetRegex = /(?:budget|afford|looking to spend|price range|under|up to|max|maximum)[^\d]*(\$?[\d,]+(?:[\d,.]+k)?(?:\s*-\s*\$?[\d,]+(?:[\d,.]+k)?)?)/i;
   const budgetMatch = message.match(budgetRegex);
   if (budgetMatch && budgetMatch[1]) {
     leadInfo.budget = budgetMatch[1];
   }
   
-  // Extract property interest
-  if (message.toLowerCase().includes('house') || 
-      message.toLowerCase().includes('home') || 
-      message.toLowerCase().includes('property')) {
-    if (message.toLowerCase().includes('buying') || message.toLowerCase().includes('purchase')) {
-      leadInfo.propertyInterest = 'Buying';
-    } else if (message.toLowerCase().includes('selling') || message.toLowerCase().includes('sell')) {
-      leadInfo.propertyInterest = 'Selling';
-    } else if (message.toLowerCase().includes('renting') || message.toLowerCase().includes('rent')) {
-      leadInfo.propertyInterest = 'Renting';
+  // Extract property interest - enhanced with more patterns
+  const propertyTerms = ['house', 'home', 'property', 'condo', 'apartment', 'townhouse'];
+  const actionTerms = {
+    'buying': 'Buying',
+    'looking to buy': 'Buying',
+    'purchase': 'Buying',
+    'interested in buying': 'Buying',
+    'selling': 'Selling',
+    'sell': 'Selling',
+    'renting': 'Renting',
+    'rent': 'Renting',
+    'lease': 'Renting'
+  };
+  
+  // Check for property interest
+  const messageLower = message.toLowerCase();
+  if (propertyTerms.some(term => messageLower.includes(term))) {
+    for (const [action, value] of Object.entries(actionTerms)) {
+      if (messageLower.includes(action)) {
+        leadInfo.propertyInterest = value;
+        break;
+      }
     }
+    
+    // Default to "Buying" if property term found but no action specified
+    if (!leadInfo.propertyInterest && propertyTerms.some(term => messageLower.includes(term))) {
+      leadInfo.propertyInterest = 'Buying';
+    }
+  }
+  
+  // Extract location interest
+  const locationRegex = /(?:in|near|around|at) ([A-Z][a-z]+(?: [A-Z][a-z]+)?)/i;
+  const locationMatch = message.match(locationRegex);
+  if (locationMatch && locationMatch[1]) {
+    leadInfo.location = locationMatch[1];
   }
   
   return leadInfo;
@@ -123,7 +153,7 @@ export const testChatbotResponse = async (
 
   try {
     // Call our Edge Function
-    const response = await supabase.functions.invoke('ai-chatbot', {
+    const response = await supabase.functions.invoke('chatbot-response', {
       body: {
         message,
         userId,
