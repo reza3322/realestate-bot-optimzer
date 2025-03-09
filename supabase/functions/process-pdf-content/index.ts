@@ -1,3 +1,4 @@
+
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.36.0";
 import { corsHeaders } from "../_shared/cors.ts";
 import { createPDFReader } from "https://deno.land/x/pdfium_wasm@v0.0.3/mod.ts";
@@ -51,6 +52,7 @@ Deno.serve(async (req) => {
       .download(filePath);
 
     if (downloadError) {
+      console.error("❌ Download Error:", downloadError);
       return new Response(
         JSON.stringify({ success: false, error: "Failed to download file", details: downloadError }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -93,8 +95,9 @@ Deno.serve(async (req) => {
     }
 
     console.log(`📝 Extracted ${extractedText.length} characters of text`);
+    console.log(`🔍 Inserting into chatbot_training_files table...`);
 
-    // ✅ Store File Metadata in chatbot_training_files Table
+    // ✅ Store File Metadata in chatbot_training_files Table - EXPLICITLY using this table
     const { data: insertData, error: insertError } = await supabase
       .from("chatbot_training_files")
       .insert({
@@ -114,12 +117,16 @@ Deno.serve(async (req) => {
       );
     }
 
+    console.log("✅ Successfully inserted data into chatbot_training_files table");
+    console.log("📊 Insert result:", insertData);
+
     return new Response(
       JSON.stringify({
         success: true,
         message: "File processed successfully",
         entriesCreated: 1,
-        priority: priority
+        priority: priority,
+        table: "chatbot_training_files" // Adding this for debugging
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

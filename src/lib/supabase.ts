@@ -404,7 +404,7 @@ export const getSystemLogs = async () => {
 // Add a new function to process files and extract content for the chatbot
 export const processPdfContent = async (filePath: string, userId: string, contentType: string, fileName: string, priority: number = 5) => {
   try {
-    console.log(`Processing file: ${filePath}`);
+    console.log(`Processing file: ${filePath} for table: chatbot_training_files`);
     
     const { data, error } = await supabase.functions.invoke('process-pdf-content', {
       body: {
