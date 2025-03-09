@@ -55,10 +55,10 @@ serve(async (req) => {
     let failCount = 0
     let errorLog = []
     
-    // Debug all properties at once
-    console.log('All properties for debugging:', JSON.stringify(properties.slice(0, 2)))
+    // Log first few properties for debugging
+    console.log('First properties for debugging:', JSON.stringify(properties.slice(0, 2)))
     
-    // Process each property with more flexible format handling
+    // Process each property with robust format handling
     for (const property of properties) {
       try {
         // Create a normalized property object with consistent field names
@@ -67,29 +67,35 @@ serve(async (req) => {
         // Log the normalized property for debugging
         console.log('Normalized property:', JSON.stringify(normalizedProperty))
         
-        // Make title from address if missing
-        if (!normalizedProperty.title && normalizedProperty.address) {
-          normalizedProperty.title = `Property at ${normalizedProperty.address}`
-        }
-        
-        // Make title generic if still missing
-        if (!normalizedProperty.title && normalizedProperty.type) {
-          normalizedProperty.title = `${normalizedProperty.type} Property`
-        } else if (!normalizedProperty.title) {
-          normalizedProperty.title = "New Property Listing"
+        // Validate the required fields
+        if (!normalizedProperty.title) {
+          // Make title from address if missing
+          if (normalizedProperty.address) {
+            normalizedProperty.title = `Property at ${normalizedProperty.address}`
+          } else if (normalizedProperty.type) {
+            normalizedProperty.title = `${normalizedProperty.type} Property`
+          } else {
+            normalizedProperty.title = "New Property Listing"
+          }
         }
 
-        // Validate the price
+        // Validate the price - this is essential
         if (!normalizedProperty.price || normalizedProperty.price <= 0) {
           // Try to infer price from any field that has numeric value
           const possiblePriceField = findPossiblePriceField(property)
           if (possiblePriceField) {
             normalizedProperty.price = possiblePriceField
           } else {
-            // Still no price found, use a placeholder
+            // Still no price found, use a placeholder and log warning
             normalizedProperty.price = 0
             console.log(`No valid price found for property: ${normalizedProperty.title}`)
+            errorLog.push(`Missing or invalid price for property: ${normalizedProperty.title}`)
           }
+        }
+        
+        // Set default status if not provided
+        if (!normalizedProperty.status) {
+          normalizedProperty.status = 'active'
         }
         
         // Add user_id to the property
@@ -167,6 +173,24 @@ serve(async (req) => {
 
 // Helper function to find a possible price field
 function findPossiblePriceField(property) {
+  // Check if there's a field that has "price" or "cost" in its name
+  for (const [key, value] of Object.entries(property)) {
+    const keyLower = key.toLowerCase();
+    
+    if (keyLower.includes('price') || keyLower.includes('cost') || keyLower.includes('value')) {
+      if (typeof value === 'number') {
+        return value;
+      }
+      if (typeof value === 'string') {
+        const numericValue = parseNumericValue(value);
+        if (numericValue > 0) {
+          return numericValue;
+        }
+      }
+    }
+  }
+  
+  // Check for any numeric field that might be a price
   for (const [key, value] of Object.entries(property)) {
     if (typeof value === 'number' && value > 1000) {
       return value;
@@ -175,6 +199,7 @@ function findPossiblePriceField(property) {
       return parseNumericValue(value);
     }
   }
+  
   return null;
 }
 
@@ -184,111 +209,61 @@ function normalizePropertyData(property) {
   
   // Extended map of possible field names to standard field names
   const fieldMappings = {
-    // Title variants with more options
+    // Title variants
     'title': 'title', 'Title': 'title', 'property name': 'title', 'property_name': 'title',
     'propertyname': 'title', 'name': 'title', 'Name': 'title', 'heading': 'title',
     'Heading': 'title', 'listing_title': 'title', 'listing': 'title', 'property': 'title',
     'Property': 'title', 'property_title': 'title', 'header': 'title', 'Header': 'title',
-    'prop_title': 'title', 'prop name': 'title', 'property headline': 'title',
-    'subject': 'title', 'Subject': 'title', 'headline': 'title', 'Headline': 'title',
-    'property_listing': 'title', 'listing_name': 'title', 'realestate_title': 'title',
     
-    // Price variants with more options
+    // Price variants
     'price': 'price', 'Price': 'price', 'cost': 'price', 'Cost': 'price',
     'value': 'price', 'Value': 'price', 'asking_price': 'price', 'asking price': 'price',
     'listing_price': 'price', 'amount': 'price', 'Amount': 'price', 'price_eur': 'price',
     'price_usd': 'price', 'price_gbp': 'price', 'sale_price': 'price', 'rent_price': 'price',
-    'property_price': 'price', 'list_price': 'price', 'selling_price': 'price', 'final_price': 'price',
-    'monthly_price': 'price', 'yearly_price': 'price', 'offer_price': 'price', 
-    'sale_value': 'price', 'list_value': 'price', 'euro_price': 'price', 'dollar_price': 'price',
-    'eur': 'price', 'usd': 'price', 'preis': 'price', 'prix': 'price', 'precio': 'price',
-    'selling': 'price', 'listed': 'price', 'listed_price': 'price', 'total_price': 'price',
-    'home_price': 'price', 'house_price': 'price', 'apartment_price': 'price',
     
-    // Description variants with more options
+    // Description variants
     'description': 'description', 'Description': 'description', 'details': 'description',
     'Details': 'description', 'info': 'description', 'Info': 'description',
     'about': 'description', 'About': 'description', 'property_description': 'description',
-    'listing_description': 'description', 'text': 'description', 'Text': 'description',
-    'full_description': 'description', 'property_details': 'description', 'summary': 'description',
-    'Summary': 'description', 'overview': 'description', 'Overview': 'description',
-    'content': 'description', 'Content': 'description', 'long_description': 'description',
-    'note': 'description', 'notes': 'description', 'additional_info': 'description', 
-    'features': 'description', 'property_text': 'description', 'desc': 'description',
-    'comments': 'description', 'property_features': 'description', 'amenities': 'description',
-    'listing_details': 'description', 'home_description': 'description', 'full_text': 'description',
-    'more_info': 'description', 'detailed_description': 'description', 'detail': 'description',
+    'summary': 'description', 'Summary': 'description', 'notes': 'description',
     
     // Status variants 
     'status': 'status', 'Status': 'status', 'state': 'status', 'State': 'status',
-    'availability': 'status', 'Availability': 'status', 'property_status': 'status',
-    'listing_status': 'status', 'sale_status': 'status', 'condition': 'status',
-    'Condition': 'status', 'active': 'status', 'Active': 'status',
-    'property_state': 'status', 'listing_state': 'status', 'available': 'status',
-    'for_sale': 'status', 'for_rent': 'status', 'sold': 'status', 'rented': 'status',
+    'availability': 'status', 'property_status': 'status', 'condition': 'status',
     
     // Type variants
     'type': 'type', 'Type': 'type', 'property_type': 'type', 'property type': 'type',
     'category': 'type', 'Category': 'type', 'kind': 'type', 'Kind': 'type',
-    'class': 'type', 'Class': 'type', 'style': 'type', 'Style': 'type',
-    'property_category': 'type', 'property_class': 'type', 'property_style': 'type',
-    'building_type': 'type', 'residence_type': 'type', 'home_type': 'type',
-    'house_type': 'type', 'apartment_type': 'type', 'construction_type': 'type',
-    'dwelling_type': 'type', 'structure_type': 'type', 'realestate_type': 'type',
     
     // Address fields
     'address': 'address', 'Address': 'address', 'street': 'address', 'Street': 'address',
     'street_address': 'address', 'property_address': 'address', 'location_address': 'address',
-    'full_address': 'address', 'mailing_address': 'address', 'physical_address': 'address',
-    'address_line1': 'address', 'address1': 'address', 'addr': 'address',
-    'street_number': 'address', 'street_name': 'address', 'address_line': 'address',
-    'property_location': 'address', 'location': 'address',
+    'full_address': 'address', 'address_line1': 'address', 'address1': 'address',
     
     // City variants
     'city': 'city', 'City': 'city', 'town': 'city', 'Town': 'city',
     'locality': 'city', 'Locality': 'city', 'municipality': 'city',
-    'village': 'city', 'location': 'city', 'Location': 'city',
-    'property_city': 'city', 'property_town': 'city', 'area': 'city',
-    'district': 'city', 'region_name': 'city', 'urban_area': 'city',
-    'city_name': 'city', 'property_area': 'city', 'community': 'city',
-    'neighborhood': 'city', 'suburb': 'city',
+    'location': 'city', 'Location': 'city', 'area': 'city',
     
     // State/Province variants
     'state': 'state', 'State': 'state', 'province': 'state', 'Province': 'state',
     'region': 'state', 'Region': 'state', 'county': 'state', 'County': 'state',
-    'division': 'state', 'administrative_area': 'state', 'territory': 'state',
-    'state_province': 'state', 'state_code': 'state', 'province_code': 'state',
-    'state_name': 'state', 'property_state': 'state', 'province_name': 'state',
     
     // Zip/Postal code variants
     'zip': 'zip', 'Zip': 'zip', 'zipcode': 'zip', 'ZipCode': 'zip',
     'postal': 'zip', 'Postal': 'zip', 'postal_code': 'zip', 'postalcode': 'zip',
-    'zip_code': 'zip', 'code_postal': 'zip', 'post_code': 'zip', 'postcode': 'zip',
-    'pin': 'zip', 'pin_code': 'zip', 'postal_index': 'zip',
-    'zip_postal': 'zip', 'postcode_zip': 'zip', 'post_box': 'zip',
+    'zip_code': 'zip', 'post_code': 'zip', 'postcode': 'zip',
     
     // Bedrooms variants
     'bedrooms': 'bedrooms', 'Bedrooms': 'bedrooms', 'beds': 'bedrooms', 'Beds': 'bedrooms',
     'bedroom': 'bedrooms', 'Bedroom': 'bedrooms', 'bed': 'bedrooms', 'Bed': 'bedrooms',
     'br': 'bedrooms', 'BR': 'bedrooms', 'num_bedrooms': 'bedrooms', 'number_of_bedrooms': 'bedrooms',
     'bedroom_count': 'bedrooms', 'bed_count': 'bedrooms', 'rooms': 'bedrooms',
-    'no_of_bedrooms': 'bedrooms', 'nb_bedrooms': 'bedrooms', 'nb_chambres': 'bedrooms', 
-    'dormitorios': 'bedrooms', 'habitaciones': 'bedrooms', 'quartos': 'bedrooms',
-    'total_bedrooms': 'bedrooms', 'bdrooms': 'bedrooms', 'bd': 'bedrooms',
-    'num_beds': 'bedrooms', 'bedrm': 'bedrooms', 'bedroom_total': 'bedrooms',
-    'bedroom_num': 'bedrooms', 'no_bedrooms': 'bedrooms', 'bdrm': 'bedrooms',
-    'bd_num': 'bedrooms', 'bed_num': 'bedrooms', 'num_bd': 'bedrooms',
     
     // Bathrooms variants
     'bathrooms': 'bathrooms', 'Bathrooms': 'bathrooms', 'baths': 'bathrooms', 'Baths': 'bathrooms',
     'bathroom': 'bathrooms', 'Bathroom': 'bathrooms', 'bath': 'bathrooms', 'Bath': 'bathrooms',
     'ba': 'bathrooms', 'BA': 'bathrooms', 'num_bathrooms': 'bathrooms', 'number_of_bathrooms': 'bathrooms',
-    'bathroom_count': 'bathrooms', 'bath_count': 'bathrooms', 'no_of_bathrooms': 'bathrooms',
-    'nb_bathrooms': 'bathrooms', 'nb_salledebain': 'bathrooms', 'banos': 'bathrooms',
-    'total_bathrooms': 'bathrooms', 'bthrms': 'bathrooms', 'bth': 'bathrooms', 'wb': 'bathrooms',
-    'num_baths': 'bathrooms', 'bathrm': 'bathrooms', 'bathroom_total': 'bathrooms',
-    'bathroom_num': 'bathrooms', 'no_bathrooms': 'bathrooms', 'btrm': 'bathrooms',
-    'ba_num': 'bathrooms', 'bath_num': 'bathrooms', 'num_ba': 'bathrooms',
     
     // Size variants
     'size': 'size', 'Size': 'size', 'area': 'size', 'Area': 'size',
@@ -296,132 +271,95 @@ function normalizePropertyData(property) {
     'sq_ft': 'size', 'square_meters': 'size', 'squaremeters': 'size', 'sqm': 'size',
     'SQM': 'size', 'sq_m': 'size', 'footage': 'size', 'square_footage': 'size',
     'living_area': 'size', 'floor_area': 'size', 'total_area': 'size', 'property_size': 'size',
-    'building_size': 'size', 'living_space': 'size', 'total_sqft': 'size', 'total_sqm': 'size',
-    'm2': 'size', 'sq_meters': 'size', 'surface': 'size', 'superficie': 'size',
-    'floor_size': 'size', 'total_floor_area': 'size', 'lot_size': 'size', 'plot_size': 'size',
-    'mq': 'size', 'metros': 'size', 'metros2': 'size', 'ft2': 'size', 'm²': 'size', 'ft²': 'size',
-    'square': 'size', 'sq': 'size', 'property_area': 'size', 'house_size': 'size',
-    'apartment_size': 'size', 'unit_size': 'size', 'int_sqft': 'size', 'interior_size': 'size',
-    'interior_area': 'size', 'livable_area': 'size', 'gross_area': 'size'
+    'm2': 'size', 'sq_meters': 'size'
   }
   
-  // Check for numeric fields first and ensure they're properly formatted
+  // First, check for exact field name matches
   for (const [key, value] of Object.entries(property)) {
     // Skip null or undefined values
     if (value === null || value === undefined || value === '') continue;
     
-    // If there's a field that has a name containing 'bedroom'/'bath'/'size', etc, extract it
-    // This handles cases where field names might not exactly match our mappings
-    let foundStandardField = false;
-    
-    // Price fields have high priority detection
-    if (key.toLowerCase().includes('price') || key.toLowerCase().includes('cost') || 
-        key.toLowerCase().includes('value') || (/^\$?\d+[,.]\d+$/.test(value?.toString() || ''))) {
-      normalized.price = parseNumericValue(value);
-      foundStandardField = true;
-    }
-    
-    // Bed/Bath/Size are important numeric fields to detect
-    if (!foundStandardField) {
-      if (key.toLowerCase().includes('bed') || key.toLowerCase().includes('room')) {
-        normalized.bedrooms = parseNumericValue(value);
-        foundStandardField = true;
-      } else if (key.toLowerCase().includes('bath')) {
-        normalized.bathrooms = parseNumericValue(value);
-        foundStandardField = true;
-      } else if (key.toLowerCase().includes('size') || key.toLowerCase().includes('area') || 
-                key.toLowerCase().includes('sq') || key.toLowerCase().includes('ft') || 
-                key.toLowerCase().includes('meter')) {
-        normalized.size = parseNumericValue(value);
-        foundStandardField = true;
-      }
-    }
-    
-    // If we've already handled this field specifically, continue
-    if (foundStandardField) continue;
-    
-    // Now map to standard fields using our extensive mapping
     const standardField = fieldMappings[key]
     if (standardField) {
-      // Parse numeric fields
+      // Parse numeric fields appropriately
       if (standardField === 'price' || standardField === 'size') {
-        // Strip currency symbols and commas, then convert to number
-        const numericValue = parseNumericValue(value)
-        normalized[standardField] = numericValue
+        normalized[standardField] = parseNumericValue(value)
       } 
       else if (standardField === 'bedrooms' || standardField === 'bathrooms') {
-        // Convert to numeric
         normalized[standardField] = parseNumericValue(value)
       }
       else {
         normalized[standardField] = value
       }
-    } else {
-      // Try fuzzy matching for column names
-      let matched = false
-      for (const [mappingKey, mappingValue] of Object.entries(fieldMappings)) {
-        // Check if the current key resembles any of our mapping keys
-        if (
-          key.toLowerCase().includes(mappingKey.toLowerCase()) || 
-          mappingKey.toLowerCase().includes(key.toLowerCase())
-        ) {
-          if (mappingValue === 'price' || mappingValue === 'size') {
-            normalized[mappingValue] = parseNumericValue(value);
-          } else if (mappingValue === 'bedrooms' || mappingValue === 'bathrooms') {
-            normalized[mappingValue] = parseNumericValue(value);
-          } else {
-            normalized[mappingValue] = value;
-          }
-          matched = true;
-          break;
-        }
-      }
-      
-      // If not matched through fuzzy matching, keep the original field
-      if (!matched) {
-        normalized[key] = value;
-      }
     }
   }
   
-  // Set default status if not provided
-  if (!normalized.status) {
-    normalized.status = 'active'
-  }
-  
-  // If price is missing, but we have a field with a name containing 'price'
-  if (!normalized.price) {
-    for (const [key, value] of Object.entries(property)) {
-      if (key.toLowerCase().includes('price') || key.toLowerCase().includes('cost') || 
-          key.toLowerCase().includes('value') || key.toLowerCase().includes('eur') || 
-          key.toLowerCase().includes('usd')) {
-        normalized.price = parseNumericValue(value);
-        break;
-      }
-    }
-  }
-  
-  // If title is missing but we have a name-like field
-  if (!normalized.title) {
-    for (const [key, value] of Object.entries(property)) {
-      if (key.toLowerCase().includes('name') || key.toLowerCase().includes('title') || 
-          key.toLowerCase().includes('heading') || key.toLowerCase().includes('property')) {
+  // Then, try fuzzy matching for column names
+  for (const [key, value] of Object.entries(property)) {
+    if (value === null || value === undefined || value === '') continue;
+    
+    // Skip if we already found a value for this field
+    const keyLower = key.toLowerCase();
+    
+    // Check for title-like fields
+    if (!normalized.title) {
+      if (keyLower.includes('title') || keyLower.includes('name') || 
+          keyLower.includes('property') || keyLower.includes('listing')) {
         normalized.title = value;
-        break;
+        continue;
+      }
+    }
+    
+    // Check for price-like fields
+    if (!normalized.price) {
+      if (keyLower.includes('price') || keyLower.includes('cost') || 
+          keyLower.includes('value') || keyLower.includes('amount')) {
+        normalized.price = parseNumericValue(value);
+        continue;
+      }
+    }
+    
+    // Check for description-like fields
+    if (!normalized.description) {
+      if (keyLower.includes('desc') || keyLower.includes('about') || 
+          keyLower.includes('detail') || keyLower.includes('info')) {
+        normalized.description = value;
+        continue;
+      }
+    }
+    
+    // Check for bedroom-like fields
+    if (!normalized.bedrooms) {
+      if (keyLower.includes('bed') || keyLower.includes('room') ||
+          keyLower.includes('br') || keyLower === 'rooms') {
+        normalized.bedrooms = parseNumericValue(value);
+        continue;
+      }
+    }
+    
+    // Check for bathroom-like fields
+    if (!normalized.bathrooms) {
+      if (keyLower.includes('bath') || keyLower.includes('ba')) {
+        normalized.bathrooms = parseNumericValue(value);
+        continue;
+      }
+    }
+    
+    // Check for size-like fields
+    if (!normalized.size) {
+      if (keyLower.includes('size') || keyLower.includes('area') || 
+          keyLower.includes('sqft') || keyLower.includes('sq ft') ||
+          keyLower.includes('square') || keyLower.includes('meter') ||
+          keyLower.includes('m2') || keyLower.includes('footage')) {
+        normalized.size = parseNumericValue(value);
+        continue;
       }
     }
   }
   
-  // If we still don't have description but have text fields
-  if (!normalized.description) {
-    for (const [key, value] of Object.entries(property)) {
-      if (key.toLowerCase().includes('desc') || key.toLowerCase().includes('text') || 
-          key.toLowerCase().includes('note') || key.toLowerCase().includes('detail') ||
-          key.toLowerCase().includes('feature')) {
-        normalized.description = value;
-        break;
-      }
-    }
+  // Last attempt - for any fields we couldn't normalize, try numeric detection
+  if (!normalized.price) {
+    normalized.price = findPossiblePriceField(property) || 0;
   }
   
   return normalized
@@ -434,44 +372,25 @@ function parseNumericValue(value) {
   if (typeof value === 'number') return value;
   
   if (typeof value === 'string') {
-    // First handle common suffixes like K or M (for thousands or millions)
-    if (/\d+\s*k$/i.test(value)) {
-      // Handle "150k" or "150 k" format (thousands)
-      const num = parseFloat(value.replace(/k$/i, '').replace(/,/g, '').trim());
+    // Handle values with currency symbols
+    let cleaned = value.replace(/[$€£¥,\s]+/g, '');
+    
+    // Handle K/M suffixes (thousands/millions)
+    if (/\d+\s*k$/i.test(cleaned)) {
+      const num = parseFloat(cleaned.replace(/k$/i, ''));
       return num * 1000;
-    } else if (/\d+\s*m$/i.test(value)) {
-      // Handle "1.5m" or "1.5 m" format (millions)
-      const num = parseFloat(value.replace(/m$/i, '').replace(/,/g, '').trim());
+    } else if (/\d+\s*m$/i.test(cleaned)) {
+      const num = parseFloat(cleaned.replace(/m$/i, ''));
       return num * 1000000;
     }
     
-    // Handle values with currency symbols at beginning
-    if (/^[$€£¥]/.test(value)) {
-      const cleaned = value.replace(/[$€£¥,\s]+/g, '').replace(/[^\d.-]/g, '');
-      if (!isNaN(parseFloat(cleaned))) {
-        return parseFloat(cleaned);
-      }
-    }
-    
-    // Remove currency symbols, commas, spaces, and other non-numeric characters
-    // But keep the decimal point
-    const cleaned = value.replace(/[$€£¥,\s]+/g, '').replace(/[^\d.-]/g, '');
-    
-    // If there's a slash (like in "1/2" for bathrooms), calculate the fraction
-    if (cleaned.includes('/')) {
-      const parts = cleaned.split('/');
-      if (parts.length === 2 && !isNaN(parseFloat(parts[0])) && !isNaN(parseFloat(parts[1])) && parseFloat(parts[1]) !== 0) {
-        return parseFloat(parts[0]) / parseFloat(parts[1]);
-      }
-    }
-    
-    // Extract numeric part
+    // Extract numeric part and convert to number
     const match = cleaned.match(/([-+]?\d*\.?\d+)/);
     if (match) {
       return parseFloat(match[0]);
     }
   }
   
-  // If value is not a number or couldn't be parsed, return 0
+  // If value couldn't be parsed, return 0
   return 0;
 }

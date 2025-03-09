@@ -45,6 +45,7 @@ const PropertyListings = ({ userId, isPremiumFeature }) => {
     status: "active"
   });
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [filteredProperties, setFilteredProperties] = useState([]);
   const [sortConfig, setSortConfig] = useState({
@@ -131,6 +132,9 @@ const PropertyListings = ({ userId, isPremiumFeature }) => {
     setIsImporting(true);
     setImportStatus("Importing properties...");
     
+    // Add additional debugging information
+    console.log("Importing data:", JSON.stringify(parsedData.slice(0, 2)));
+    
     try {
       // Call the Supabase Edge Function to import properties
       const { data, error } = await supabase.functions.invoke("import-properties", {
@@ -145,6 +149,7 @@ const PropertyListings = ({ userId, isPremiumFeature }) => {
         throw error;
       }
       
+      console.log("Import result:", data);
       setImportResult(data);
       
       if (data.properties_imported > 0) {
@@ -156,9 +161,17 @@ const PropertyListings = ({ userId, isPremiumFeature }) => {
       
       if (data.properties_failed > 0) {
         toast.error(`${data.properties_failed} properties failed to import`);
+        console.error("Failed imports:", data.errors);
       }
       
       setImportStatus(`Import completed. ${data.properties_imported} imported, ${data.properties_failed} failed.`);
+      
+      // Close the dialog after successful import with slight delay
+      if (data.properties_imported > 0) {
+        setTimeout(() => {
+          setImportDialogOpen(false);
+        }, 2000);
+      }
     } catch (error) {
       console.error("Error importing properties:", error);
       toast.error("Failed to import properties");
@@ -318,336 +331,20 @@ const PropertyListings = ({ userId, isPremiumFeature }) => {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="mr-2 h-4 w-4" />
-                Add Property
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[600px]">
-              <DialogHeader>
-                <DialogTitle>Add New Property</DialogTitle>
-                <DialogDescription>
-                  Enter the details of your new property listing.
-                </DialogDescription>
-              </DialogHeader>
-              <form id="add-property-form" className="space-y-4">
-                <ScrollArea className="max-h-[70vh] pr-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="title">Title*</Label>
-                      <Input
-                        id="title"
-                        name="title"
-                        value={newProperty.title}
-                        onChange={handleInputChange}
-                        placeholder="e.g. Beautiful 3BR Home"
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="price">Price*</Label>
-                      <Input
-                        id="price"
-                        name="price"
-                        type="number"
-                        value={newProperty.price}
-                        onChange={handleInputChange}
-                        placeholder="e.g. 450000"
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2 md:col-span-2">
-                      <Label htmlFor="description">Description</Label>
-                      <Textarea
-                        id="description"
-                        name="description"
-                        value={newProperty.description}
-                        onChange={handleInputChange}
-                        placeholder="Describe your property..."
-                        rows={3}
-                      />
-                    </div>
-                    <div className="space-y-2 md:col-span-2">
-                      <Label htmlFor="address">Address</Label>
-                      <Input
-                        id="address"
-                        name="address"
-                        value={newProperty.address}
-                        onChange={handleInputChange}
-                        placeholder="e.g. 123 Main St"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="city">City</Label>
-                      <Input
-                        id="city"
-                        name="city"
-                        value={newProperty.city}
-                        onChange={handleInputChange}
-                        placeholder="e.g. Austin"
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="space-y-2">
-                        <Label htmlFor="state">State</Label>
-                        <Input
-                          id="state"
-                          name="state"
-                          value={newProperty.state}
-                          onChange={handleInputChange}
-                          placeholder="e.g. TX"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="zip">ZIP</Label>
-                        <Input
-                          id="zip"
-                          name="zip"
-                          value={newProperty.zip}
-                          onChange={handleInputChange}
-                          placeholder="e.g. 78701"
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="type">Property Type</Label>
-                      <Select 
-                        name="type" 
-                        value={newProperty.type} 
-                        onValueChange={(value) => handleSelectChange("type", value)}
-                      >
-                        <SelectTrigger id="type">
-                          <SelectValue placeholder="Select type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="house">House</SelectItem>
-                          <SelectItem value="apartment">Apartment</SelectItem>
-                          <SelectItem value="condo">Condo</SelectItem>
-                          <SelectItem value="townhouse">Townhouse</SelectItem>
-                          <SelectItem value="land">Land</SelectItem>
-                          <SelectItem value="commercial">Commercial</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="status">Status</Label>
-                      <Select 
-                        name="status"
-                        value={newProperty.status} 
-                        onValueChange={(value) => handleSelectChange("status", value)}
-                      >
-                        <SelectTrigger id="status">
-                          <SelectValue placeholder="Select status" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="active">Active</SelectItem>
-                          <SelectItem value="pending">Pending</SelectItem>
-                          <SelectItem value="sold">Sold</SelectItem>
-                          <SelectItem value="inactive">Inactive</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="bedrooms">Bedrooms</Label>
-                      <Input
-                        id="bedrooms"
-                        name="bedrooms"
-                        type="number"
-                        value={newProperty.bedrooms}
-                        onChange={handleInputChange}
-                        placeholder="e.g. 3"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="bathrooms">Bathrooms</Label>
-                      <Input
-                        id="bathrooms"
-                        name="bathrooms"
-                        type="number"
-                        step="0.5"
-                        value={newProperty.bathrooms}
-                        onChange={handleInputChange}
-                        placeholder="e.g. 2.5"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="size">Size (sq ft)</Label>
-                      <Input
-                        id="size"
-                        name="size"
-                        type="number"
-                        value={newProperty.size}
-                        onChange={handleInputChange}
-                        placeholder="e.g. 2000"
-                      />
-                    </div>
-                  </div>
-                </ScrollArea>
-              </form>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
-                  Cancel
-                </Button>
-                <Button onClick={handleAddProperty}>Save Property</Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+          <Button onClick={() => setIsAddDialogOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Property
+          </Button>
           
-          <Dialog>
-            <DialogTrigger asChild>
-              <Button variant="outline">
-                <UploadCloud className="mr-2 h-4 w-4" />
-                Import CSV
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[600px]">
-              <DialogHeader>
-                <DialogTitle>Import Properties from CSV</DialogTitle>
-                <DialogDescription>
-                  Upload a CSV file with your property listings.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div className="border rounded-md p-4 bg-muted/40">
-                  <div className="flex items-center gap-2 mb-2">
-                    <FileText className="h-4 w-4 text-primary" />
-                    <h3 className="text-sm font-medium">CSV Format Guide</h3>
-                  </div>
-                  <p className="text-xs text-muted-foreground mb-2">
-                    Your CSV file should contain the following column headers:
-                  </p>
-                  <div className="text-xs font-mono bg-secondary/30 p-2 rounded overflow-auto whitespace-nowrap mb-2">
-                    title, price, description, address, city, state, zip, type, bedrooms, bathrooms, size
-                  </div>
-                  <details className="text-xs">
-                    <summary className="font-medium cursor-pointer">CSV Example</summary>
-                    <pre className="bg-secondary/30 p-2 rounded mt-1 overflow-auto">{csvExample}</pre>
-                  </details>
-                </div>
-              
-                <div className="grid w-full items-center gap-1.5">
-                  <Label htmlFor="csv-upload">Upload CSV</Label>
-                  <Input 
-                    id="csv-upload" 
-                    type="file" 
-                    accept=".csv"
-                    onChange={handleFileUpload}
-                  />
-                </div>
-                
-                {csvError && (
-                  <Alert variant="destructive">
-                    <AlertTriangle className="h-4 w-4" />
-                    <AlertTitle>Error</AlertTitle>
-                    <AlertDescription>{csvError}</AlertDescription>
-                  </Alert>
-                )}
-                
-                {parsedData.length > 0 && (
-                  <div className="border rounded-md p-2">
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-sm font-medium">CSV Preview ({parsedData.length} properties)</span>
-                    </div>
-                    <ScrollArea className="h-[200px]">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            {Object.keys(parsedData[0]).slice(0, 5).map((header) => (
-                              <TableHead key={header}>{header}</TableHead>
-                            ))}
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {parsedData.slice(0, 5).map((row, i) => (
-                            <TableRow key={i}>
-                              {Object.values(row).slice(0, 5).map((value, j) => (
-                                <TableCell key={j}>{value ? String(value).substring(0, 20) : "-"}</TableCell>
-                              ))}
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </ScrollArea>
-                  </div>
-                )}
-                
-                {importStatus && (
-                  <div className="text-sm">
-                    {importStatus}
-                  </div>
-                )}
-                
-                {importResult && (
-                  <Alert variant={importResult.properties_failed > 0 ? "warning" : "default"}>
-                    <div className="flex flex-col">
-                      <div className="flex items-center">
-                        {importResult.properties_failed > 0 ? (
-                          <AlertTriangle className="h-4 w-4 mr-2 text-warning" />
-                        ) : (
-                          <Check className="h-4 w-4 mr-2 text-success" />
-                        )}
-                        <AlertTitle>Import completed</AlertTitle>
-                      </div>
-                      <AlertDescription>
-                        <div className="space-y-1 mt-1">
-                          <div className="text-sm">
-                            {importResult.properties_imported} properties imported successfully
-                          </div>
-                          {importResult.properties_failed > 0 && (
-                            <div className="text-sm text-warning">
-                              {importResult.properties_failed} properties failed to import
-                            </div>
-                          )}
-                          {importResult.errors && importResult.errors.length > 0 && (
-                            <details className="text-xs mt-2">
-                              <summary className="cursor-pointer">View Errors</summary>
-                              <div className="mt-1 bg-muted p-2 rounded">
-                                <ul className="list-disc pl-4">
-                                  {importResult.errors.slice(0, 5).map((error, i) => (
-                                    <li key={i} className="mb-1">{error}</li>
-                                  ))}
-                                  {importResult.errors.length > 5 && (
-                                    <li>...and {importResult.errors.length - 5} more errors</li>
-                                  )}
-                                </ul>
-                              </div>
-                            </details>
-                          )}
-                        </div>
-                      </AlertDescription>
-                    </div>
-                  </Alert>
-                )}
-              </div>
-              <DialogFooter>
-                <Button 
-                  variant="outline" 
-                  onClick={() => {
-                    setUploadedFile(null);
-                    setParsedData([]);
-                    setCsvError(null);
-                    setImportStatus(null);
-                    setImportResult(null);
-                  }}
-                >
-                  Cancel
-                </Button>
-                <Button 
-                  onClick={handlePropertyImport} 
-                  disabled={isImporting || parsedData.length === 0}
-                >
-                  {isImporting ? "Importing..." : "Import Properties"}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+          <Button variant="outline" onClick={() => setImportDialogOpen(true)}>
+            <UploadCloud className="mr-2 h-4 w-4" />
+            Import CSV
+          </Button>
         </div>
       </div>
       
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col md:flex-row justify-between gap-4">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <TabsList>
               <TabsTrigger value="all">
@@ -663,17 +360,15 @@ const PropertyListings = ({ userId, isPremiumFeature }) => {
               <TabsTrigger value="sold">Sold</TabsTrigger>
             </TabsList>
           </Tabs>
-          <div className="flex items-center gap-2">
-            <div className="relative">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                type="search"
-                placeholder="Search properties..."
-                className="pl-8 w-[200px] md:w-[300px]"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
+          <div className="relative w-full md:w-auto">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="search"
+              placeholder="Search properties..."
+              className="pl-8 w-full md:w-[300px]"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
           </div>
         </div>
         
@@ -784,6 +479,323 @@ const PropertyListings = ({ userId, isPremiumFeature }) => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Add Property Dialog */}
+      <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Add New Property</DialogTitle>
+            <DialogDescription>
+              Enter the details of your new property listing.
+            </DialogDescription>
+          </DialogHeader>
+          <form id="add-property-form" className="space-y-4">
+            <ScrollArea className="max-h-[70vh] pr-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="title">Title*</Label>
+                  <Input
+                    id="title"
+                    name="title"
+                    value={newProperty.title}
+                    onChange={handleInputChange}
+                    placeholder="e.g. Beautiful 3BR Home"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="price">Price*</Label>
+                  <Input
+                    id="price"
+                    name="price"
+                    type="number"
+                    value={newProperty.price}
+                    onChange={handleInputChange}
+                    placeholder="e.g. 450000"
+                    required
+                  />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor="description">Description</Label>
+                  <Textarea
+                    id="description"
+                    name="description"
+                    value={newProperty.description}
+                    onChange={handleInputChange}
+                    placeholder="Describe your property..."
+                    rows={3}
+                  />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor="address">Address</Label>
+                  <Input
+                    id="address"
+                    name="address"
+                    value={newProperty.address}
+                    onChange={handleInputChange}
+                    placeholder="e.g. 123 Main St"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="city">City</Label>
+                  <Input
+                    id="city"
+                    name="city"
+                    value={newProperty.city}
+                    onChange={handleInputChange}
+                    placeholder="e.g. Austin"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="state">State</Label>
+                    <Input
+                      id="state"
+                      name="state"
+                      value={newProperty.state}
+                      onChange={handleInputChange}
+                      placeholder="e.g. TX"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="zip">ZIP</Label>
+                    <Input
+                      id="zip"
+                      name="zip"
+                      value={newProperty.zip}
+                      onChange={handleInputChange}
+                      placeholder="e.g. 78701"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="type">Property Type</Label>
+                  <Select 
+                    name="type" 
+                    value={newProperty.type} 
+                    onValueChange={(value) => handleSelectChange("type", value)}
+                  >
+                    <SelectTrigger id="type">
+                      <SelectValue placeholder="Select type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="house">House</SelectItem>
+                      <SelectItem value="apartment">Apartment</SelectItem>
+                      <SelectItem value="condo">Condo</SelectItem>
+                      <SelectItem value="townhouse">Townhouse</SelectItem>
+                      <SelectItem value="land">Land</SelectItem>
+                      <SelectItem value="commercial">Commercial</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="status">Status</Label>
+                  <Select 
+                    name="status"
+                    value={newProperty.status} 
+                    onValueChange={(value) => handleSelectChange("status", value)}
+                  >
+                    <SelectTrigger id="status">
+                      <SelectValue placeholder="Select status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="pending">Pending</SelectItem>
+                      <SelectItem value="sold">Sold</SelectItem>
+                      <SelectItem value="inactive">Inactive</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="bedrooms">Bedrooms</Label>
+                  <Input
+                    id="bedrooms"
+                    name="bedrooms"
+                    type="number"
+                    value={newProperty.bedrooms}
+                    onChange={handleInputChange}
+                    placeholder="e.g. 3"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="bathrooms">Bathrooms</Label>
+                  <Input
+                    id="bathrooms"
+                    name="bathrooms"
+                    type="number"
+                    step="0.5"
+                    value={newProperty.bathrooms}
+                    onChange={handleInputChange}
+                    placeholder="e.g. 2.5"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="size">Size (sq ft)</Label>
+                  <Input
+                    id="size"
+                    name="size"
+                    type="number"
+                    value={newProperty.size}
+                    onChange={handleInputChange}
+                    placeholder="e.g. 2000"
+                  />
+                </div>
+              </div>
+            </ScrollArea>
+          </form>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleAddProperty}>Save Property</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Import CSV Dialog */}
+      <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Import Properties from CSV</DialogTitle>
+            <DialogDescription>
+              Upload a CSV file with your property listings.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="border rounded-md p-4 bg-muted/40">
+              <div className="flex items-center gap-2 mb-2">
+                <FileText className="h-4 w-4 text-primary" />
+                <h3 className="text-sm font-medium">CSV Format Guide</h3>
+              </div>
+              <p className="text-xs text-muted-foreground mb-2">
+                Your CSV file should contain the following column headers:
+              </p>
+              <div className="text-xs font-mono bg-secondary/30 p-2 rounded overflow-auto whitespace-nowrap mb-2">
+                title, price, description, address, city, state, zip, type, bedrooms, bathrooms, size
+              </div>
+              <details className="text-xs">
+                <summary className="font-medium cursor-pointer">CSV Example</summary>
+                <pre className="bg-secondary/30 p-2 rounded mt-1 overflow-auto">{csvExample}</pre>
+              </details>
+            </div>
+          
+            <div className="grid w-full items-center gap-1.5">
+              <Label htmlFor="csv-upload">Upload CSV</Label>
+              <Input 
+                id="csv-upload" 
+                type="file" 
+                accept=".csv"
+                onChange={handleFileUpload}
+              />
+            </div>
+            
+            {csvError && (
+              <Alert variant="destructive">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertTitle>Error</AlertTitle>
+                <AlertDescription>{csvError}</AlertDescription>
+              </Alert>
+            )}
+            
+            {parsedData.length > 0 && (
+              <div className="border rounded-md p-2">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-sm font-medium">CSV Preview ({parsedData.length} properties)</span>
+                </div>
+                <ScrollArea className="h-[200px]">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        {Object.keys(parsedData[0]).slice(0, 5).map((header) => (
+                          <TableHead key={header}>{header}</TableHead>
+                        ))}
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {parsedData.slice(0, 5).map((row, i) => (
+                        <TableRow key={i}>
+                          {Object.values(row).slice(0, 5).map((value, j) => (
+                            <TableCell key={j}>{value ? String(value).substring(0, 20) : "-"}</TableCell>
+                          ))}
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </ScrollArea>
+              </div>
+            )}
+            
+            {importStatus && (
+              <div className="text-sm">
+                {importStatus}
+              </div>
+            )}
+            
+            {importResult && (
+              <Alert variant={importResult.properties_failed > 0 ? "warning" : "default"}>
+                <div className="flex flex-col">
+                  <div className="flex items-center">
+                    {importResult.properties_failed > 0 ? (
+                      <AlertTriangle className="h-4 w-4 mr-2 text-warning" />
+                    ) : (
+                      <Check className="h-4 w-4 mr-2 text-success" />
+                    )}
+                    <AlertTitle>Import completed</AlertTitle>
+                  </div>
+                  <AlertDescription>
+                    <div className="space-y-1 mt-1">
+                      <div className="text-sm">
+                        {importResult.properties_imported} properties imported successfully
+                      </div>
+                      {importResult.properties_failed > 0 && (
+                        <div className="text-sm text-warning">
+                          {importResult.properties_failed} properties failed to import
+                        </div>
+                      )}
+                      {importResult.errors && importResult.errors.length > 0 && (
+                        <details className="text-xs mt-2">
+                          <summary className="cursor-pointer">View Errors</summary>
+                          <div className="mt-1 bg-muted p-2 rounded">
+                            <ul className="list-disc pl-4">
+                              {importResult.errors.slice(0, 5).map((error, i) => (
+                                <li key={i} className="mb-1">{error}</li>
+                              ))}
+                              {importResult.errors.length > 5 && (
+                                <li>...and {importResult.errors.length - 5} more errors</li>
+                              )}
+                            </ul>
+                          </div>
+                        </details>
+                      )}
+                    </div>
+                  </AlertDescription>
+                </div>
+              </Alert>
+            )}
+          </div>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setUploadedFile(null);
+                setParsedData([]);
+                setCsvError(null);
+                setImportStatus(null);
+                setImportResult(null);
+                setImportDialogOpen(false);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={handlePropertyImport} 
+              disabled={isImporting || parsedData.length === 0}
+            >
+              {isImporting ? "Importing..." : "Import Properties"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
