@@ -1,4 +1,3 @@
-
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.36.0";
 import { corsHeaders } from "../_shared/cors.ts";
 
@@ -69,6 +68,7 @@ Deno.serve(async (req) => {
     console.log("✅ File downloaded successfully");
     
     let extractedText = "";
+    let isScannedOrBinary = false;
     
     // Determine file type from filename
     const fileType = fileName.toLowerCase().endsWith('.pdf') ? 'pdf' : 
@@ -100,7 +100,8 @@ Deno.serve(async (req) => {
             console.log("✅ Successfully extracted text with alternative method");
           } else {
             console.log("⚠️ All extraction methods failed to get readable text");
-            extractedText = "This document appears to be a scanned, encrypted, or image-based PDF. The system could not extract text content. For best results, please upload a text-based PDF or a text file.";
+            isScannedOrBinary = true;
+            extractedText = "⚠️ This document appears to be a scanned, encrypted, or image-based PDF. The system could not extract readable text content. For best results, please upload a text-based PDF or a text file.";
           }
         }
         
@@ -112,6 +113,7 @@ Deno.serve(async (req) => {
         }
       } catch (pdfError) {
         console.error("❌ Error extracting PDF text:", pdfError);
+        isScannedOrBinary = true;
         extractedText = "Error extracting text from PDF. The file may be corrupt, encrypted, or in an unsupported format.";
       }
     } else if (fileType === 'txt') {
@@ -138,8 +140,13 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Sanitize text to remove problematic characters before inserting to database
-    extractedText = sanitizeTextForPostgres(extractedText);
+    // Enhanced text sanitation for PDFs with high likelihood of binary content
+    if (fileType === 'pdf') {
+      extractedText = sanitizeTextEnhanced(extractedText, isScannedOrBinary);
+    } else {
+      // Basic sanitization for text files
+      extractedText = sanitizeTextForPostgres(extractedText);
+    }
 
     console.log(`🔍 Inserting into chatbot_training_files table...`);
 
@@ -150,9 +157,10 @@ Deno.serve(async (req) => {
         user_id: userId,
         source_file: fileName,
         extracted_text: extractedText,
-        category: "File Import",
+        category: isScannedOrBinary ? "File Import (Scanned PDF)" : "File Import",
         priority: parseInt(String(priority), 10) || 5,
-        content_type: fileType === 'pdf' ? 'application/pdf' : 'text/plain'
+        content_type: fileType === 'pdf' ? 'application/pdf' : 'text/plain',
+        processing_status: isScannedOrBinary ? "partial" : "complete"
       })
       .select();
 
@@ -170,10 +178,13 @@ Deno.serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
-        message: "File processed successfully",
+        message: isScannedOrBinary ? 
+          "File processed, but appears to be a scanned or image-based PDF. Limited or no text extracted." : 
+          "File processed successfully",
         entriesCreated: 1,
         priority: priority,
-        table: "chatbot_training_files"
+        table: "chatbot_training_files",
+        isScannedOrBinary: isScannedOrBinary
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
@@ -188,8 +199,11 @@ Deno.serve(async (req) => {
 
 // Function to check if text is likely binary content rather than readable text
 function isProbablyBinary(text: string): boolean {
+  if (!text) return false;
+  
   // Count non-printable characters
   let nonPrintableCount = 0;
+  let specialCharCount = 0;
   const sampleSize = Math.min(text.length, 500); // Check first 500 chars
   
   for (let i = 0; i < sampleSize; i++) {
@@ -203,12 +217,22 @@ function isProbablyBinary(text: string): boolean {
     ) {
       nonPrintableCount++;
     }
+    
+    // Count special characters that typically appear in large numbers in binary output
+    if ("�¢£¥©®±¼½¾×÷ØøÆæÐðÞþß".indexOf(text[i]) >= 0) {
+      specialCharCount++;
+    }
   }
   
-  // If more than 5% of characters are non-printable, consider it binary
-  const ratio = nonPrintableCount / sampleSize;
-  console.log(`Binary detection: ${nonPrintableCount} non-printable chars out of ${sampleSize}, ratio: ${ratio}`);
-  return ratio > 0.05;
+  // If more than 5% of characters are non-printable or special markers
+  const nonPrintableRatio = nonPrintableCount / sampleSize;
+  const specialCharRatio = specialCharCount / sampleSize;
+  const combinedRatio = nonPrintableRatio + specialCharRatio;
+  
+  console.log(`Binary detection: ${nonPrintableCount} non-printable chars, ${specialCharCount} special chars out of ${sampleSize}, ratio: ${combinedRatio}`);
+  
+  // More aggressive binary detection
+  return combinedRatio > 0.05 || nonPrintableRatio > 0.03;
 }
 
 // Improved PDF text extraction function
@@ -305,6 +329,35 @@ async function extractTextAlternativeMethod(pdfBytes: ArrayBuffer): Promise<stri
     console.error("Error in alternative PDF extraction:", e);
     return "";
   }
+}
+
+// Enhanced sanitization for potentially binary content
+function sanitizeTextEnhanced(text: string, isLikelyBinary: boolean): string {
+  if (!text) return "";
+  
+  // If it's detected as binary and appears to be PDF internals, replace with a helpful message
+  if (isLikelyBinary) {
+    // Check if the content has typical PDF internal structure markers
+    if (text.includes("endobj") || text.includes("endstream") || text.includes("/Type /Page")) {
+      return "This document appears to be a scanned or image-based PDF. The system could not extract readable text content. For best results, please upload a text-based PDF or a text file.";
+    }
+  }
+  
+  // Use regular expression to keep only readable characters
+  let sanitized = text.replace(/[^\p{L}\p{N}\p{P}\p{Z}\p{S}\p{M}\n\r\t]/gu, " ");
+  
+  // Remove common binary artifacts and PDF structure markers
+  sanitized = sanitized.replace(/endobj|endstream|obj|stream|\/Type|\/Page|\/Contents|\/Resources/g, " ");
+  
+  // Clean up excessive whitespace
+  sanitized = sanitized.replace(/\s+/g, " ").trim();
+  
+  // If after sanitization we're left with very little content, return a message
+  if (sanitized.length < 100 && isLikelyBinary) {
+    return "This document appears to be a scanned or image-based PDF. The system could not extract readable text content. For best results, please upload a text-based PDF or a text file.";
+  }
+  
+  return sanitizeTextForPostgres(sanitized);
 }
 
 // Helper function to clean up the extracted text

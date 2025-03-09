@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
-import { Upload, Loader2, AlertCircle, FileText } from "lucide-react";
+import { Upload, Loader2, AlertCircle, FileText, FileWarning } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -24,6 +24,7 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
   const [error, setError] = useState<string>("");
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [stage, setStage] = useState<string>("");
+  const [isScannedOrBinary, setIsScannedOrBinary] = useState<boolean>(false);
 
   // Handle file upload to Supabase Storage
   const uploadFile = async () => {
@@ -37,6 +38,7 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
     setFileStatus("Uploading file to storage...");
     setUploadProgress(10);
     setError("");
+    setIsScannedOrBinary(false);
 
     const fileName = `${Date.now()}_${selectedFile.name}`;
     const filePath = `${userId}/${fileName}`;
@@ -74,14 +76,19 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
 
       setUploadProgress(100);
       setStage("complete");
-      setFileStatus("File processed successfully!");
-      toast.success("File uploaded and processed successfully!");
-      setSelectedFile(null);
       
-      // Check if the response contains an error message about scanned PDFs
-      if (data.message?.includes("scanned or image-based PDF")) {
-        setError("This appears to be a scanned or image-based PDF. The text could not be extracted properly.");
+      // Check if the response indicates a scanned/binary PDF
+      if (data.isScannedOrBinary) {
+        setIsScannedOrBinary(true);
+        setFileStatus("File processed with limited text extraction");
+        setError("This appears to be a scanned or image-based PDF. Text extraction was limited or unsuccessful.");
+        toast.warning("PDF processed, but appears to be a scanned document with limited text extraction");
+      } else {
+        setFileStatus("File processed successfully!");
+        toast.success("File uploaded and processed successfully!");
       }
+      
+      setSelectedFile(null);
       
       setTimeout(() => {
         setUploadProgress(0);
@@ -114,6 +121,7 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
         setError("");
         setStage("");
         setUploadProgress(0);
+        setIsScannedOrBinary(false);
       } else {
         toast.error("Only PDF and text files are supported");
         e.target.value = "";
@@ -176,7 +184,17 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
           </div>
         )}
 
-        {error && (
+        {isScannedOrBinary && (
+          <Alert variant="warning" className="mt-2">
+            <FileWarning className="h-4 w-4" />
+            <AlertDescription>
+              This appears to be a scanned or image-based PDF. The system could not extract proper text content.
+              For best results, please upload text-based PDFs rather than scanned documents.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {error && !isScannedOrBinary && (
           <Alert variant="destructive" className="mt-2">
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>{error}</AlertDescription>
@@ -209,6 +227,7 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
             <li>Use text-based PDFs rather than scanned documents</li>
             <li>Ensure text is clearly formatted and readable</li>
             <li>Avoid password-protected or encrypted files</li>
+            <li>For scanned documents, consider using OCR software first</li>
           </ul>
         </div>
       </CardContent>
