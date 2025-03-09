@@ -297,6 +297,7 @@ const PropertyListings = ({ userPlan, isPremiumFeature }: PropertyListingsProps)
       dynamicTyping: true, // Automatically convert numeric values
       transformHeader: (header) => header.trim(), // Trim whitespace from headers
       complete: (results) => {
+        console.log("Parsed CSV data:", results.data);
         setCsvParseResult(results.data);
         setIsCsvDialogOpen(true);
       },
@@ -318,6 +319,13 @@ const PropertyListings = ({ userPlan, isPremiumFeature }: PropertyListingsProps)
         return;
       }
       
+      // Log the data being sent to the function
+      console.log("Sending to import-properties:", {
+        userId: session.user.id,
+        properties: csvParseResult,
+        source: 'csv'
+      });
+      
       // Send all parsed data to the backend to handle normalization there
       const { data, error } = await supabase.functions.invoke('import-properties', {
         body: {
@@ -328,6 +336,8 @@ const PropertyListings = ({ userPlan, isPremiumFeature }: PropertyListingsProps)
       });
         
       if (error) throw error;
+      
+      console.log("Import response:", data);
       
       // Close dialog and refresh list
       setIsCsvDialogOpen(false);
@@ -355,12 +365,17 @@ const PropertyListings = ({ userPlan, isPremiumFeature }: PropertyListingsProps)
   const CsvGuideInfo = () => (
     <div className="text-sm text-muted-foreground mt-4 space-y-2">
       <h4 className="font-medium text-foreground">CSV Format Guide</h4>
-      <p>Supports various CSV formats with these fields:</p>
+      <p>Our flexible importer supports many CSV formats with these fields:</p>
       <ul className="list-disc pl-5 space-y-1">
         <li><strong>Required:</strong> Title (or name), Price</li>
         <li><strong>Optional:</strong> Description, Status, Type, Bedrooms, Bathrooms, Address, City, State, Zip, Size</li>
       </ul>
-      <p>The importer will automatically recognize common field names variants.</p>
+      <p>The system automatically recognizes many different column name variations and formats, including:</p>
+      <ul className="list-disc pl-5 space-y-1">
+        <li><strong>Price formats:</strong> Numbers with currency symbols (€, $, £), with commas, with 'k' or 'm' suffixes</li>
+        <li><strong>Size formats:</strong> Square feet (sqft), square meters (sqm, m²), with or without units</li>
+        <li><strong>Bathroom formats:</strong> Decimals (1.5) or fractions (1 1/2)</li>
+      </ul>
     </div>
   );
   
@@ -602,7 +617,7 @@ const PropertyListings = ({ userPlan, isPremiumFeature }: PropertyListingsProps)
 
       {/* Add/Edit Property Dialog - Updated with ScrollArea and improved layout */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-[650px] max-h-[90vh]">
+        <DialogContent className="sm:max-w-[800px] max-h-[90vh]">
           <DialogHeader>
             <DialogTitle>{editingProperty ? "Edit Property" : "Add New Property"}</DialogTitle>
             <DialogDescription>
@@ -624,7 +639,7 @@ const PropertyListings = ({ userPlan, isPremiumFeature }: PropertyListingsProps)
                   />
                 </div>
                 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="price">Price* (€)</Label>
                     <Input 
@@ -654,9 +669,7 @@ const PropertyListings = ({ userPlan, isPremiumFeature }: PropertyListingsProps)
                       </SelectContent>
                     </Select>
                   </div>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-4">
+                  
                   <div className="space-y-2">
                     <Label htmlFor="type">Property Type</Label>
                     <Input 
@@ -667,21 +680,9 @@ const PropertyListings = ({ userPlan, isPremiumFeature }: PropertyListingsProps)
                       placeholder="e.g. Villa, Apartment, House" 
                     />
                   </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="size">Size (m²)</Label>
-                    <Input 
-                      id="size"
-                      name="size"
-                      value={formData.size || ''}
-                      onChange={handleInputChange}
-                      placeholder="e.g. 200"
-                      type="number" 
-                    />
-                  </div>
                 </div>
                 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="bedrooms">Bedrooms</Label>
                     <Input 
@@ -706,6 +707,18 @@ const PropertyListings = ({ userPlan, isPremiumFeature }: PropertyListingsProps)
                       step="0.5"
                     />
                   </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="size">Size (m²)</Label>
+                    <Input 
+                      id="size"
+                      name="size"
+                      value={formData.size || ''}
+                      onChange={handleInputChange}
+                      placeholder="e.g. 200"
+                      type="number" 
+                    />
+                  </div>
                 </div>
                 
                 <div className="space-y-2">
@@ -719,7 +732,7 @@ const PropertyListings = ({ userPlan, isPremiumFeature }: PropertyListingsProps)
                   />
                 </div>
                 
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="city">City</Label>
                     <Input 
@@ -797,7 +810,7 @@ const PropertyListings = ({ userPlan, isPremiumFeature }: PropertyListingsProps)
 
       {/* CSV Import Preview Dialog - Updated with more information */}
       <Dialog open={isCsvDialogOpen} onOpenChange={setIsCsvDialogOpen}>
-        <DialogContent className="sm:max-w-[700px] max-h-[90vh]">
+        <DialogContent className="sm:max-w-[800px] max-h-[90vh]">
           <DialogHeader>
             <DialogTitle>Import Properties from CSV</DialogTitle>
             <DialogDescription>
@@ -815,23 +828,125 @@ const PropertyListings = ({ userPlan, isPremiumFeature }: PropertyListingsProps)
                   <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground tracking-wider">Price</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground tracking-wider">Type</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground tracking-wider">Location</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground tracking-wider">Size</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground tracking-wider">Beds/Baths</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
                 {csvParseResult.map((row, index) => {
-                  // Handle various column names for more flexible display
-                  const title = row.title || row.Title || row.name || row.Name || row.property_name || row["Property Name"] || "No title";
-                  const price = row.price || row.Price || row.cost || row.Cost || row.value || row.Value || "0";
-                  const type = row.type || row.Type || row.property_type || row["Property Type"] || "Not specified";
-                  const city = row.city || row.City || row.town || row.Town || "";
-                  const state = row.state || row.State || row.province || row.Province || "";
+                  // Find title using advanced fuzzy matching
+                  const titleFields = ['title', 'Title', 'name', 'Name', 'property_name', 'property name', 'heading', 'Heading', 'listing_title'];
+                  let title = null;
+                  for (const field of titleFields) {
+                    if (row[field]) {
+                      title = row[field];
+                      break;
+                    }
+                  }
+                  // If still not found, try partial matching
+                  if (!title) {
+                    for (const key in row) {
+                      if (key.toLowerCase().includes('title') || key.toLowerCase().includes('name') || 
+                          key.toLowerCase().includes('property') || key.toLowerCase().includes('heading')) {
+                        title = row[key];
+                        break;
+                      }
+                    }
+                  }
+                  
+                  // Find price using similar approach
+                  const priceFields = ['price', 'Price', 'cost', 'Cost', 'value', 'Value', 'asking_price', 'listing_price'];
+                  let price = null;
+                  for (const field of priceFields) {
+                    if (row[field] !== undefined && row[field] !== null && row[field] !== '') {
+                      price = row[field];
+                      break;
+                    }
+                  }
+                  // If still not found, try partial matching
+                  if (!price) {
+                    for (const key in row) {
+                      if (key.toLowerCase().includes('price') || key.toLowerCase().includes('cost') || 
+                          key.toLowerCase().includes('value') || key.toLowerCase().includes('eur') || 
+                          key.toLowerCase().includes('usd')) {
+                        price = row[key];
+                        break;
+                      }
+                    }
+                  }
+                  
+                  // Same for other fields
+                  const typeFields = ['type', 'Type', 'property_type', 'property type', 'category', 'Category'];
+                  let type = null;
+                  for (const field of typeFields) {
+                    if (row[field]) {
+                      type = row[field];
+                      break;
+                    }
+                  }
+                  
+                  // Get city
+                  const cityFields = ['city', 'City', 'town', 'Town', 'location', 'Location'];
+                  let city = null;
+                  for (const field of cityFields) {
+                    if (row[field]) {
+                      city = row[field];
+                      break;
+                    }
+                  }
+                  
+                  // Get state
+                  const stateFields = ['state', 'State', 'province', 'Province', 'region', 'Region'];
+                  let state = null;
+                  for (const field of stateFields) {
+                    if (row[field]) {
+                      state = row[field];
+                      break;
+                    }
+                  }
+                  
+                  // Get size
+                  const sizeFields = ['size', 'Size', 'area', 'Area', 'square_feet', 'square_meters', 'sqft', 'sqm'];
+                  let size = null;
+                  for (const field of sizeFields) {
+                    if (row[field]) {
+                      size = row[field];
+                      break;
+                    }
+                  }
+                  
+                  // Get bedrooms
+                  const bedroomFields = ['bedrooms', 'Bedrooms', 'beds', 'Beds', 'bedroom', 'Bedroom', 'br', 'BR'];
+                  let bedrooms = null;
+                  for (const field of bedroomFields) {
+                    if (row[field] !== undefined && row[field] !== null && row[field] !== '') {
+                      bedrooms = row[field];
+                      break;
+                    }
+                  }
+                  
+                  // Get bathrooms
+                  const bathroomFields = ['bathrooms', 'Bathrooms', 'baths', 'Baths', 'bathroom', 'Bathroom', 'ba', 'BA'];
+                  let bathrooms = null;
+                  for (const field of bathroomFields) {
+                    if (row[field] !== undefined && row[field] !== null && row[field] !== '') {
+                      bathrooms = row[field];
+                      break;
+                    }
+                  }
                   
                   return (
                     <tr key={index} className="hover:bg-muted/50">
-                      <td className="px-4 py-2 text-sm">{title}</td>
-                      <td className="px-4 py-2 text-sm">{typeof price === 'number' ? price.toLocaleString() : price}</td>
-                      <td className="px-4 py-2 text-sm">{type}</td>
+                      <td className="px-4 py-2 text-sm">{title || "No title"}</td>
+                      <td className="px-4 py-2 text-sm">{typeof price === 'number' ? price.toLocaleString() : (price || "Not specified")}</td>
+                      <td className="px-4 py-2 text-sm">{type || "Not specified"}</td>
                       <td className="px-4 py-2 text-sm">{city ? `${city}${state ? `, ${state}` : ''}` : "No location"}</td>
+                      <td className="px-4 py-2 text-sm">{size ? (typeof size === 'number' ? `${size.toLocaleString()} m²` : size) : "Not specified"}</td>
+                      <td className="px-4 py-2 text-sm">
+                        {bedrooms || bathrooms ? 
+                          `${bedrooms || '?'} bd / ${bathrooms || '?'} ba` : 
+                          "Not specified"}
+                      </td>
                     </tr>
                   );
                 })}
