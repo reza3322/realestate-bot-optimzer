@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -26,7 +25,6 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
   const [stage, setStage] = useState<string>("");
   const [isScannedOrBinary, setIsScannedOrBinary] = useState<boolean>(false);
 
-  // Handle file upload to Supabase Storage
   const uploadFile = async () => {
     if (!selectedFile || !userId) {
       toast.error("Please select a file first");
@@ -44,7 +42,6 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
     const filePath = `${userId}/${fileName}`;
 
     try {
-      // Step 1: Upload to storage
       const { error: uploadError } = await supabase
         .storage
         .from("chatbot_training_files")
@@ -56,7 +53,6 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
       setStage("processing");
       setFileStatus("Processing file content...");
       
-      // Step 2: Process the file content
       const { data, error: processError } = await supabase.functions.invoke("process-pdf-content", {
         body: {
           filePath,
@@ -77,7 +73,6 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
       setUploadProgress(100);
       setStage("complete");
       
-      // Check if the response indicates a scanned/binary PDF
       if (data.isScannedOrBinary) {
         setIsScannedOrBinary(true);
         setFileStatus("File processed with limited text extraction");
@@ -110,7 +105,6 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
     }
   };
 
-  // Handles file selection
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
@@ -185,7 +179,10 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
         )}
 
         {isScannedOrBinary && (
-          <Alert variant="warning" className="mt-2">
+          <Alert 
+            variant="default" 
+            className="mt-2 border-amber-500 bg-amber-50 text-amber-800 dark:bg-amber-900/30 dark:text-amber-500"
+          >
             <FileWarning className="h-4 w-4" />
             <AlertDescription>
               This appears to be a scanned or image-based PDF. The system could not extract proper text content.
