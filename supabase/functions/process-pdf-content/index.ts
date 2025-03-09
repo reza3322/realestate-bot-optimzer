@@ -49,7 +49,7 @@ Deno.serve(async (req) => {
     );
 
     console.log(`📥 Attempting to download file: ${filePath}`);
-    const { data: fileData, error: downloadError } = await supabase
+    const { data: fileResponse, error: downloadError } = await supabase
       .storage
       .from("chatbot_training_files")
       .download(filePath);
@@ -62,7 +62,42 @@ Deno.serve(async (req) => {
       );
     }
 
+    if (!fileResponse) {
+      console.error("❌ No file data received");
+      return new Response(
+        JSON.stringify({ success: false, error: "No file data received" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     console.log("✅ File downloaded successfully");
+    console.log("📂 File response type:", typeof fileResponse);
+
+    let fileData;
+    try {
+      // Handle different response types from storage API
+      if (fileResponse instanceof Uint8Array || fileResponse instanceof ArrayBuffer) {
+        fileData = fileResponse;
+      } else if (typeof fileResponse === 'object' && fileResponse !== null) {
+        // If it's a Response-like object or Blob
+        if ('arrayBuffer' in fileResponse && typeof fileResponse.arrayBuffer === 'function') {
+          fileData = await fileResponse.arrayBuffer();
+        } else if ('blob' in fileResponse && typeof fileResponse.blob === 'function') {
+          const blob = await fileResponse.blob();
+          fileData = await blob.arrayBuffer();
+        } else {
+          throw new Error(`Cannot process file data of type: ${typeof fileResponse}`);
+        }
+      } else {
+        throw new Error(`Unexpected file data format: ${typeof fileResponse}`);
+      }
+    } catch (error) {
+      console.error("❌ Error processing file data:", error);
+      return new Response(
+        JSON.stringify({ success: false, error: "Failed to process file data", details: error.message }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     let extractedText = "";
     let finalContentType = contentType || "application/octet-stream"; // Ensure content type is not null
@@ -82,8 +117,6 @@ Deno.serve(async (req) => {
     if (finalContentType === "application/pdf") {
       console.log("📄 Processing PDF file");
       try {
-        // Simple extraction for PDF (without pdfium_wasm)
-        // We need to ensure we have an ArrayBuffer to decode
         if (fileData instanceof ArrayBuffer || ArrayBuffer.isView(fileData)) {
           const decoder = new TextDecoder('utf-8');
           const text = decoder.decode(fileData);
