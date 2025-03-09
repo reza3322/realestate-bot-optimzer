@@ -95,17 +95,8 @@ Deno.serve(async (req) => {
 
     console.log(`📝 Extracted ${extractedText.length} characters of text`);
 
-    // **✅ Stronger Unicode Cleaning to Fix `\u0000` Error**
-    extractedText = extractedText
-      .replace(/\u0000/g, "") // Remove null bytes
-      .replace(/[\x00-\x1F\x7F-\x9F]/g, "") // Remove non-printable ASCII & control characters
-      .replace(/[^\x20-\x7EäöüßÄÖÜéèàùç]/g, "") // Keep readable characters
-      .replace(/\s+/g, " ") // Replace multiple spaces
-      .normalize("NFC") // Normalize Unicode
-      .trim();
-
-    // **Extra Encoding Fix**
-    extractedText = new TextDecoder("utf-8", { fatal: false }).decode(new TextEncoder().encode(extractedText));
+    // **✅ Strongest Unicode Cleaning Fix**
+    extractedText = cleanText(extractedText);
 
     console.log("💾 Inserting extracted text into database...");
     const { data: insertData, error: insertError } = await supabase
@@ -144,3 +135,56 @@ Deno.serve(async (req) => {
     );
   }
 });
+
+// ✅ Strongest Unicode Sanitization Fix
+function cleanText(text: string): string {
+  return text
+    .replace(/\u0000/g, "") // Remove null bytes
+    .replace(/[\x00-\x1F\x7F-\x9F]/g, "") // Remove non-printable ASCII & control characters
+    .replace(/[^\x20-\x7EäöüßÄÖÜéèàùç]/g, "") // Keep readable characters
+    .replace(/\s+/g, " ") // Replace multiple spaces
+    .normalize("NFC") // Normalize Unicode
+    .trim();
+}
+
+// ✅ Extract Text from PDF Function
+async function extractPdfText(pdfArrayBuffer: ArrayBuffer): Promise<string> {
+  try {
+    console.log("🔍 Extracting text from PDF...");
+    const reader = new PdfReader();
+    let extractedText = "";
+
+    await new Promise((resolve, reject) => {
+      reader.parseBuffer(new Uint8Array(pdfArrayBuffer), (err, item) => {
+        if (err) reject(err);
+        else if (!item) resolve(null);
+        else if (item.text) extractedText += item.text + " ";
+      });
+    });
+
+    return extractedText.trim();
+  } catch (error) {
+    console.error("❌ Error extracting PDF text:", error);
+    return "";
+  }
+}
+
+// ✅ OCR Function for Scanned PDFs
+async function extractTextWithOCR(pdfArrayBuffer: ArrayBuffer): Promise<string> {
+  try {
+    console.log("📸 Running OCR on PDF...");
+    const image = new Uint8Array(pdfArrayBuffer);
+    const text = await recognize(image, "eng");
+
+    if (!text.trim()) {
+      console.log("⚠️ OCR extracted no text. Returning fallback message.");
+      return "OCR could not extract text. The PDF may be too complex for automated text extraction.";
+    }
+
+    console.log("✅ OCR Extraction Successful!");
+    return text.trim();
+  } catch (error) {
+    console.error("❌ OCR Extraction Failed:", error);
+    return "OCR failed to extract text from this PDF.";
+  }
+}
