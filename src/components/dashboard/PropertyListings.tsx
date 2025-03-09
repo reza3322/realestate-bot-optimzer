@@ -1,978 +1,789 @@
 
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DialogTrigger, DialogTitle, DialogDescription, DialogHeader, DialogFooter, DialogContent, Dialog } from "@/components/ui/dialog";
-import { PlusCircle, Upload, FileSpreadsheet, Link, Lock, Trash2, Edit, X, ImageIcon } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
+import { Home, UploadCloud, Plus, Edit, MoreHorizontal, Eye, Trash2, Search, Download, Filter, Check, X, FileText, AlertTriangle } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { supabase } from "@/lib/supabase";
 import Papa from 'papaparse';
-import { ScrollArea } from "@/components/ui/scroll-area";
 
-interface PropertyListingsProps {
-  userPlan: string;
-  isPremiumFeature: (plan: string) => boolean;
-}
-
-interface Property {
-  id: string;
-  title: string;
-  description: string;
-  price: number;
-  views?: number;
-  inquiries?: number;
-  status: string;
-  imageUrl?: string;
-  address?: string;
-  city?: string;
-  state?: string;
-  zip?: string;
-  bedrooms?: number;
-  bathrooms?: number;
-  size?: number;
-  type?: string;
-  created_at: string;
-  updated_at: string;
-  user_id: string;
-  images?: string[];
-}
-
-interface FormData {
-  title: string;
-  description: string;
-  price: number;
-  status: string;
-  type: string;
-  bedrooms: number;
-  bathrooms: number;
-  address: string;
-  city: string;
-  state: string;
-  zip: string;
-  size: number;
-}
-
-const PropertyListings = ({ userPlan, isPremiumFeature }: PropertyListingsProps) => {
-  const [activePropertyTab, setActivePropertyTab] = useState("manual");
-  const [properties, setProperties] = useState<Property[]>([]);
+const PropertyListings = ({ userId, isPremiumFeature }) => {
+  const [activeTab, setActiveTab] = useState("all");
+  const [properties, setProperties] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [formData, setFormData] = useState<FormData>({
+  const [selectedProperty, setSelectedProperty] = useState(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const [uploadedFile, setUploadedFile] = useState(null);
+  const [parsedData, setParsedData] = useState([]);
+  const [csvError, setCsvError] = useState(null);
+  const [importStatus, setImportStatus] = useState(null);
+  const [newProperty, setNewProperty] = useState({
     title: "",
     description: "",
-    price: 0,
-    status: "active",
-    type: "",
-    bedrooms: 0,
-    bathrooms: 0,
+    price: "",
     address: "",
     city: "",
     state: "",
     zip: "",
-    size: 0
+    type: "house",
+    bedrooms: "",
+    bathrooms: "",
+    size: "",
+    status: "active"
   });
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editingProperty, setEditingProperty] = useState<string | null>(null);
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [propertyToDelete, setPropertyToDelete] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const csvInputRef = useRef<HTMLInputElement>(null);
-  const [csvParseResult, setCsvParseResult] = useState<any[]>([]);
-  const [isCsvDialogOpen, setIsCsvDialogOpen] = useState(false);
-  const [csvUploadLoading, setCsvUploadLoading] = useState(false);
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filteredProperties, setFilteredProperties] = useState([]);
+  const [sortConfig, setSortConfig] = useState({
+    key: "created_at",
+    direction: "desc"
+  });
+  const [importResult, setImportResult] = useState(null);
   
   useEffect(() => {
-    fetchProperties();
-  }, []);
-
+    if (userId) {
+      fetchProperties();
+    }
+  }, [userId]);
+  
+  useEffect(() => {
+    if (properties.length > 0) {
+      handleFilter();
+    }
+  }, [properties, searchQuery, activeTab, sortConfig]);
+  
+  const handleFilter = () => {
+    let filtered = [...properties];
+    
+    // Filter by search
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(
+        property => 
+          property.title?.toLowerCase().includes(query) ||
+          property.address?.toLowerCase().includes(query) ||
+          property.city?.toLowerCase().includes(query) ||
+          property.description?.toLowerCase().includes(query)
+      );
+    }
+    
+    // Filter by tab
+    if (activeTab !== "all") {
+      filtered = filtered.filter(property => property.status === activeTab);
+    }
+    
+    // Sort
+    filtered.sort((a, b) => {
+      if (a[sortConfig.key] < b[sortConfig.key]) {
+        return sortConfig.direction === "asc" ? -1 : 1;
+      }
+      if (a[sortConfig.key] > b[sortConfig.key]) {
+        return sortConfig.direction === "asc" ? 1 : -1;
+      }
+      return 0;
+    });
+    
+    setFilteredProperties(filtered);
+  };
+  
   const fetchProperties = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session) {
-        toast.error("You must be logged in to view properties");
-        return;
-      }
-
       const { data, error } = await supabase
-        .from('properties')
-        .select('*')
-        .eq('user_id', session.user.id)
-        .order('created_at', { ascending: false });
-
+        .from("properties")
+        .select("*")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false });
+      
       if (error) {
-        console.error("Error fetching properties:", error);
-        toast.error("Failed to load properties");
-        return;
+        throw error;
       }
-
-      // Transform the data to match our component's expected format
-      const formattedProperties = data.map(property => ({
-        ...property,
-        imageUrl: property.images && property.images.length > 0 
-          ? property.images[0] 
-          : 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9',
-        views: Math.floor(Math.random() * 200) + 50, // Demo value
-        inquiries: Math.floor(Math.random() * 15), // Demo value
-      }));
-
-      setProperties(formattedProperties);
+      
+      setProperties(data || []);
+      setFilteredProperties(data || []);
     } catch (error) {
-      console.error("Error in fetchProperties:", error);
-      toast.error("Failed to load properties data");
+      console.error("Error fetching properties:", error);
+      toast.error("Failed to load properties");
     } finally {
       setLoading(false);
     }
   };
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: name === 'price' || name === 'bedrooms' || name === 'bathrooms' || name === 'size' 
-        ? parseFloat(value) || 0 
-        : value
-    }));
-  };
-
-  const handleSelectChange = (name: string, value: string) => {
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-  };
-
-  const resetForm = () => {
-    setFormData({
-      title: "",
-      description: "",
-      price: 0,
-      status: "active",
-      type: "",
-      bedrooms: 0,
-      bathrooms: 0,
-      address: "",
-      city: "",
-      state: "",
-      zip: "",
-      size: 0
-    });
-    setEditingProperty(null);
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session) {
-        toast.error("You must be logged in to add or edit properties");
-        return;
-      }
-
-      // Validate form data
-      if (!formData.title || !formData.price) {
-        toast.error("Title and price are required");
-        return;
-      }
-
-      // Prepare property data
-      const propertyData = {
-        ...formData,
-        user_id: session.user.id,
-      };
-
-      let result;
-      
-      if (editingProperty) {
-        // Update existing property
-        const { data, error } = await supabase
-          .from('properties')
-          .update(propertyData)
-          .eq('id', editingProperty)
-          .select();
-          
-        if (error) throw error;
-        result = data;
-        toast.success("Property updated successfully");
-      } else {
-        // Add new property
-        const { data, error } = await supabase
-          .from('properties')
-          .insert(propertyData)
-          .select();
-          
-        if (error) throw error;
-        result = data;
-        toast.success("Property added successfully");
-      }
-
-      // Refresh properties list
-      fetchProperties();
-      
-      // Close the dialog and reset form
-      setIsDialogOpen(false);
-      resetForm();
-      
-    } catch (error: any) {
-      console.error("Error saving property:", error);
-      toast.error(error.message || "Failed to save property");
+  
+  const handlePropertyImport = async () => {
+    if (!parsedData || parsedData.length === 0) {
+      toast.error("No valid data to import");
+      return;
     }
-  };
-
-  const handleEdit = (property: Property) => {
-    setFormData({
-      title: property.title || "",
-      description: property.description || "",
-      price: property.price || 0,
-      status: property.status || "active",
-      type: property.type || "",
-      bedrooms: property.bedrooms || 0,
-      bathrooms: property.bathrooms || 0,
-      address: property.address || "",
-      city: property.city || "",
-      state: property.state || "",
-      zip: property.zip || "",
-      size: property.size || 0
-    });
-    setEditingProperty(property.id);
-    setIsDialogOpen(true);
-  };
-
-  const handleDelete = async () => {
-    if (!propertyToDelete) return;
+    
+    setIsImporting(true);
+    setImportStatus("Importing properties...");
     
     try {
-      const { error } = await supabase
-        .from('properties')
-        .delete()
-        .eq('id', propertyToDelete);
-        
-      if (error) throw error;
-      
-      // Remove from list and close dialog
-      setProperties(properties.filter(p => p.id !== propertyToDelete));
-      setIsDeleteDialogOpen(false);
-      setPropertyToDelete(null);
-      toast.success("Property deleted successfully");
-    } catch (error: any) {
-      console.error("Error deleting property:", error);
-      toast.error(error.message || "Failed to delete property");
-    }
-  };
-
-  const handleImageUpload = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-    
-    // TODO: Implement image upload functionality
-    toast.info("Image upload will be implemented in a future update");
-  };
-
-  const handleCsvUpload = () => {
-    csvInputRef.current?.click();
-  };
-
-  const handleCsvFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-    
-    const file = files[0];
-    
-    // Parse CSV file with more flexible options
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      dynamicTyping: true, // Automatically convert numeric values
-      transformHeader: (header) => header.trim(), // Trim whitespace from headers
-      complete: (results) => {
-        console.log("Parsed CSV data:", results.data);
-        setCsvParseResult(results.data);
-        setIsCsvDialogOpen(true);
-      },
-      error: (error) => {
-        console.error("CSV parsing error:", error);
-        toast.error("Failed to parse CSV file");
-      }
-    });
-  };
-
-  const importCsvProperties = async () => {
-    try {
-      setCsvUploadLoading(true);
-      
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session) {
-        toast.error("You must be logged in to import properties");
-        return;
-      }
-      
-      // Log the data being sent to the function
-      console.log("Sending to import-properties:", {
-        userId: session.user.id,
-        properties: csvParseResult,
-        source: 'csv'
-      });
-      
-      // Send all parsed data to the backend to handle normalization there
-      const { data, error } = await supabase.functions.invoke('import-properties', {
+      // Call the Supabase Edge Function to import properties
+      const { data, error } = await supabase.functions.invoke("import-properties", {
         body: {
-          userId: session.user.id,
-          properties: csvParseResult,
-          source: 'csv'
+          userId,
+          properties: parsedData,
+          source: "csv"
         }
       });
-        
-      if (error) throw error;
       
-      console.log("Import response:", data);
+      if (error) {
+        throw error;
+      }
       
-      // Close dialog and refresh list
-      setIsCsvDialogOpen(false);
-      setCsvParseResult([]);
-      fetchProperties();
+      setImportResult(data);
       
-      // Show import summary
       if (data.properties_imported > 0) {
         toast.success(`Successfully imported ${data.properties_imported} properties`);
+        fetchProperties();
+      } else {
+        toast.warning("No properties were imported");
       }
       
       if (data.properties_failed > 0) {
-        toast.warning(`${data.properties_failed} properties failed to import`);
+        toast.error(`${data.properties_failed} properties failed to import`);
       }
       
-    } catch (error: any) {
+      setImportStatus(`Import completed. ${data.properties_imported} imported, ${data.properties_failed} failed.`);
+    } catch (error) {
       console.error("Error importing properties:", error);
-      toast.error(error.message || "Failed to import properties");
+      toast.error("Failed to import properties");
+      setImportStatus("Import failed");
     } finally {
-      setCsvUploadLoading(false);
+      setIsImporting(false);
     }
   };
   
-  // Display CSV upload guide information
-  const CsvGuideInfo = () => (
-    <div className="text-sm text-muted-foreground mt-4 space-y-2">
-      <h4 className="font-medium text-foreground">CSV Format Guide</h4>
-      <p>Our flexible importer supports many CSV formats with these fields:</p>
-      <ul className="list-disc pl-5 space-y-1">
-        <li><strong>Required:</strong> Title (or name), Price</li>
-        <li><strong>Optional:</strong> Description, Status, Type, Bedrooms, Bathrooms, Address, City, State, Zip, Size</li>
-      </ul>
-      <p>The system automatically recognizes many different column name variations and formats, including:</p>
-      <ul className="list-disc pl-5 space-y-1">
-        <li><strong>Price formats:</strong> Numbers with currency symbols (€, $, £), with commas, with 'k' or 'm' suffixes</li>
-        <li><strong>Size formats:</strong> Square feet (sqft), square meters (sqm, m²), with or without units</li>
-        <li><strong>Bathroom formats:</strong> Decimals (1.5) or fractions (1 1/2)</li>
-      </ul>
-    </div>
-  );
+  const handleFileUpload = (e) => {
+    const file = e.target.files[0];
+    setUploadedFile(file);
+    setCsvError(null);
+    setImportResult(null);
+    
+    if (file) {
+      // Preview the uploaded file
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: (results) => {
+          console.log("Parsed CSV data:", results);
+          if (results.errors.length > 0) {
+            setCsvError(`CSV parsing error: ${results.errors[0].message}`);
+            setParsedData([]);
+          } else if (results.data.length === 0) {
+            setCsvError("The CSV file is empty");
+            setParsedData([]);
+          } else {
+            setParsedData(results.data);
+            setImportStatus(`Ready to import ${results.data.length} properties`);
+          }
+        },
+        error: (error) => {
+          console.error("Error parsing CSV:", error);
+          setCsvError(`Failed to parse CSV: ${error.message}`);
+          setParsedData([]);
+        }
+      });
+    } else {
+      setParsedData([]);
+      setImportStatus(null);
+    }
+  };
   
+  const handleAddProperty = async () => {
+    try {
+      // Basic validation
+      if (!newProperty.title || !newProperty.price) {
+        toast.error("Title and price are required");
+        return;
+      }
+      
+      // Ensure numeric fields are actually numbers
+      const propertyToAdd = {
+        ...newProperty,
+        price: parseFloat(newProperty.price) || 0,
+        bedrooms: newProperty.bedrooms ? parseInt(newProperty.bedrooms, 10) : null,
+        bathrooms: newProperty.bathrooms ? parseFloat(newProperty.bathrooms) : null,
+        size: newProperty.size ? parseFloat(newProperty.size) : null,
+        user_id: userId
+      };
+      
+      const { data, error } = await supabase
+        .from("properties")
+        .insert(propertyToAdd)
+        .select();
+      
+      if (error) {
+        throw error;
+      }
+      
+      toast.success("Property added successfully");
+      fetchProperties();
+      
+      // Reset form
+      setNewProperty({
+        title: "",
+        description: "",
+        price: "",
+        address: "",
+        city: "",
+        state: "",
+        zip: "",
+        type: "house",
+        bedrooms: "",
+        bathrooms: "",
+        size: "",
+        status: "active"
+      });
+      
+      setIsAddDialogOpen(false);
+    } catch (error) {
+      console.error("Error adding property:", error);
+      toast.error("Failed to add property");
+    }
+  };
+  
+  const handleDeleteProperty = async (id) => {
+    try {
+      const { error } = await supabase
+        .from("properties")
+        .delete()
+        .eq("id", id);
+      
+      if (error) {
+        throw error;
+      }
+      
+      toast.success("Property deleted successfully");
+      fetchProperties();
+    } catch (error) {
+      console.error("Error deleting property:", error);
+      toast.error("Failed to delete property");
+    }
+  };
+  
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setNewProperty(prev => ({ ...prev, [name]: value }));
+  };
+  
+  const handleSelectChange = (name, value) => {
+    setNewProperty(prev => ({ ...prev, [name]: value }));
+  };
+  
+  const formatCurrency = (amount) => {
+    if (!amount && amount !== 0) return '';
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
+    }).format(amount);
+  };
+  
+  const formatDate = (dateString) => {
+    const date = new Date(dateString);
+    return new Intl.DateTimeFormat('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    }).format(date);
+  };
+  
+  const csvExample = `title,price,description,address,city,state,zip,type,bedrooms,bathrooms,size
+"Beautiful 3BR Home",450000,"A stunning property with mountain views","123 Main St","Austin","TX","78701","house",3,2,2100
+"Downtown Condo",320000,"Modern living in the heart of the city","456 Center Ave","Austin","TX","78704","condo",2,2,1200`;
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-3xl font-bold tracking-tight">Property Management</h2>
-        <Button onClick={() => {
-          resetForm();
-          setIsDialogOpen(true);
-        }}>
-          <PlusCircle className="mr-2 h-4 w-4" />
-          Add New Property
-        </Button>
-      </div>
-      
-      <Tabs defaultValue="manual" value={activePropertyTab} onValueChange={setActivePropertyTab}>
-        <TabsList className="grid grid-cols-3 w-full max-w-2xl">
-          <TabsTrigger value="manual">Manual Upload</TabsTrigger>
-          <TabsTrigger value="automated" disabled={isPremiumFeature('professional')}>
-            {isPremiumFeature('professional') && <Lock className="mr-2 h-4 w-4" />}
-            Automated Import
-          </TabsTrigger>
-          <TabsTrigger value="analytics" disabled={isPremiumFeature('professional')}>
-            {isPremiumFeature('professional') && <Lock className="mr-2 h-4 w-4" />}
-            Analytics
-          </TabsTrigger>
-        </TabsList>
-        
-        <TabsContent value="manual" className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
-            <Card className="col-span-1 md:col-span-2">
-              <CardHeader>
-                <CardTitle>Demo Property List</CardTitle>
-                <CardDescription>Click Add New Property to add a real property</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  <p>Get started with your property listings:</p>
-                  <ul className="list-disc pl-5 space-y-1">
-                    <li>Add properties manually with detailed information</li>
-                    <li>Import multiple properties using CSV</li>
-                    <li>Your chatbot will automatically know about your properties</li>
-                  </ul>
+        <div>
+          <h2 className="text-2xl font-bold">Property Management</h2>
+          <p className="text-muted-foreground">
+            Manage your listings and property details
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="mr-2 h-4 w-4" />
+                Add Property
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[600px]">
+              <DialogHeader>
+                <DialogTitle>Add New Property</DialogTitle>
+                <DialogDescription>
+                  Enter the details of your new property listing.
+                </DialogDescription>
+              </DialogHeader>
+              <form id="add-property-form" className="space-y-4">
+                <ScrollArea className="max-h-[70vh] pr-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="title">Title*</Label>
+                      <Input
+                        id="title"
+                        name="title"
+                        value={newProperty.title}
+                        onChange={handleInputChange}
+                        placeholder="e.g. Beautiful 3BR Home"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="price">Price*</Label>
+                      <Input
+                        id="price"
+                        name="price"
+                        type="number"
+                        value={newProperty.price}
+                        onChange={handleInputChange}
+                        placeholder="e.g. 450000"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2 md:col-span-2">
+                      <Label htmlFor="description">Description</Label>
+                      <Textarea
+                        id="description"
+                        name="description"
+                        value={newProperty.description}
+                        onChange={handleInputChange}
+                        placeholder="Describe your property..."
+                        rows={3}
+                      />
+                    </div>
+                    <div className="space-y-2 md:col-span-2">
+                      <Label htmlFor="address">Address</Label>
+                      <Input
+                        id="address"
+                        name="address"
+                        value={newProperty.address}
+                        onChange={handleInputChange}
+                        placeholder="e.g. 123 Main St"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="city">City</Label>
+                      <Input
+                        id="city"
+                        name="city"
+                        value={newProperty.city}
+                        onChange={handleInputChange}
+                        placeholder="e.g. Austin"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="state">State</Label>
+                        <Input
+                          id="state"
+                          name="state"
+                          value={newProperty.state}
+                          onChange={handleInputChange}
+                          placeholder="e.g. TX"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="zip">ZIP</Label>
+                        <Input
+                          id="zip"
+                          name="zip"
+                          value={newProperty.zip}
+                          onChange={handleInputChange}
+                          placeholder="e.g. 78701"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="type">Property Type</Label>
+                      <Select 
+                        name="type" 
+                        value={newProperty.type} 
+                        onValueChange={(value) => handleSelectChange("type", value)}
+                      >
+                        <SelectTrigger id="type">
+                          <SelectValue placeholder="Select type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="house">House</SelectItem>
+                          <SelectItem value="apartment">Apartment</SelectItem>
+                          <SelectItem value="condo">Condo</SelectItem>
+                          <SelectItem value="townhouse">Townhouse</SelectItem>
+                          <SelectItem value="land">Land</SelectItem>
+                          <SelectItem value="commercial">Commercial</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="status">Status</Label>
+                      <Select 
+                        name="status"
+                        value={newProperty.status} 
+                        onValueChange={(value) => handleSelectChange("status", value)}
+                      >
+                        <SelectTrigger id="status">
+                          <SelectValue placeholder="Select status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="active">Active</SelectItem>
+                          <SelectItem value="pending">Pending</SelectItem>
+                          <SelectItem value="sold">Sold</SelectItem>
+                          <SelectItem value="inactive">Inactive</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="bedrooms">Bedrooms</Label>
+                      <Input
+                        id="bedrooms"
+                        name="bedrooms"
+                        type="number"
+                        value={newProperty.bedrooms}
+                        onChange={handleInputChange}
+                        placeholder="e.g. 3"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="bathrooms">Bathrooms</Label>
+                      <Input
+                        id="bathrooms"
+                        name="bathrooms"
+                        type="number"
+                        step="0.5"
+                        value={newProperty.bathrooms}
+                        onChange={handleInputChange}
+                        placeholder="e.g. 2.5"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="size">Size (sq ft)</Label>
+                      <Input
+                        id="size"
+                        name="size"
+                        type="number"
+                        value={newProperty.size}
+                        onChange={handleInputChange}
+                        placeholder="e.g. 2000"
+                      />
+                    </div>
+                  </div>
+                </ScrollArea>
+              </form>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={handleAddProperty}>Save Property</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+          
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button variant="outline">
+                <UploadCloud className="mr-2 h-4 w-4" />
+                Import CSV
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[600px]">
+              <DialogHeader>
+                <DialogTitle>Import Properties from CSV</DialogTitle>
+                <DialogDescription>
+                  Upload a CSV file with your property listings.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="border rounded-md p-4 bg-muted/40">
+                  <div className="flex items-center gap-2 mb-2">
+                    <FileText className="h-4 w-4 text-primary" />
+                    <h3 className="text-sm font-medium">CSV Format Guide</h3>
+                  </div>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Your CSV file should contain the following column headers:
+                  </p>
+                  <div className="text-xs font-mono bg-secondary/30 p-2 rounded overflow-auto whitespace-nowrap mb-2">
+                    title, price, description, address, city, state, zip, type, bedrooms, bathrooms, size
+                  </div>
+                  <details className="text-xs">
+                    <summary className="font-medium cursor-pointer">CSV Example</summary>
+                    <pre className="bg-secondary/30 p-2 rounded mt-1 overflow-auto">{csvExample}</pre>
+                  </details>
                 </div>
-              </CardContent>
-            </Card>
-            
-            <Card>
-              <CardHeader>
-                <CardTitle>Upload Options</CardTitle>
-                <CardDescription>Upload your property data</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <Button variant="outline" className="w-full justify-start" onClick={handleImageUpload}>
-                  <Upload className="mr-2 h-4 w-4" />
-                  Upload Images
-                  <input 
+              
+                <div className="grid w-full items-center gap-1.5">
+                  <Label htmlFor="csv-upload">Upload CSV</Label>
+                  <Input 
+                    id="csv-upload" 
                     type="file" 
-                    ref={fileInputRef} 
-                    className="hidden" 
-                    accept="image/*" 
-                    multiple 
-                    onChange={handleFileChange}
+                    accept=".csv"
+                    onChange={handleFileUpload}
                   />
-                </Button>
+                </div>
                 
-                <Button variant="outline" className="w-full justify-start" onClick={handleCsvUpload}>
-                  <FileSpreadsheet className="mr-2 h-4 w-4" />
-                  Bulk Import (CSV)
-                  <input 
-                    type="file" 
-                    ref={csvInputRef} 
-                    className="hidden" 
-                    accept=".csv" 
-                    onChange={handleCsvFileChange}
-                  />
-                </Button>
+                {csvError && (
+                  <Alert variant="destructive">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertTitle>Error</AlertTitle>
+                    <AlertDescription>{csvError}</AlertDescription>
+                  </Alert>
+                )}
                 
+                {parsedData.length > 0 && (
+                  <div className="border rounded-md p-2">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-sm font-medium">CSV Preview ({parsedData.length} properties)</span>
+                    </div>
+                    <ScrollArea className="h-[200px]">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            {Object.keys(parsedData[0]).slice(0, 5).map((header) => (
+                              <TableHead key={header}>{header}</TableHead>
+                            ))}
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {parsedData.slice(0, 5).map((row, i) => (
+                            <TableRow key={i}>
+                              {Object.values(row).slice(0, 5).map((value, j) => (
+                                <TableCell key={j}>{value ? String(value).substring(0, 20) : "-"}</TableCell>
+                              ))}
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </ScrollArea>
+                  </div>
+                )}
+                
+                {importStatus && (
+                  <div className="text-sm">
+                    {importStatus}
+                  </div>
+                )}
+                
+                {importResult && (
+                  <Alert variant={importResult.properties_failed > 0 ? "warning" : "default"}>
+                    <div className="flex flex-col">
+                      <div className="flex items-center">
+                        {importResult.properties_failed > 0 ? (
+                          <AlertTriangle className="h-4 w-4 mr-2 text-warning" />
+                        ) : (
+                          <Check className="h-4 w-4 mr-2 text-success" />
+                        )}
+                        <AlertTitle>Import completed</AlertTitle>
+                      </div>
+                      <AlertDescription>
+                        <div className="space-y-1 mt-1">
+                          <div className="text-sm">
+                            {importResult.properties_imported} properties imported successfully
+                          </div>
+                          {importResult.properties_failed > 0 && (
+                            <div className="text-sm text-warning">
+                              {importResult.properties_failed} properties failed to import
+                            </div>
+                          )}
+                          {importResult.errors && importResult.errors.length > 0 && (
+                            <details className="text-xs mt-2">
+                              <summary className="cursor-pointer">View Errors</summary>
+                              <div className="mt-1 bg-muted p-2 rounded">
+                                <ul className="list-disc pl-4">
+                                  {importResult.errors.slice(0, 5).map((error, i) => (
+                                    <li key={i} className="mb-1">{error}</li>
+                                  ))}
+                                  {importResult.errors.length > 5 && (
+                                    <li>...and {importResult.errors.length - 5} more errors</li>
+                                  )}
+                                </ul>
+                              </div>
+                            </details>
+                          )}
+                        </div>
+                      </AlertDescription>
+                    </div>
+                  </Alert>
+                )}
+              </div>
+              <DialogFooter>
                 <Button 
                   variant="outline" 
-                  className="w-full justify-start" 
-                  disabled={isPremiumFeature('professional')}
-                  onClick={() => !isPremiumFeature('professional') && setActivePropertyTab('automated')}
+                  onClick={() => {
+                    setUploadedFile(null);
+                    setParsedData([]);
+                    setCsvError(null);
+                    setImportStatus(null);
+                    setImportResult(null);
+                  }}
                 >
-                  {isPremiumFeature('professional') && <Lock className="mr-2 h-4 w-4" />}
-                  {!isPremiumFeature('professional') && <Link className="mr-2 h-4 w-4" />}
-                  Website Scraping
-                  {isPremiumFeature('professional') && <span className="ml-auto text-xs text-muted-foreground">(Pro)</span>}
+                  Cancel
                 </Button>
-              </CardContent>
-            </Card>
+                <Button 
+                  onClick={handlePropertyImport} 
+                  disabled={isImporting || parsedData.length === 0}
+                >
+                  {isImporting ? "Importing..." : "Import Properties"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </div>
+      
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <TabsList>
+              <TabsTrigger value="all">
+                All Properties
+                {properties.length > 0 && (
+                  <Badge variant="secondary" className="ml-2">
+                    {properties.length}
+                  </Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="active">Active</TabsTrigger>
+              <TabsTrigger value="pending">Pending</TabsTrigger>
+              <TabsTrigger value="sold">Sold</TabsTrigger>
+            </TabsList>
+          </Tabs>
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="search"
+                placeholder="Search properties..."
+                className="pl-8 w-[200px] md:w-[300px]"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
           </div>
-          
-          <h3 className="text-xl font-bold mt-6">Your Properties</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        </div>
+        
+        <Card>
+          <CardContent className="p-0">
             {loading ? (
-              <div className="col-span-3 flex justify-center items-center h-40">
-                <div className="animate-spin h-6 w-6 border-t-2 border-primary rounded-full"></div>
+              <div className="flex items-center justify-center p-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
               </div>
-            ) : properties.length === 0 ? (
-              <div className="col-span-3 text-center p-8 border rounded-lg">
-                <ImageIcon className="h-12 w-12 mx-auto text-muted-foreground/50 mb-3" />
-                <h4 className="text-lg font-medium mb-2">No properties yet</h4>
-                <p className="text-muted-foreground mb-4">Add your first property to get started</p>
-                <Button onClick={() => {
-                  resetForm();
-                  setIsDialogOpen(true);
-                }}>
-                  <PlusCircle className="mr-2 h-4 w-4" />
-                  Add New Property
+            ) : filteredProperties.length === 0 ? (
+              <div className="flex flex-col items-center justify-center p-8 text-center">
+                <Home className="h-12 w-12 text-muted-foreground mb-4" />
+                <h3 className="text-lg font-medium mb-1">No properties found</h3>
+                <p className="text-muted-foreground mb-4">
+                  {searchQuery ? "Try a different search term" : "Add your first property listing to get started"}
+                </p>
+                <Button onClick={() => setIsAddDialogOpen(true)}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Property
                 </Button>
               </div>
             ) : (
-              properties.map((property) => (
-                <Card key={property.id} className="overflow-hidden">
-                  <img 
-                    src={property.imageUrl} 
-                    alt={property.title}
-                    className="h-48 w-full object-cover"
-                  />
-                  <CardHeader className="pb-3">
-                    <div className="flex justify-between items-start">
-                      <CardTitle className="text-lg">{property.title}</CardTitle>
-                      <Badge variant={property.status === 'active' ? 'default' : 'outline'}>
-                        {property.status === 'active' ? 'Active' : 'Pending'}
-                      </Badge>
-                    </div>
-                    <CardDescription>{property.price.toLocaleString('en-US', {style: 'currency', currency: 'EUR'})}</CardDescription>
-                  </CardHeader>
-                  <CardContent className="text-sm pb-3">
-                    <p className="line-clamp-2">{property.description}</p>
-                    <div className="flex justify-between items-center mt-2 text-xs text-muted-foreground">
-                      <span>{property.views} views</span>
-                      <span>{property.inquiries} inquiries</span>
-                    </div>
-                  </CardContent>
-                  <CardFooter className="flex justify-between pt-0">
-                    <Button variant="outline" size="sm" onClick={() => handleEdit(property)}>
-                      <Edit className="h-3.5 w-3.5 mr-1" />
-                      Edit
-                    </Button>
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      className="text-destructive hover:text-destructive"
-                      onClick={() => {
-                        setPropertyToDelete(property.id);
-                        setIsDeleteDialogOpen(true);
-                      }}
-                    >
-                      <Trash2 className="h-3.5 w-3.5 mr-1" />
-                      Delete
-                    </Button>
-                  </CardFooter>
-                </Card>
-              ))
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Property</TableHead>
+                    <TableHead>Price</TableHead>
+                    <TableHead className="hidden md:table-cell">Location</TableHead>
+                    <TableHead className="hidden md:table-cell">Details</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Date Added</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredProperties.map((property) => (
+                    <TableRow key={property.id}>
+                      <TableCell className="font-medium">
+                        {property.title || "Untitled Property"}
+                      </TableCell>
+                      <TableCell>{formatCurrency(property.price)}</TableCell>
+                      <TableCell className="hidden md:table-cell">
+                        {property.city ? `${property.city}, ${property.state || ''}` : "Location not specified"}
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell">
+                        {property.bedrooms || property.bathrooms || property.size ? (
+                          <div className="flex items-center gap-2">
+                            {property.bedrooms && (
+                              <span className="text-xs bg-secondary px-2 py-1 rounded-md">{property.bedrooms} BR</span>
+                            )}
+                            {property.bathrooms && (
+                              <span className="text-xs bg-secondary px-2 py-1 rounded-md">{property.bathrooms} BA</span>
+                            )}
+                            {property.size && (
+                              <span className="text-xs bg-secondary px-2 py-1 rounded-md">{Math.round(property.size)} sqft</span>
+                            )}
+                          </div>
+                        ) : (
+                          "No details"
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Badge 
+                          variant={
+                            property.status === "active" ? "default" :
+                            property.status === "pending" ? "secondary" :
+                            property.status === "sold" ? "success" : "outline"
+                          }
+                        >
+                          {property.status ? property.status.charAt(0).toUpperCase() + property.status.slice(1) : "Active"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>{formatDate(property.created_at)}</TableCell>
+                      <TableCell className="text-right">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" className="h-8 w-8 p-0">
+                              <span className="sr-only">Open menu</span>
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                            <DropdownMenuItem onClick={() => alert("View property details")}>
+                              <Eye className="mr-2 h-4 w-4" />
+                              View Details
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => alert("Edit property")}>
+                              <Edit className="mr-2 h-4 w-4" />
+                              Edit Property
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem 
+                              className="text-destructive focus:text-destructive"
+                              onClick={() => handleDeleteProperty(property.id)}
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Delete Property
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             )}
-          </div>
-        </TabsContent>
-        
-        <TabsContent value="automated">
-          {isPremiumFeature('professional') ? (
-            <div className="text-center py-12">
-              <h3 className="text-xl font-bold mb-2">Upgrade to Professional Plan</h3>
-              <p className="text-muted-foreground mb-6">
-                Automated property imports are available on the Professional plan and above
-              </p>
-              <Button>Upgrade Now</Button>
-            </div>
-          ) : (
-            <div className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Website Scraping</CardTitle>
-                  <CardDescription>
-                    Paste a website URL to automatically import properties
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex gap-2">
-                    <Input placeholder="https://realestatewebsite.com/listings" />
-                    <Button>Import</Button>
-                  </div>
-                </CardContent>
-              </Card>
-              
-              <Card>
-                <CardHeader>
-                  <CardTitle>API Integration</CardTitle>
-                  <CardDescription>
-                    Connect to your MLS or agency platform
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="api-key">API Key</Label>
-                      <Input id="api-key" type="password" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="api-url">API Endpoint URL</Label>
-                      <Input id="api-url" placeholder="https://api.example.com/listings" />
-                    </div>
-                    <Button>Connect API</Button>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          )}
-        </TabsContent>
-        
-        <TabsContent value="analytics">
-          {isPremiumFeature('professional') ? (
-            <div className="text-center py-12">
-              <h3 className="text-xl font-bold mb-2">Upgrade to Professional Plan</h3>
-              <p className="text-muted-foreground mb-6">
-                Property analytics are available on the Professional plan and above
-              </p>
-              <Button>Upgrade Now</Button>
-            </div>
-          ) : (
-            <div className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Property Performance</CardTitle>
-                  <CardDescription>See which properties are performing best</CardDescription>
-                </CardHeader>
-                <CardContent className="h-80">
-                  <div className="flex items-center justify-center h-full">
-                    <p className="text-muted-foreground">Analytics charts will appear here</p>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          )}
-        </TabsContent>
-      </Tabs>
-
-      {/* Add/Edit Property Dialog - Updated with ScrollArea and improved layout */}
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-[800px] max-h-[90vh]">
-          <DialogHeader>
-            <DialogTitle>{editingProperty ? "Edit Property" : "Add New Property"}</DialogTitle>
-            <DialogDescription>
-              {editingProperty ? "Update your property details" : "Enter the details of your property"}
-            </DialogDescription>
-          </DialogHeader>
-          <ScrollArea className="max-h-[calc(90vh-180px)]">
-            <form id="property-form" onSubmit={handleSubmit}>
-              <div className="grid gap-4 py-4 px-1">
-                <div className="space-y-2">
-                  <Label htmlFor="title">Property Title*</Label>
-                  <Input 
-                    id="title"
-                    name="title"
-                    value={formData.title}
-                    onChange={handleInputChange}
-                    placeholder="e.g. Luxury Villa with Pool"
-                    required
-                  />
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="price">Price* (€)</Label>
-                    <Input 
-                      id="price"
-                      name="price"
-                      value={formData.price || ''}
-                      onChange={handleInputChange}
-                      placeholder="e.g. 850000"
-                      type="number"
-                      required
-                    />
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="status">Status</Label>
-                    <Select 
-                      value={formData.status} 
-                      onValueChange={(value) => handleSelectChange('status', value)}
-                    >
-                      <SelectTrigger id="status">
-                        <SelectValue placeholder="Select status" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="active">Active</SelectItem>
-                        <SelectItem value="pending">Pending</SelectItem>
-                        <SelectItem value="sold">Sold</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="type">Property Type</Label>
-                    <Input 
-                      id="type"
-                      name="type"
-                      value={formData.type}
-                      onChange={handleInputChange}
-                      placeholder="e.g. Villa, Apartment, House" 
-                    />
-                  </div>
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="bedrooms">Bedrooms</Label>
-                    <Input 
-                      id="bedrooms"
-                      name="bedrooms"
-                      value={formData.bedrooms || ''}
-                      onChange={handleInputChange}
-                      placeholder="e.g. 4"
-                      type="number" 
-                    />
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="bathrooms">Bathrooms</Label>
-                    <Input 
-                      id="bathrooms"
-                      name="bathrooms"
-                      value={formData.bathrooms || ''}
-                      onChange={handleInputChange}
-                      placeholder="e.g. 2.5"
-                      type="number" 
-                      step="0.5"
-                    />
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="size">Size (m²)</Label>
-                    <Input 
-                      id="size"
-                      name="size"
-                      value={formData.size || ''}
-                      onChange={handleInputChange}
-                      placeholder="e.g. 200"
-                      type="number" 
-                    />
-                  </div>
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="address">Address</Label>
-                  <Input 
-                    id="address"
-                    name="address"
-                    value={formData.address}
-                    onChange={handleInputChange}
-                    placeholder="Street address" 
-                  />
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="city">City</Label>
-                    <Input 
-                      id="city"
-                      name="city"
-                      value={formData.city}
-                      onChange={handleInputChange}
-                      placeholder="City" 
-                    />
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="state">State/Province</Label>
-                    <Input 
-                      id="state"
-                      name="state"
-                      value={formData.state}
-                      onChange={handleInputChange}
-                      placeholder="State or Province" 
-                    />
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="zip">Postal Code</Label>
-                    <Input 
-                      id="zip"
-                      name="zip"
-                      value={formData.zip}
-                      onChange={handleInputChange}
-                      placeholder="Postal Code" 
-                    />
-                  </div>
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="description">Description</Label>
-                  <Textarea 
-                    id="description"
-                    name="description"
-                    value={formData.description}
-                    onChange={handleInputChange}
-                    placeholder="Describe the property..."
-                    rows={3}
-                  />
-                </div>
-              </div>
-            </form>
-          </ScrollArea>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
-            <Button type="submit" form="property-form">{editingProperty ? "Update Property" : "Add Property"}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete Confirmation Dialog */}
-      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>Confirm Deletion</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete this property? This action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={handleDelete}>
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* CSV Import Preview Dialog - Updated with more information */}
-      <Dialog open={isCsvDialogOpen} onOpenChange={setIsCsvDialogOpen}>
-        <DialogContent className="sm:max-w-[800px] max-h-[90vh]">
-          <DialogHeader>
-            <DialogTitle>Import Properties from CSV</DialogTitle>
-            <DialogDescription>
-              Review the properties to be imported from your CSV file
-            </DialogDescription>
-          </DialogHeader>
-          
-          <CsvGuideInfo />
-          
-          <ScrollArea className="max-h-[400px] border rounded-md">
-            <table className="min-w-full">
-              <thead className="bg-muted/50 sticky top-0 z-10">
-                <tr>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground tracking-wider">Title</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground tracking-wider">Price</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground tracking-wider">Type</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground tracking-wider">Location</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground tracking-wider">Size</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground tracking-wider">Beds/Baths</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {csvParseResult.map((row, index) => {
-                  // Find title using advanced fuzzy matching
-                  const titleFields = ['title', 'Title', 'name', 'Name', 'property_name', 'property name', 'heading', 'Heading', 'listing_title'];
-                  let title = null;
-                  for (const field of titleFields) {
-                    if (row[field]) {
-                      title = row[field];
-                      break;
-                    }
-                  }
-                  // If still not found, try partial matching
-                  if (!title) {
-                    for (const key in row) {
-                      if (key.toLowerCase().includes('title') || key.toLowerCase().includes('name') || 
-                          key.toLowerCase().includes('property') || key.toLowerCase().includes('heading')) {
-                        title = row[key];
-                        break;
-                      }
-                    }
-                  }
-                  
-                  // Find price using similar approach
-                  const priceFields = ['price', 'Price', 'cost', 'Cost', 'value', 'Value', 'asking_price', 'listing_price'];
-                  let price = null;
-                  for (const field of priceFields) {
-                    if (row[field] !== undefined && row[field] !== null && row[field] !== '') {
-                      price = row[field];
-                      break;
-                    }
-                  }
-                  // If still not found, try partial matching
-                  if (!price) {
-                    for (const key in row) {
-                      if (key.toLowerCase().includes('price') || key.toLowerCase().includes('cost') || 
-                          key.toLowerCase().includes('value') || key.toLowerCase().includes('eur') || 
-                          key.toLowerCase().includes('usd')) {
-                        price = row[key];
-                        break;
-                      }
-                    }
-                  }
-                  
-                  // Same for other fields
-                  const typeFields = ['type', 'Type', 'property_type', 'property type', 'category', 'Category'];
-                  let type = null;
-                  for (const field of typeFields) {
-                    if (row[field]) {
-                      type = row[field];
-                      break;
-                    }
-                  }
-                  
-                  // Get city
-                  const cityFields = ['city', 'City', 'town', 'Town', 'location', 'Location'];
-                  let city = null;
-                  for (const field of cityFields) {
-                    if (row[field]) {
-                      city = row[field];
-                      break;
-                    }
-                  }
-                  
-                  // Get state
-                  const stateFields = ['state', 'State', 'province', 'Province', 'region', 'Region'];
-                  let state = null;
-                  for (const field of stateFields) {
-                    if (row[field]) {
-                      state = row[field];
-                      break;
-                    }
-                  }
-                  
-                  // Get size
-                  const sizeFields = ['size', 'Size', 'area', 'Area', 'square_feet', 'square_meters', 'sqft', 'sqm'];
-                  let size = null;
-                  for (const field of sizeFields) {
-                    if (row[field]) {
-                      size = row[field];
-                      break;
-                    }
-                  }
-                  
-                  // Get bedrooms
-                  const bedroomFields = ['bedrooms', 'Bedrooms', 'beds', 'Beds', 'bedroom', 'Bedroom', 'br', 'BR'];
-                  let bedrooms = null;
-                  for (const field of bedroomFields) {
-                    if (row[field] !== undefined && row[field] !== null && row[field] !== '') {
-                      bedrooms = row[field];
-                      break;
-                    }
-                  }
-                  
-                  // Get bathrooms
-                  const bathroomFields = ['bathrooms', 'Bathrooms', 'baths', 'Baths', 'bathroom', 'Bathroom', 'ba', 'BA'];
-                  let bathrooms = null;
-                  for (const field of bathroomFields) {
-                    if (row[field] !== undefined && row[field] !== null && row[field] !== '') {
-                      bathrooms = row[field];
-                      break;
-                    }
-                  }
-                  
-                  return (
-                    <tr key={index} className="hover:bg-muted/50">
-                      <td className="px-4 py-2 text-sm">{title || "No title"}</td>
-                      <td className="px-4 py-2 text-sm">{typeof price === 'number' ? price.toLocaleString() : (price || "Not specified")}</td>
-                      <td className="px-4 py-2 text-sm">{type || "Not specified"}</td>
-                      <td className="px-4 py-2 text-sm">{city ? `${city}${state ? `, ${state}` : ''}` : "No location"}</td>
-                      <td className="px-4 py-2 text-sm">{size ? (typeof size === 'number' ? `${size.toLocaleString()} m²` : size) : "Not specified"}</td>
-                      <td className="px-4 py-2 text-sm">
-                        {bedrooms || bathrooms ? 
-                          `${bedrooms || '?'} bd / ${bathrooms || '?'} ba` : 
-                          "Not specified"}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </ScrollArea>
-          <p className="text-sm text-muted-foreground mt-2">
-            {csvParseResult.length} properties found in CSV file.
-          </p>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsCsvDialogOpen(false)} disabled={csvUploadLoading}>
-              Cancel
-            </Button>
-            <Button onClick={importCsvProperties} disabled={csvUploadLoading}>
-              {csvUploadLoading ? (
-                <>
-                  <div className="animate-spin h-4 w-4 mr-2 border-t-2 border-current rounded-full"></div>
-                  Importing...
-                </>
-              ) : (
-                "Import Properties"
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 };
