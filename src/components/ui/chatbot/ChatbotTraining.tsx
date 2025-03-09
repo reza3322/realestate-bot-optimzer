@@ -6,7 +6,7 @@ import { AlertCircle } from "lucide-react";
 import FileUpload from "./FileUpload";
 import WebsiteCrawler from "./WebsiteCrawler";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import TrainingContentManager from "./TrainingContentManager";
+import { TrainingContentManager } from "./TrainingContentManager";
 
 interface ChatbotTrainingProps {
   userId: string;

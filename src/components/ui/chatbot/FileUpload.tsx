@@ -141,12 +141,12 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
     <Card>
       <CardHeader>
         <CardTitle className="text-lg">Upload Training Files</CardTitle>
-        <CardDescription>Upload text files to train your chatbot</CardDescription>
+        <CardDescription>Upload text files (.txt) to train your chatbot</CardDescription>
       </CardHeader>
 
       <CardContent className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="file-upload">Select File (TXT only)</Label>
+          <Label htmlFor="file-upload">Select Text File (.txt only)</Label>
           <Input 
             id="file-upload" 
             type="file" 
@@ -222,9 +222,10 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
         <div className="text-xs text-muted-foreground mt-2">
           <p>For best results:</p>
           <ul className="list-disc pl-5 space-y-1 mt-1">
-            <li>Upload plain text (.txt) files</li>
+            <li>Upload plain text (.txt) files only</li>
             <li>Ensure text is clearly formatted and readable</li>
             <li>Use multiple smaller files rather than one large file</li>
+            <li>You can later edit uploaded content in the "Manage Content" tab</li>
           </ul>
         </div>
       </CardContent>
