@@ -57,6 +57,7 @@ Deno.serve(async (req) => {
     if (userId) {
       console.log('🔍 Searching for relevant training data...');
       try {
+        // First check the chatbot_training_data table (for manually entered Q&A)
         const { data: trainingMatches, error: trainingError } = await supabase
           .from('chatbot_training_data')
           .select('*')
@@ -118,32 +119,89 @@ Deno.serve(async (req) => {
             
             return {
               ...item,
-              relevanceScore: finalScore
+              relevanceScore: finalScore,
+              source: 'training'
             };
           });
           
-          // Sort by relevance score and take top matches
-          const relevantMatches = scoredMatches
-            .filter(item => item.relevanceScore > 1) // Only consider reasonably relevant items
-            .sort((a, b) => b.relevanceScore - a.relevanceScore)
-            .slice(0, 3); // Take top 3 most relevant items
-          
-          console.log(`🔍 Found ${relevantMatches.length} relevant training items`);
-          
-          if (relevantMatches.length > 0) {
-            // If we have a highly relevant match, use it directly
-            const bestMatch = relevantMatches[0];
-            if (bestMatch.relevanceScore > 5) {
-              console.log(`🎯 Using training data match: "${bestMatch.question}" with score ${bestMatch.relevanceScore}`);
-              response = bestMatch.answer;
-              responseSource = 'training';
-            } else {
-              // Otherwise, collect relevant training data to enhance the AI response
-              relevantTrainingData = relevantMatches.map(item => ({
-                question: item.question,
-                answer: item.answer
-              }));
-              console.log(`📚 Using ${relevantTrainingData.length} training items to enhance AI response`);
+          // Now also check the chatbot_training_files table
+          console.log('🔍 Searching for relevant uploaded file content...');
+          const { data: fileMatches, error: fileError } = await supabase
+            .from('chatbot_training_files')
+            .select('*')
+            .eq('user_id', userId)
+            .order('priority', { ascending: false });
+            
+          if (fileError) {
+            console.error('❌ Error fetching uploaded file content:', fileError);
+          } else if (fileMatches && fileMatches.length > 0) {
+            console.log(`✅ Found ${fileMatches.length} training files to check`);
+            
+            // Score file content matches similar to training data
+            const scoredFileMatches = fileMatches.map(item => {
+              // Check if message terms appear in the extracted text
+              const extractedText = item.extracted_text.toLowerCase();
+              let matchScore = 0;
+              
+              // Check for term presence in extracted text
+              for (const term of messageTerms) {
+                if (extractedText.includes(term)) {
+                  matchScore += 0.5; // Lower weight per term than exact QA matches
+                }
+              }
+              
+              // Check for exact phrase match
+              if (extractedText.includes(message.toLowerCase())) {
+                matchScore += 2;
+              }
+              
+              // Check for partial phrase matches
+              const messagePhrases = splitIntoPhrases(message.toLowerCase());
+              for (const phrase of messagePhrases) {
+                if (phrase.length > 5 && extractedText.includes(phrase)) {
+                  matchScore += 0.5;
+                }
+              }
+              
+              // Apply priority multiplier
+              const priorityMultiplier = 1 + (item.priority || 0) / 10;
+              const finalScore = matchScore * priorityMultiplier;
+              
+              // Convert file to a "fake" Q&A pair for consistency
+              return {
+                question: `What information is in ${item.source_file}?`,
+                answer: item.extracted_text,
+                relevanceScore: finalScore,
+                source: 'file'
+              };
+            });
+            
+            // Combine both types of matches
+            const allScoredMatches = [...scoredMatches, ...scoredFileMatches];
+            
+            // Sort by relevance score and take top matches
+            const relevantMatches = allScoredMatches
+              .filter(item => item.relevanceScore > 1) // Only consider reasonably relevant items
+              .sort((a, b) => b.relevanceScore - a.relevanceScore)
+              .slice(0, 3); // Take top 3 most relevant items
+            
+            console.log(`🔍 Found ${relevantMatches.length} relevant items (from both Q&A and files)`);
+            
+            if (relevantMatches.length > 0) {
+              // If we have a highly relevant match, use it directly
+              const bestMatch = relevantMatches[0];
+              if (bestMatch.relevanceScore > 5) {
+                console.log(`🎯 Using match: "${bestMatch.question}" with score ${bestMatch.relevanceScore} from source: ${bestMatch.source}`);
+                response = bestMatch.answer;
+                responseSource = bestMatch.source;
+              } else {
+                // Otherwise, collect relevant training data to enhance the AI response
+                relevantTrainingData = relevantMatches.map(item => ({
+                  question: item.question,
+                  answer: item.answer
+                }));
+                console.log(`📚 Using ${relevantTrainingData.length} items to enhance AI response`);
+              }
             }
           }
         } else {
@@ -213,7 +271,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // If no direct match in training data, use enhanced OpenAI
+    // If no direct match in training data or files, use enhanced OpenAI
     if (!response) {
       console.log('🤖 Generating enhanced response with OpenAI');
       
