@@ -1,8 +1,6 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.36.0";
 import { corsHeaders } from "../_shared/cors.ts";
-// Fix the PDF reader import - use a different module that's available
-import { createPDFReader } from "https://cdn.jsdelivr.net/gh/denoland/deno_std@0.218.2/encoding/pdf.ts";
 
 Deno.serve(async (req) => {
   console.log(`🔄 Request received: ${req.method}`);
@@ -66,7 +64,7 @@ Deno.serve(async (req) => {
     if (fileName.toLowerCase().endsWith(".pdf")) {
       console.log("📄 Processing PDF file");
       try {
-        // For now, we'll use a simple text extraction method since we're changing the PDF library
+        // Use a simple text extraction method for PDF files
         extractedText = await extractSimpleText(fileData);
 
         if (!extractedText.trim()) {
