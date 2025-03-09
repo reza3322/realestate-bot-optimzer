@@ -1,6 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.36.0";
 import { corsHeaders } from "../_shared/cors.ts";
-import { PDFDocument } from "https://deno.land/x/pdf@v1.2.0/mod.ts"; // ✅ Use Deno's native PDF parser
+import { PDFDocument } from "https://deno.land/x/pdf@v1.2.0/mod.ts"; // ✅ Fully Deno-compatible
 
 Deno.serve(async (req) => {
   console.log(`🔄 Request received: ${req.method}`);
