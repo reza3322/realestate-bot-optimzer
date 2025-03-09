@@ -1,7 +1,8 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.36.0";
 import { corsHeaders } from "../_shared/cors.ts";
-import { PDFDocument } from "https://deno.land/x/pdf@1.2.0/mod.ts";
+import { extractText } from "https://deno.land/x/pdf_extract@0.1.0/mod.ts";
+
 
 
  // ✅ Proper PDF text extraction
@@ -200,24 +201,21 @@ Deno.serve(async (req) => {
 // ✅ **PDF Text Extraction Function**
 async function extractPdfText(pdfArrayBuffer: ArrayBuffer): Promise<string> {
   try {
-    console.log("🔍 Extracting text from PDF using pdf-lib...");
+    console.log("🔍 Extracting text from PDF using pdf-extract...");
 
-    // Load the PDF
-    const pdfDoc = await PDFDocument.load(pdfArrayBuffer);
-    let extractedText = "";
+    const uint8Array = new Uint8Array(pdfArrayBuffer);
+    const extractedText = await extractText(uint8Array);
 
-    // Extract text from each page
-    const pageCount = pdfDoc.getPageCount();
-    for (let i = 0; i < pageCount; i++) {
-      const page = pdfDoc.getPage(i);
-      extractedText += page.getText() + "\n\n"; // Preserve formatting
+    if (!extractedText || extractedText.trim().length === 0) {
+      console.warn("⚠️ No text extracted, this might be an image-based PDF.");
+      return "PDF text extraction failed. This PDF might be image-based. Try uploading a text-based PDF.";
     }
 
     console.log(`✅ Extracted ${extractedText.length} characters from PDF.`);
     return extractedText.trim();
   } catch (error) {
     console.error("❌ Error extracting PDF text:", error);
-    return "PDF content extraction failed. Please upload a text version of this document.";
+    return "PDF content extraction failed. This might be an image-based PDF or have security restrictions.";
   }
 }
 
