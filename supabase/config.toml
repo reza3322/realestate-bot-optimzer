@@ -34,3 +34,6 @@ verify_jwt = true
 
 [functions.process-pdf-content]
 verify_jwt = false
+
+[functions.web-crawler]
+verify_jwt = true

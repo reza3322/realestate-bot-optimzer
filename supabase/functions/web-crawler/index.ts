@@ -1,7 +1,7 @@
+
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1'
-import { DOMParser } from 'https://deno.land/x/deno_dom@v0.1.38/deno-dom-wasm.ts';
-import * as playwright from 'playwright';
+import { createClient } from '@supabase/supabase-js'
+import { DOMParser } from 'deno-dom';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -49,9 +49,12 @@ serve(async (req) => {
     
     if (maxPages && !isNaN(Number(maxPages))) {
       // If maxPages is specified in request, use it (but enforce plan limits)
-      if (userPlan === 'premium' || userPlan === 'enterprise') {
-        pagesToCrawl = Number(maxPages);
-        console.log(`Premium/Enterprise user - allowing custom crawl limit: ${pagesToCrawl} pages`);
+      if (userPlan === 'premium') {
+        pagesToCrawl = Math.min(Number(maxPages), 200);
+        console.log(`Premium user - allowing custom crawl limit: ${pagesToCrawl} pages`);
+      } else if (userPlan === 'enterprise') {
+        pagesToCrawl = Math.min(Number(maxPages), 500);
+        console.log(`Enterprise user - allowing custom crawl limit: ${pagesToCrawl} pages`);
       } else {
         // For non-premium users, cap at default
         pagesToCrawl = Math.min(Number(maxPages), 10);
@@ -111,7 +114,7 @@ serve(async (req) => {
             extracted_text: sanitizedContent,
             priority: 5, // Default priority
             category: 'Website Content',
-            content_type: 'text/html' // Add content_type field which does exist
+            content_type: 'text/html'
           })
         
         if (insertError) {
@@ -188,135 +191,61 @@ async function crawlWebsite(baseUrl: string, maxPages = 10): Promise<Record<stri
   
   console.log(`Starting crawl of ${baseUrl}, max pages: ${maxPages}`)
   
-  try {
-    // Initialize Playwright browser
-    const browser = await playwright.chromium.launch();
-    console.log('Browser launched for JavaScript-enabled crawling');
-
-    while (queue.length > 0 && visitedUrls.size < maxPages) {
-      const currentUrl = queue.shift();
-      if (!currentUrl || visitedUrls.has(currentUrl)) continue;
-      
-      visitedUrls.add(currentUrl);
-      console.log(`Crawling page ${visitedUrls.size}/${maxPages}: ${currentUrl}`);
-      
-      try {
-        // Use Playwright to load the page with JavaScript enabled
-        const context = await browser.newContext();
-        const page = await context.newPage();
-        
-        // Set timeout for page load
-        await page.goto(currentUrl, { timeout: 30000, waitUntil: 'networkidle' });
-        console.log(`Page loaded with JS support: ${currentUrl}`);
-        
-        // Wait for JavaScript content to load
-        await page.waitForLoadState('networkidle');
-        
-        // Extract the fully rendered HTML
-        const content = await page.content();
-        
-        // Parse the rendered HTML and extract text
-        const parser = new DOMParser();
-        const document = parser.parseFromString(content, 'text/html');
-        
-        if (!document) {
-          console.error(`Failed to parse HTML for ${currentUrl}`);
-          await context.close();
-          continue;
-        }
-        
-        // Extract text content from the rendered page
-        const textContent = extractTextContent(document);
-        
-        // Get any dynamically loaded content (SPA, React, etc.)
-        const dynamicContent = await extractDynamicContent(page);
-        
-        // Combine static and dynamic content
-        const combinedContent = `${textContent}\n\nDynamic Content:\n${dynamicContent}`;
-        
-        // Store the content
-        results[currentUrl] = combinedContent;
-        
-        // Find more links to crawl from the rendered page
-        if (visitedUrls.size < maxPages) {
-          const links = await findLinksWithPlaywright(page, currentUrl, baseUrlObj.origin);
-          
-          // Add new links to the queue
-          for (const link of links) {
-            if (!visitedUrls.has(link) && !queue.includes(link)) {
-              queue.push(link);
-            }
-          }
-        }
-        
-        await context.close();
-      } catch (error) {
-        console.error(`Error crawling ${currentUrl}:`, error);
-      }
-    }
+  // Basic HTTP crawling
+  while (queue.length > 0 && visitedUrls.size < maxPages) {
+    const currentUrl = queue.shift();
+    if (!currentUrl || visitedUrls.has(currentUrl)) continue;
     
-    await browser.close();
-    console.log('Browser closed after crawling');
-  } catch (playwrightError) {
-    console.error('Failed to launch Playwright browser:', playwrightError);
-    console.log('Falling back to basic HTTP fetch crawling...');
+    visitedUrls.add(currentUrl);
+    console.log(`Crawling page ${visitedUrls.size}/${maxPages}: ${currentUrl}`);
     
-    // If Playwright fails, fall back to basic HTTP crawling
-    while (queue.length > 0 && visitedUrls.size < maxPages) {
-      const currentUrl = queue.shift();
-      if (!currentUrl || visitedUrls.has(currentUrl)) continue;
+    try {
+      const response = await fetch(currentUrl, {
+        headers: {
+          'User-Agent': 'RealHome.ai Bot/1.0 (Web Crawler for Chatbot Training)'
+        }
+      });
       
-      visitedUrls.add(currentUrl);
-      console.log(`Fallback crawling page ${visitedUrls.size}/${maxPages}: ${currentUrl}`);
-      
-      try {
-        const response = await fetch(currentUrl, {
-          headers: {
-            'User-Agent': 'RealHome.ai Bot/1.0 (Web Crawler for Chatbot Training)'
-          }
-        });
-        
-        if (!response.ok) {
-          console.error(`Failed to fetch ${currentUrl}: ${response.status} ${response.statusText}`);
-          continue;
-        }
-        
-        const contentType = response.headers.get('content-type') || '';
-        if (!contentType.includes('text/html')) {
-          console.log(`Skipping non-HTML content at ${currentUrl}: ${contentType}`);
-          continue;
-        }
-        
-        const html = await response.text();
-        
-        const parser = new DOMParser();
-        const document = parser.parseFromString(html, 'text/html');
-        
-        if (!document) {
-          console.error(`Failed to parse HTML for ${currentUrl}`);
-          continue;
-        }
-        
-        // Extract and clean text content
-        let textContent = extractTextContent(document);
-        
-        // Store the cleaned text content
-        results[currentUrl] = textContent;
-        
-        // Find more links to crawl
-        if (visitedUrls.size < maxPages) {
-          const links = findLinks(document, currentUrl, baseUrlObj.origin);
-          
-          // Add new links to the queue
-          for (const link of links) {
-            if (!visitedUrls.has(link) && !queue.includes(link)) {
-              queue.push(link);
-            }
-          }
-        }
-      } catch (error) {
-        console.error(`Error crawling ${currentUrl}:`, error);
+      if (!response.ok) {
+        console.error(`Failed to fetch ${currentUrl}: ${response.status} ${response.statusText}`);
+        continue;
       }
+      
+      const contentType = response.headers.get('content-type') || '';
+      if (!contentType.includes('text/html')) {
+        console.log(`Skipping non-HTML content at ${currentUrl}: ${contentType}`);
+        continue;
+      }
+      
+      const html = await response.text();
+      
+      const parser = new DOMParser();
+      const document = parser.parseFromString(html, 'text/html');
+      
+      if (!document) {
+        console.error(`Failed to parse HTML for ${currentUrl}`);
+        continue;
+      }
+      
+      // Extract and clean text content
+      let textContent = extractTextContent(document);
+      
+      // Store the cleaned text content
+      results[currentUrl] = textContent;
+      
+      // Find more links to crawl
+      if (visitedUrls.size < maxPages) {
+        const links = findLinks(document, currentUrl, baseUrlObj.origin);
+        
+        // Add new links to the queue
+        for (const link of links) {
+          if (!visitedUrls.has(link) && !queue.includes(link)) {
+            queue.push(link);
+          }
+        }
+      }
+    } catch (error) {
+      console.error(`Error crawling ${currentUrl}:`, error);
     }
   }
   
@@ -402,225 +331,6 @@ function extractTextContent(document: any): string {
     .trim();
   
   return combinedContent;
-}
-
-// Extract dynamic content from JavaScript-rendered pages
-async function extractDynamicContent(page: any): Promise<string> {
-  try {
-    // Get all text content visible on the page
-    const visibleText = await page.evaluate(() => {
-      // Get all text nodes on the page
-      const walker = document.createTreeWalker(
-        document.body,
-        NodeFilter.SHOW_TEXT,
-        null
-      );
-      
-      let node;
-      let text = '';
-      
-      while ((node = walker.nextNode())) {
-        // Skip if parent element is script, style, or hidden
-        const element = node.parentElement;
-        if (element) {
-          const style = window.getComputedStyle(element);
-          if (
-            element.tagName === 'SCRIPT' ||
-            element.tagName === 'STYLE' ||
-            style.display === 'none' ||
-            style.visibility === 'hidden' ||
-            style.opacity === '0'
-          ) {
-            continue;
-          }
-          
-          const nodeText = node.textContent.trim();
-          if (nodeText) {
-            text += nodeText + '\n';
-          }
-        }
-      }
-      
-      // Get text from ARIA elements which might be generated by JS frameworks
-      const ariaElements = document.querySelectorAll('[aria-label], [aria-description]');
-      ariaElements.forEach(el => {
-        const ariaLabel = el.getAttribute('aria-label');
-        const ariaDesc = el.getAttribute('aria-description');
-        
-        if (ariaLabel) text += `ARIA Label: ${ariaLabel}\n`;
-        if (ariaDesc) text += `ARIA Description: ${ariaDesc}\n`;
-      });
-      
-      return text;
-    });
-    
-    // Extract content from React/Angular/Vue apps by looking for data-* attributes
-    const jsFrameworkContent = await page.evaluate(() => {
-      let content = '';
-      
-      // React - look for data-reactid or __reactInternalInstance
-      const reactElements = document.querySelectorAll('[data-reactid], [data-testid]');
-      if (reactElements.length > 0) {
-        content += 'React Content:\n';
-        reactElements.forEach(el => {
-          const text = el.textContent.trim();
-          if (text) content += `${text}\n`;
-        });
-      }
-      
-      // Angular - look for ng-* attributes
-      const angularElements = document.querySelectorAll('[ng-*], [data-ng-*], [x-ng-*]');
-      if (angularElements.length > 0) {
-        content += 'Angular Content:\n';
-        angularElements.forEach(el => {
-          const text = el.textContent.trim();
-          if (text) content += `${text}\n`;
-        });
-      }
-      
-      // Vue - look for v-* attributes
-      const vueElements = document.querySelectorAll('[v-*], [data-v-*]');
-      if (vueElements.length > 0) {
-        content += 'Vue Content:\n';
-        vueElements.forEach(el => {
-          const text = el.textContent.trim();
-          if (text) content += `${text}\n`;
-        });
-      }
-      
-      return content;
-    });
-    
-    // Extract JSON-LD and other structured data
-    const structuredData = await page.evaluate(() => {
-      let data = '';
-      
-      // JSON-LD
-      const jsonLdScripts = document.querySelectorAll('script[type="application/ld+json"]');
-      if (jsonLdScripts.length > 0) {
-        data += 'Structured Data:\n';
-        jsonLdScripts.forEach(script => {
-          try {
-            const json = JSON.parse(script.textContent);
-            data += `Type: ${json['@type'] || 'Unknown'}\n`;
-            
-            // Extract name/title
-            if (json.name) data += `Name: ${json.name}\n`;
-            if (json.headline) data += `Headline: ${json.headline}\n`;
-            
-            // Extract description
-            if (json.description) data += `Description: ${json.description}\n`;
-            
-            // Extract other common attributes
-            if (json.price) data += `Price: ${json.price} ${json.priceCurrency || ''}\n`;
-            if (json.offers) {
-              if (Array.isArray(json.offers)) {
-                json.offers.forEach(offer => {
-                  if (offer.price) data += `Offer: ${offer.price} ${offer.priceCurrency || ''}\n`;
-                });
-              } else if (json.offers.price) {
-                data += `Offer: ${json.offers.price} ${json.offers.priceCurrency || ''}\n`;
-              }
-            }
-          } catch (e) {
-            // Ignore JSON parse errors
-          }
-        });
-      }
-      
-      return data;
-    });
-    
-    // Extract SPA routes (for single page applications)
-    const spaRoutes = await page.evaluate(() => {
-      const links = Array.from(document.querySelectorAll('a[href]'));
-      const internalLinks = links
-        .map(link => link.getAttribute('href'))
-        .filter(href => {
-          // Keep only internal links that might be SPA routes
-          return href && 
-                (href.startsWith('/') || href.startsWith('#/')) && 
-                !href.includes('.') && 
-                !href.endsWith('.html');
-        });
-      
-      return Array.from(new Set(internalLinks)).join(', ');
-    });
-    
-    if (spaRoutes) {
-      return `${visibleText}\n\n${jsFrameworkContent}\n\n${structuredData}\n\nSPA Routes: ${spaRoutes}`;
-    }
-    
-    return `${visibleText}\n\n${jsFrameworkContent}\n\n${structuredData}`;
-  } catch (error) {
-    console.error('Error extracting dynamic content:', error);
-    return '';
-  }
-}
-
-// Find links to other pages on the same domain (using Playwright)
-async function findLinksWithPlaywright(page: any, currentUrl: string, baseOrigin: string): Promise<string[]> {
-  try {
-    return await page.evaluate((currentUrl: string, baseOrigin: string) => {
-      const links: string[] = [];
-      const anchorTags = document.querySelectorAll('a[href]');
-      const currentUrlObj = new URL(currentUrl);
-      
-      anchorTags.forEach((a: any) => {
-        try {
-          const href = a.getAttribute('href');
-          if (!href) return;
-          
-          // Skip anchor links, javascript, mailto, tel links
-          if (href.startsWith('#') || 
-              href.startsWith('javascript:') || 
-              href.startsWith('mailto:') || 
-              href.startsWith('tel:')) {
-            return;
-          }
-          
-          // Resolve relative URLs
-          let fullUrl: URL;
-          try {
-            fullUrl = new URL(href, currentUrl);
-          } catch {
-            return; // Invalid URL
-          }
-          
-          // Only include links from the same domain
-          if (fullUrl.origin !== baseOrigin) {
-            return;
-          }
-          
-          // Skip query parameters and fragments to avoid duplicate content
-          fullUrl.search = '';
-          fullUrl.hash = '';
-          
-          // Skip common non-content URLs
-          const pathLower = fullUrl.pathname.toLowerCase();
-          if (pathLower.includes('/wp-admin') || 
-              pathLower.includes('/wp-login') || 
-              pathLower.includes('/login') || 
-              pathLower.includes('/logout') || 
-              pathLower.includes('/wp-content/uploads') ||
-              pathLower.match(/\.(jpg|jpeg|png|gif|svg|webp|pdf|doc|docx|xls|xlsx|zip|rar)$/)) {
-            return;
-          }
-          
-          // Normalize URL to avoid duplicates
-          const normalizedUrl = fullUrl.toString();
-          links.push(normalizedUrl);
-        } catch (error) {
-          // Ignore errors processing individual links
-        }
-      });
-      
-      return links;
-    }, currentUrl, baseOrigin);
-  } catch (error) {
-    console.error('Error finding links with Playwright:', error);
-    return [];
-  }
 }
 
 // Find links to other pages on the same domain

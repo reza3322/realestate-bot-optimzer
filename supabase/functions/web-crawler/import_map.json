@@ -2,8 +2,7 @@
 {
   "imports": {
     "https://deno.land/std@0.168.0/http/server.ts": "https://deno.land/std@0.168.0/http/server.ts",
-    "https://esm.sh/@supabase/supabase-js@2.7.1": "https://esm.sh/@supabase/supabase-js@2.7.1",
-    "https://deno.land/x/deno_dom@v0.1.38/deno-dom-wasm.ts": "https://deno.land/x/deno_dom@v0.1.38/deno-dom-wasm.ts",
-    "playwright": "https://deno.land/x/playwright@v0.3.0/mod.ts"
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2.7.1",
+    "deno-dom": "https://deno.land/x/deno_dom@v0.1.38/deno-dom-wasm.ts"
   }
 }
