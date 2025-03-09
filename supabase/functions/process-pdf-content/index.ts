@@ -9,7 +9,6 @@ Deno.serve(async (req) => {
   console.log(`🔄 Request received: ${req.method}`);
 
   if (req.method === "OPTIONS") {
-    console.log("🟢 Handling CORS preflight request...");
     return new Response(null, {
       headers: {
         ...corsHeaders,
@@ -35,7 +34,6 @@ Deno.serve(async (req) => {
     const { filePath, userId, contentType, fileName, priority = 5 } = body;
 
     if (!filePath || !userId || !contentType || !fileName) {
-      console.error("❌ Missing required fields:", body);
       return new Response(
         JSON.stringify({ success: false, error: "Missing required fields", received: body }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -56,7 +54,6 @@ Deno.serve(async (req) => {
       .download(filePath);
 
     if (downloadError) {
-      console.error("❌ Failed to download file:", downloadError);
       return new Response(
         JSON.stringify({ success: false, error: "Failed to download file", details: downloadError }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -71,23 +68,20 @@ Deno.serve(async (req) => {
       try {
         const arrayBuffer = await fileData.arrayBuffer();
         extractedText = await extractPdfText(arrayBuffer);
-        
+
         if (!extractedText.trim()) {
           console.log("⚠️ No text found in PDF. Attempting OCR...");
           extractedText = await extractTextWithOCR(arrayBuffer);
         }
       } catch (pdfError) {
-        console.error("❌ Error extracting PDF text:", pdfError);
         return new Response(
           JSON.stringify({ success: false, error: `Failed to extract text from PDF: ${pdfError.message}` }),
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
     } else if (fileName.toLowerCase().endsWith(".txt")) {
-      console.log("📄 Processing text file");
       extractedText = await fileData.text();
     } else {
-      console.error(`❌ Unsupported file type: ${fileName}`);
       return new Response(
         JSON.stringify({ success: false, error: `Unsupported file type: ${fileName}` }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -95,7 +89,6 @@ Deno.serve(async (req) => {
     }
 
     if (!extractedText || extractedText.trim().length === 0) {
-      console.error("❌ No text was extracted from the file");
       return new Response(
         JSON.stringify({ success: false, error: "No text was extracted from the file" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -105,11 +98,11 @@ Deno.serve(async (req) => {
     console.log(`📝 Extracted ${extractedText.length} characters of text`);
 
     extractedText = extractedText
-      .replace(/\u0000/g, "") // Remove null characters
-      .replace(/[\x00-\x1F\x7F]/g, "") // Remove all non-printable characters
-      .replace(/[^\x20-\x7EäöüßÄÖÜéèàù]/g, "") // Keep common characters
-      .replace(/\s+/g, " ") // Normalize spaces
-      .normalize("NFC") // Ensure proper UTF-8 encoding
+      .replace(/\u0000/g, "")
+      .replace(/[\x00-\x1F\x7F]/g, "")
+      .replace(/[^\x20-\x7EäöüßÄÖÜéèàù]/g, "")
+      .replace(/\s+/g, " ")
+      .normalize("NFC")
       .trim();
 
     console.log("💾 Inserting extracted text into database...");
@@ -119,21 +112,18 @@ Deno.serve(async (req) => {
         user_id: userId,
         content_type: contentType,
         question: `What information is in ${fileName}?`,
-        answer: extractedText.substring(0, 5000), // Prevents long text issues
+        answer: extractedText.substring(0, 5000),
         category: "File Import",
         priority: parseInt(priority, 10) || 5
       })
       .select();
 
     if (insertError) {
-      console.error("❌ ERROR INSERTING INTO DATABASE:", insertError);
       return new Response(
         JSON.stringify({ success: false, error: "Failed to store training data", details: insertError }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-
-    console.log("✅ Training data stored successfully:", insertData);
 
     return new Response(
       JSON.stringify({
@@ -146,7 +136,6 @@ Deno.serve(async (req) => {
     );
 
   } catch (error) {
-    console.error("❌ Error processing file:", error);
     return new Response(
       JSON.stringify({ success: false, error: error.message }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -178,9 +167,14 @@ async function extractPdfText(pdfArrayBuffer: ArrayBuffer): Promise<string> {
 
 // ✅ OCR Function for Scanned PDFs
 async function extractTextWithOCR(pdfArrayBuffer: ArrayBuffer): Promise<string> {
-  console.log("📸 Running OCR on PDF...");
-  const image = new Uint8Array(pdfArrayBuffer);
-  const text = await recognize(image, "eng"); // English OCR
-  console.log("✅ OCR Extraction Successful!");
-  return text.trim();
+  try {
+    console.log("📸 Running OCR on PDF...");
+    const image = new Uint8Array(pdfArrayBuffer);
+    const text = await recognize(image, "eng");
+    console.log("✅ OCR Extraction Successful!");
+    return text.trim();
+  } catch (error) {
+    console.error("❌ OCR Extraction Failed:", error);
+    return "";
+  }
 }
