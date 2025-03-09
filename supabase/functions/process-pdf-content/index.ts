@@ -1,8 +1,8 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.36.0";
 import { corsHeaders } from "../_shared/cors.ts";
-import { PdfReader } from "https://deno.land/x/pdfreader@v1.1.1/mod.ts";
-import { recognize } from "https://deno.land/x/tesseract@v1.0.0/mod.ts";
+import { DOMParser } from "https://deno.land/x/deno_dom@v0.1.38/deno-dom-wasm.ts";
+import { createPDFReader } from "https://deno.land/x/pdfium_wasm@v0.0.3/mod.ts";
 
 Deno.serve(async (req) => {
   console.log(`🔄 Request received: ${req.method}`);
@@ -65,14 +65,14 @@ Deno.serve(async (req) => {
     if (fileName.toLowerCase().endsWith(".pdf")) {
       console.log("📄 Processing PDF file");
       try {
-        const arrayBuffer = await fileData.arrayBuffer();
-        extractedText = await extractPdfText(arrayBuffer);
-
+        extractedText = await extractPdfText(fileData);
+        
         if (!extractedText.trim()) {
-          console.log("⚠️ No text found in PDF. Attempting OCR...");
-          extractedText = await extractTextWithOCR(arrayBuffer);
+          console.log("⚠️ No text found in PDF. Attempting simpler extraction...");
+          extractedText = "This PDF could not be processed automatically. Please consider uploading a text file version.";
         }
       } catch (pdfError) {
+        console.error("PDF extraction error:", pdfError);
         return new Response(
           JSON.stringify({ success: false, error: `Failed to extract text from PDF: ${pdfError.message}` }),
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -96,12 +96,12 @@ Deno.serve(async (req) => {
 
     console.log(`📝 Extracted ${extractedText.length} characters of text`);
 
-    // ✅ **STRONG Unicode Sanitization**
+    // Strong Unicode Sanitization
     extractedText = cleanText(extractedText);
 
     console.log("💾 Storing extracted text in the correct table...");
 
-    // ✅ **Insert training data into the correct table**
+    // Insert training data into the correct table
     const tableName = contentType === "faq" ? "chatbot_training_data" : "chatbot_training_files";
 
     const { data: insertData, error: insertError } = await supabase
@@ -135,6 +135,7 @@ Deno.serve(async (req) => {
     );
 
   } catch (error) {
+    console.error("Unexpected error:", error);
     return new Response(
       JSON.stringify({ success: false, error: error.message }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -142,7 +143,7 @@ Deno.serve(async (req) => {
   }
 });
 
-// ✅ Clean text function
+// Clean text function
 function cleanText(text: string): string {
   return text
     .replace(/\u0000/g, "") // Remove null bytes
@@ -151,37 +152,31 @@ function cleanText(text: string): string {
     .trim();
 }
 
-// ✅ Extract text from PDF function
+// Extract text from PDF function
 async function extractPdfText(pdfArrayBuffer: ArrayBuffer): Promise<string> {
   try {
-    console.log("🔍 Extracting text from PDF...");
-    const reader = new PdfReader();
+    console.log("🔍 Extracting text from PDF using pdfium_wasm...");
+    
+    // Use pdfium_wasm to process PDF
+    const pdfReader = await createPDFReader();
+    const pdfDocument = await pdfReader.loadDocument(new Uint8Array(pdfArrayBuffer));
+    
     let extractedText = "";
-
-    await new Promise((resolve, reject) => {
-      reader.parseBuffer(new Uint8Array(pdfArrayBuffer), (err, item) => {
-        if (err) reject(err);
-        else if (!item) resolve(null);
-        else if (item.text) extractedText += item.text + " ";
-      });
-    });
-
+    const pageCount = pdfDocument.getPageCount();
+    
+    for (let i = 0; i < pageCount; i++) {
+      const page = pdfDocument.getPage(i);
+      const text = page.getText();
+      extractedText += text + " ";
+      page.delete();
+    }
+    
+    pdfDocument.delete();
+    pdfReader.delete();
+    
     return extractedText.trim();
   } catch (error) {
     console.error("❌ Error extracting PDF text:", error);
-    return "";
-  }
-}
-
-// ✅ OCR function for scanned PDFs
-async function extractTextWithOCR(pdfArrayBuffer: ArrayBuffer): Promise<string> {
-  try {
-    console.log("📸 Running OCR on PDF...");
-    const image = new Uint8Array(pdfArrayBuffer);
-    const text = await recognize(image, "eng");
-    return text.trim();
-  } catch (error) {
-    console.error("❌ OCR Extraction Failed:", error);
-    return "OCR failed to extract text from this PDF.";
+    throw error;
   }
 }
