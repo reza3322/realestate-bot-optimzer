@@ -95,13 +95,12 @@ Deno.serve(async (req) => {
 
     console.log(`📝 Extracted ${extractedText.length} characters of text`);
 
-    // **✅ FIXED Unicode Issue (`\u0000` error)**
     extractedText = extractedText
-      .replace(/\u0000/g, "")                     // Remove null bytes
-      .replace(/[\x00-\x1F\x7F]/g, "")           // Remove non-printable ASCII
-      .replace(/[^\x20-\x7EäöüßÄÖÜéèàù]/g, "")   // Keep readable characters
-      .replace(/\s+/g, " ")                      // Replace multiple spaces
-      .normalize("NFC")                          // Normalize Unicode
+      .replace(/\u0000/g, "")
+      .replace(/[\x00-\x1F\x7F]/g, "")
+      .replace(/[^\x20-\x7EäöüßÄÖÜéèàù]/g, "")
+      .replace(/\s+/g, " ")
+      .normalize("NFC")
       .trim();
 
     console.log("💾 Inserting extracted text into database...");
@@ -161,5 +160,25 @@ async function extractPdfText(pdfArrayBuffer: ArrayBuffer): Promise<string> {
   } catch (error) {
     console.error("❌ Error extracting PDF text:", error);
     return "";
+  }
+}
+
+// ✅ OCR Function for Scanned PDFs
+async function extractTextWithOCR(pdfArrayBuffer: ArrayBuffer): Promise<string> {
+  try {
+    console.log("📸 Running OCR on PDF...");
+    const image = new Uint8Array(pdfArrayBuffer);
+    const text = await recognize(image, "eng");
+
+    if (!text.trim()) {
+      console.log("⚠️ OCR extracted no text. Returning fallback message.");
+      return "OCR could not extract text. The PDF may be too complex for automated text extraction.";
+    }
+
+    console.log("✅ OCR Extraction Successful!");
+    return text.trim();
+  } catch (error) {
+    console.error("❌ OCR Extraction Failed:", error);
+    return "OCR failed to extract text from this PDF.";
   }
 }
