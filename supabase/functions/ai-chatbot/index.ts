@@ -1,4 +1,3 @@
-
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
 
@@ -37,19 +36,34 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log(`Processing message for user: ${userId}, session: ${sessionId || 'new'}`);
-
-    // Create Supabase client
-    const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    console.log(`Processing message for user: ${userId || 'anonymous'}, session: ${sessionId || 'new'}`);
+    console.log(`Message: ${message}`);
+    console.log(`Has training data: ${!!trainingData}`);
+    console.log(`Has context: ${Array.isArray(context) && context.length > 0}`);
+    
+    // Create Supabase client for storing conversations
+    let supabase = null;
+    if (userId && userId !== 'demo-user') {
+      try {
+        const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+        const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+        supabase = createClient(supabaseUrl, supabaseKey);
+      } catch (error) {
+        console.error("Error creating Supabase client:", error);
+      }
+    }
 
     // Generate response using OpenAI with context from training data
     const response = await generateChatbotResponse(message, trainingData, context);
     
     // Store the conversation in the database if sessionId is provided
-    if (sessionId && userId) {
-      await storeConversation(supabase, userId, sessionId, message, response);
+    if (supabase && sessionId && userId && userId !== 'demo-user') {
+      try {
+        await storeConversation(supabase, userId, sessionId, message, response);
+      } catch (error) {
+        console.error("Error storing conversation:", error);
+        // Continue even if storage fails
+      }
     }
 
     return new Response(
@@ -81,23 +95,41 @@ async function generateChatbotResponse(message: string, trainingData?: string, c
     console.log("Generating response with OpenAI");
     
     // Create system prompt with context
-    const systemPrompt = `You are a helpful AI assistant that provides accurate and useful information about real estate. 
+    const systemPrompt = `You are a helpful AI assistant that provides accurate and useful information about real estate and RealHomeAI. 
 Base your responses on the following knowledge base when relevant, and if the information isn't in the knowledge base, 
 provide a general helpful response without making up information about the specific business or services.
 
 KNOWLEDGE BASE:
-${trainingData || "No specific knowledge base provided."}
+${trainingData || `
+RealHomeAI is an AI-powered chatbot platform for real estate professionals. It helps real estate agents and companies qualify leads, engage customers, and recommend properties. The platform uses advanced AI to understand and respond to customer inquiries about real estate, provide property recommendations, and help with scheduling viewings.
+
+Key features:
+- Lead qualification and capture
+- Property recommendation
+- 24/7 customer engagement
+- Integration with real estate websites
+- Customizable to match branding
+- Training on company-specific information
+- Analytics dashboard
+
+The platform helps real estate professionals save time, increase conversion rates, and provide better customer service through automation and AI assistance.
+`}
 
 Be conversational, helpful, and concise in your responses. If you're not sure about something related to the specific business, 
 just say you don't have that information rather than making it up.`;
 
     // Create the chat history array
-    const messages = context && Array.isArray(context) ? 
-      [{ role: "system", content: systemPrompt }, ...context] : 
-      [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: message }
-      ];
+    const messages = [{ role: "system", content: systemPrompt }];
+    
+    // Add context messages if provided
+    if (context && Array.isArray(context) && context.length > 0) {
+      messages.push(...context);
+    } else {
+      // Otherwise just add the current message
+      messages.push({ role: "user", content: message });
+    }
+
+    console.log(`Sending ${messages.length} messages to OpenAI`);
 
     // Call OpenAI API
     const response = await fetch(OPENAI_API_URL, {

@@ -1,3 +1,4 @@
+
 import { supabase } from '@/lib/supabase';
 import { Message, VisitorInfo } from './types';
 import { v4 as uuidv4 } from 'uuid';
@@ -110,7 +111,7 @@ export const extractLeadInfo = (message: string): Partial<VisitorInfo> => {
   return leadInfo;
 };
 
-// Function to generate test response
+// Function to generate response using AI or demo data
 export const testChatbotResponse = async (
   message: string, 
   userId: string,
@@ -130,7 +131,7 @@ export const testChatbotResponse = async (
     let source: 'ai' | 'training' | null = null;
     
     try {
-      if (userId && userId !== 'demo-user') {
+      if (userId && userId !== 'demo-user' && isValidUUID(userId)) {
         console.log("Searching for relevant training data...");
         const trainingData = await findRelevantTrainingData(userId, message);
         
@@ -147,7 +148,7 @@ export const testChatbotResponse = async (
               response: exactMatch.answer,
               source,
               leadInfo,
-              conversationId: conversationId || `conv_${Math.random().toString(36).substring(2, 15)}`,
+              conversationId: conversationId || `conv_${uuidv4()}`
             };
           }
           
@@ -171,28 +172,80 @@ export const testChatbotResponse = async (
       // Continue without training data if there's an error
     }
     
-    // If this is a demo user or landing page interaction, use mock responses
+    // If this is a demo user or landing page interaction, use the AI chatbot
     if (userId === 'demo-user' || !isValidUUID(userId)) {
-      const demoResponses = [
-        "I'd be happy to help you find a property. What's your budget range?",
-        "Great! And what neighborhoods are you interested in?",
-        "I've found 3 properties that match your criteria. Would you like to schedule a viewing?",
-        "Perfect! I've notified your agent and scheduled a viewing for Saturday at 2pm.",
-        "Our agents specialize in luxury properties in downtown and suburban areas.",
-        "Yes, we have several properties with pools available right now.",
-        "The average price in that neighborhood has increased by 12% over the last year.",
-        "I can help you get pre-approved for a mortgage through our partner lenders.",
-        "Hi there! How can I assist with your real estate needs today?",
-        "I can definitely help you find information about rental properties in that area."
-      ];
+      // Add company information for the landing page demo chatbot
+      const companyInfo = `
+      ### Company Information
       
-      const randomIndex = Math.floor(Math.random() * demoResponses.length);
-      return {
-        response: demoResponses[randomIndex],
-        source: 'ai',
-        leadInfo,
-        conversationId: conversationId || `conv_${Math.random().toString(36).substring(2, 15)}`
-      };
+      RealHomeAI is an AI-powered chatbot platform for real estate professionals. It helps real estate agents and companies qualify leads, engage customers, and recommend properties. The platform uses advanced AI to understand and respond to customer inquiries about real estate, provide property recommendations, and help with scheduling viewings.
+      
+      Key features:
+      - Lead qualification and capture
+      - Property recommendation
+      - 24/7 customer engagement
+      - Integration with real estate websites
+      - Customizable to match branding
+      - Training on company-specific information
+      - Analytics dashboard
+      
+      The platform helps real estate professionals save time, increase conversion rates, and provide better customer service through automation and AI assistance.
+      `;
+      
+      try {
+        // Call the Supabase Edge Function for demo mode
+        const { data, error } = await supabase.functions.invoke('ai-chatbot', {
+          body: {
+            message,
+            userId: 'demo-user',
+            sessionId: conversationId || `conv_${uuidv4()}`,
+            trainingData: companyInfo,
+            context: previousMessages.map(msg => ({
+              role: msg.role === 'user' ? 'user' : 'assistant',
+              content: msg.content
+            }))
+          }
+        });
+        
+        if (error) {
+          console.error("Error calling AI chatbot function:", error);
+          throw error;
+        }
+        
+        if (data && data.success) {
+          return {
+            response: data.response,
+            source: data.source || 'ai',
+            leadInfo,
+            conversationId: data.session_id || conversationId || `conv_${uuidv4()}`
+          };
+        } else {
+          throw new Error(data?.error || "Unknown error occurred");
+        }
+      } catch (error) {
+        console.error("Error in demo mode:", error);
+        // Fallback to static responses if the API call fails
+        const demoResponses = [
+          "I'd be happy to help you find a property. What's your budget range?",
+          "Great! And what neighborhoods are you interested in?",
+          "I've found 3 properties that match your criteria. Would you like to schedule a viewing?",
+          "Perfect! I've notified your agent and scheduled a viewing for Saturday at 2pm.",
+          "Our agents specialize in luxury properties in downtown and suburban areas.",
+          "Yes, we have several properties with pools available right now.",
+          "The average price in that neighborhood has increased by 12% over the last year.",
+          "I can help you get pre-approved for a mortgage through our partner lenders.",
+          "Hi there! How can I assist with your real estate needs today?",
+          "I can definitely help you find information about rental properties in that area."
+        ];
+        
+        const randomIndex = Math.floor(Math.random() * demoResponses.length);
+        return {
+          response: demoResponses[randomIndex],
+          source: 'ai',
+          leadInfo,
+          conversationId: conversationId || `conv_${uuidv4()}`
+        };
+      }
     }
     
     // For authenticated users, call the AI chatbot function
@@ -230,7 +283,7 @@ export const testChatbotResponse = async (
           response: data.response,
           source: data.source || 'ai',
           leadInfo,
-          conversationId: data.session_id || conversationId || `conv_${Math.random().toString(36).substring(2, 15)}`
+          conversationId: data.session_id || conversationId || `conv_${uuidv4()}`
         };
       } else {
         throw new Error(data?.error || "Unknown error occurred");
@@ -245,7 +298,7 @@ export const testChatbotResponse = async (
       response: "I'm sorry, I encountered an error processing your request. Please try again later.",
       error: error.message,
       leadInfo,
-      conversationId: conversationId || `conv_${Math.random().toString(36).substring(2, 15)}`
+      conversationId: conversationId || `conv_${uuidv4()}`
     };
   }
 };
