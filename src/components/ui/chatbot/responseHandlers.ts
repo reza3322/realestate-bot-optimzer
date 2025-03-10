@@ -1,4 +1,3 @@
-
 import { supabase } from "@/lib/supabase";
 import { ChatbotResponse, Message, PropertySearchParams } from "./types";
 
