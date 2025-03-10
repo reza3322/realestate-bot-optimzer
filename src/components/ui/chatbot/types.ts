@@ -72,4 +72,5 @@ export interface ChatbotResponse {
   source?: 'ai' | 'training';
   conversationId?: string;
   leadInfo?: VisitorInfo;
+  error?: string;
 }

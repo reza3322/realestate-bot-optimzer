@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
-import { Home, UploadCloud, Plus, Edit, MoreHorizontal, Eye, Trash2, Search, Download, Filter, Check, X, FileText, AlertTriangle, FileUpload, HelpCircle } from "lucide-react";
+import { Home, UploadCloud, Plus, Edit, MoreHorizontal, Eye, Trash2, Search, Download, Filter, Check, X, FileText, AlertTriangle, HelpCircle } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -424,7 +424,7 @@ const PropertyListings = ({ userId, userPlan, isPremiumFeature }) => {
                           variant={
                             property.status === "active" ? "default" :
                             property.status === "pending" ? "secondary" :
-                            property.status === "sold" ? "success" : "outline"
+                            property.status === "sold" ? "outline" : "outline"
                           }
                         >
                           {property.status ? property.status.charAt(0).toUpperCase() + property.status.slice(1) : "Active"}
