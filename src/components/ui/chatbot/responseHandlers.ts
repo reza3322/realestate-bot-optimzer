@@ -133,15 +133,26 @@ export const formatPropertyRecommendations = (recommendations: any[], maxResults
   limitedRecommendations.forEach(property => {
     // Format price
     const price = typeof property.price === 'number' 
-      ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(property.price)
+      ? new Intl.NumberFormat('en-EU', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(property.price)
       : property.price;
     
     // Create property listing
     formattedResponse += `🏡 **${property.title} – ${price}**\n`;
-    formattedResponse += `📍 **${property.location || 'Location available upon request'}**\n`;
+    formattedResponse += `📍 **${property.location || property.city && property.state ? `${property.city}, ${property.state}` : 'Location available upon request'}**\n`;
+    
+    // Build features list
+    let features = [];
+    if (property.bedrooms) features.push(`${property.bedrooms} Bedrooms`);
+    if (property.bathrooms) features.push(`${property.bathrooms} Bathrooms`);
+    if (property.livingArea) features.push(`${property.livingArea} m² Living Area`);
+    if (property.plotArea) features.push(`${property.plotArea} m² Plot`);
+    if (property.terrace) features.push(`${property.terrace} m² Terrace`);
+    if (property.hasPool) features.push(`Private Pool`);
     
     // Add features as bullet points
-    if (property.features && property.features.length > 0) {
+    if (features.length > 0) {
+      formattedResponse += `✅ ${features.join(', ')}\n`;
+    } else if (property.features && property.features.length > 0) {
       formattedResponse += `✅ ${Array.isArray(property.features) ? property.features.join(', ') : property.features}\n`;
     }
     

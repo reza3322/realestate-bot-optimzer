@@ -74,6 +74,11 @@ export interface PropertyRecommendation {
   highlight?: string;
   url?: string;
   id?: string;
+  livingArea?: number;
+  plotArea?: number;
+  garageArea?: number;
+  terrace?: number;
+  hasPool?: boolean;
 }
 
 export interface ChatbotResponse {
@@ -96,4 +101,5 @@ export interface PropertySearchParams {
   keywords?: string[];
   style?: string;
   maxResults?: number;
+  hasPool?: boolean;
 }

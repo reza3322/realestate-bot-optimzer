@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { supabase } from "@/lib/supabase";
 import Papa from 'papaparse';
+import { Checkbox } from "@/components/ui/checkbox";
 
 const PropertyListings = ({ userId, userPlan, isPremiumFeature }) => {
   const [activeTab, setActiveTab] = useState("all");
@@ -41,6 +43,12 @@ const PropertyListings = ({ userId, userPlan, isPremiumFeature }) => {
     bedrooms: "",
     bathrooms: "",
     size: "",
+    url: "",
+    livingArea: "",
+    plotArea: "",
+    garageArea: "",
+    terrace: "",
+    hasPool: false,
     status: "active"
   });
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -222,6 +230,10 @@ const PropertyListings = ({ userId, userPlan, isPremiumFeature }) => {
         bedrooms: newProperty.bedrooms ? parseInt(newProperty.bedrooms, 10) : null,
         bathrooms: newProperty.bathrooms ? parseFloat(newProperty.bathrooms) : null,
         size: newProperty.size ? parseFloat(newProperty.size) : null,
+        livingArea: newProperty.livingArea ? parseFloat(newProperty.livingArea) : null,
+        plotArea: newProperty.plotArea ? parseFloat(newProperty.plotArea) : null,
+        garageArea: newProperty.garageArea ? parseFloat(newProperty.garageArea) : null,
+        terrace: newProperty.terrace ? parseFloat(newProperty.terrace) : null,
         user_id: userId
       };
       
@@ -249,6 +261,12 @@ const PropertyListings = ({ userId, userPlan, isPremiumFeature }) => {
         bedrooms: "",
         bathrooms: "",
         size: "",
+        url: "",
+        livingArea: "",
+        plotArea: "",
+        garageArea: "",
+        terrace: "",
+        hasPool: false,
         status: "active"
       });
       
@@ -289,9 +307,9 @@ const PropertyListings = ({ userId, userPlan, isPremiumFeature }) => {
   
   const formatCurrency = (amount) => {
     if (!amount && amount !== 0) return '';
-    return new Intl.NumberFormat('en-US', {
+    return new Intl.NumberFormat('en-EU', {
       style: 'currency',
-      currency: 'USD',
+      currency: 'EUR',
       minimumFractionDigits: 0,
       maximumFractionDigits: 0
     }).format(amount);
@@ -470,7 +488,7 @@ const PropertyListings = ({ userId, userPlan, isPremiumFeature }) => {
       </div>
 
       <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-        <DialogContent className="sm:max-w-[600px]">
+        <DialogContent className="sm:max-w-[600px] max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Add New Property</DialogTitle>
             <DialogDescription>
@@ -486,12 +504,12 @@ const PropertyListings = ({ userId, userPlan, isPremiumFeature }) => {
                   name="title"
                   value={newProperty.title}
                   onChange={handleInputChange}
-                  placeholder="e.g. Beautiful 3BR Home"
+                  placeholder="e.g. Beautiful 3BR Villa"
                   required
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="price">Price*</Label>
+                <Label htmlFor="price">Price (€)*</Label>
                 <Input
                   id="price"
                   name="price"
@@ -514,6 +532,16 @@ const PropertyListings = ({ userId, userPlan, isPremiumFeature }) => {
                 />
               </div>
               <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="url">Property URL/Web Address</Label>
+                <Input
+                  id="url"
+                  name="url"
+                  value={newProperty.url}
+                  onChange={handleInputChange}
+                  placeholder="e.g. https://youragency.com/properties/villa-123"
+                />
+              </div>
+              <div className="space-y-2 md:col-span-2">
                 <Label htmlFor="address">Address</Label>
                 <Input
                   id="address"
@@ -530,28 +558,28 @@ const PropertyListings = ({ userId, userPlan, isPremiumFeature }) => {
                   name="city"
                   value={newProperty.city}
                   onChange={handleInputChange}
-                  placeholder="e.g. Austin"
+                  placeholder="e.g. Marbella"
                 />
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-2">
-                  <Label htmlFor="state">State</Label>
+                  <Label htmlFor="state">State/Province</Label>
                   <Input
                     id="state"
                     name="state"
                     value={newProperty.state}
                     onChange={handleInputChange}
-                    placeholder="e.g. TX"
+                    placeholder="e.g. Málaga"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="zip">ZIP</Label>
+                  <Label htmlFor="zip">ZIP/Postal Code</Label>
                   <Input
                     id="zip"
                     name="zip"
                     value={newProperty.zip}
                     onChange={handleInputChange}
-                    placeholder="e.g. 78701"
+                    placeholder="e.g. 29660"
                   />
                 </div>
               </div>
@@ -567,6 +595,7 @@ const PropertyListings = ({ userId, userPlan, isPremiumFeature }) => {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="house">House</SelectItem>
+                    <SelectItem value="villa">Villa</SelectItem>
                     <SelectItem value="apartment">Apartment</SelectItem>
                     <SelectItem value="condo">Condo</SelectItem>
                     <SelectItem value="townhouse">Townhouse</SelectItem>
@@ -617,15 +646,69 @@ const PropertyListings = ({ userId, userPlan, isPremiumFeature }) => {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="size">Size (sq ft)</Label>
+                <Label htmlFor="size">Total Size (m²)</Label>
                 <Input
                   id="size"
                   name="size"
                   type="number"
                   value={newProperty.size}
                   onChange={handleInputChange}
-                  placeholder="e.g. 2000"
+                  placeholder="e.g. 200"
                 />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="livingArea">Living Area (m²)</Label>
+                <Input
+                  id="livingArea"
+                  name="livingArea"
+                  type="number"
+                  value={newProperty.livingArea}
+                  onChange={handleInputChange}
+                  placeholder="e.g. 150"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="plotArea">Plot Area (m²)</Label>
+                <Input
+                  id="plotArea"
+                  name="plotArea"
+                  type="number"
+                  value={newProperty.plotArea}
+                  onChange={handleInputChange}
+                  placeholder="e.g. 1000"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="garageArea">Garage Area (m²)</Label>
+                <Input
+                  id="garageArea"
+                  name="garageArea"
+                  type="number"
+                  value={newProperty.garageArea}
+                  onChange={handleInputChange}
+                  placeholder="e.g. 30"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="terrace">Terrace (m²)</Label>
+                <Input
+                  id="terrace"
+                  name="terrace"
+                  type="number"
+                  value={newProperty.terrace}
+                  onChange={handleInputChange}
+                  placeholder="e.g. 50"
+                />
+              </div>
+              <div className="flex items-center space-x-2 pt-4">
+                <Checkbox 
+                  id="hasPool" 
+                  checked={newProperty.hasPool}
+                  onCheckedChange={(checked) => setNewProperty(prev => ({ ...prev, hasPool: checked }))}
+                />
+                <Label htmlFor="hasPool" className="text-sm font-normal">
+                  Property has a swimming pool
+                </Label>
               </div>
             </div>
           </div>
