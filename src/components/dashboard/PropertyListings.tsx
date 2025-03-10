@@ -477,160 +477,158 @@ const PropertyListings = ({ userId, userPlan, isPremiumFeature }) => {
               Enter the details of your new property listing.
             </DialogDescription>
           </DialogHeader>
-          <form id="add-property-form" className="space-y-4">
-            <ScrollArea className="max-h-[70vh] pr-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="py-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="title">Title*</Label>
+                <Input
+                  id="title"
+                  name="title"
+                  value={newProperty.title}
+                  onChange={handleInputChange}
+                  placeholder="e.g. Beautiful 3BR Home"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="price">Price*</Label>
+                <Input
+                  id="price"
+                  name="price"
+                  type="number"
+                  value={newProperty.price}
+                  onChange={handleInputChange}
+                  placeholder="e.g. 450000"
+                  required
+                />
+              </div>
+              <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="description">Description</Label>
+                <Textarea
+                  id="description"
+                  name="description"
+                  value={newProperty.description}
+                  onChange={handleInputChange}
+                  placeholder="Describe your property..."
+                  rows={3}
+                />
+              </div>
+              <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="address">Address</Label>
+                <Input
+                  id="address"
+                  name="address"
+                  value={newProperty.address}
+                  onChange={handleInputChange}
+                  placeholder="e.g. 123 Main St"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="city">City</Label>
+                <Input
+                  id="city"
+                  name="city"
+                  value={newProperty.city}
+                  onChange={handleInputChange}
+                  placeholder="e.g. Austin"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-2">
-                  <Label htmlFor="title">Title*</Label>
+                  <Label htmlFor="state">State</Label>
                   <Input
-                    id="title"
-                    name="title"
-                    value={newProperty.title}
+                    id="state"
+                    name="state"
+                    value={newProperty.state}
                     onChange={handleInputChange}
-                    placeholder="e.g. Beautiful 3BR Home"
-                    required
+                    placeholder="e.g. TX"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="price">Price*</Label>
+                  <Label htmlFor="zip">ZIP</Label>
                   <Input
-                    id="price"
-                    name="price"
-                    type="number"
-                    value={newProperty.price}
+                    id="zip"
+                    name="zip"
+                    value={newProperty.zip}
                     onChange={handleInputChange}
-                    placeholder="e.g. 450000"
-                    required
-                  />
-                </div>
-                <div className="space-y-2 md:col-span-2">
-                  <Label htmlFor="description">Description</Label>
-                  <Textarea
-                    id="description"
-                    name="description"
-                    value={newProperty.description}
-                    onChange={handleInputChange}
-                    placeholder="Describe your property..."
-                    rows={3}
-                  />
-                </div>
-                <div className="space-y-2 md:col-span-2">
-                  <Label htmlFor="address">Address</Label>
-                  <Input
-                    id="address"
-                    name="address"
-                    value={newProperty.address}
-                    onChange={handleInputChange}
-                    placeholder="e.g. 123 Main St"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="city">City</Label>
-                  <Input
-                    id="city"
-                    name="city"
-                    value={newProperty.city}
-                    onChange={handleInputChange}
-                    placeholder="e.g. Austin"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="state">State</Label>
-                    <Input
-                      id="state"
-                      name="state"
-                      value={newProperty.state}
-                      onChange={handleInputChange}
-                      placeholder="e.g. TX"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="zip">ZIP</Label>
-                    <Input
-                      id="zip"
-                      name="zip"
-                      value={newProperty.zip}
-                      onChange={handleInputChange}
-                      placeholder="e.g. 78701"
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="type">Property Type</Label>
-                  <Select 
-                    name="type" 
-                    value={newProperty.type} 
-                    onValueChange={(value) => handleSelectChange("type", value)}
-                  >
-                    <SelectTrigger id="type">
-                      <SelectValue placeholder="Select type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="house">House</SelectItem>
-                      <SelectItem value="apartment">Apartment</SelectItem>
-                      <SelectItem value="condo">Condo</SelectItem>
-                      <SelectItem value="townhouse">Townhouse</SelectItem>
-                      <SelectItem value="land">Land</SelectItem>
-                      <SelectItem value="commercial">Commercial</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="status">Status</Label>
-                  <Select 
-                    name="status"
-                    value={newProperty.status} 
-                    onValueChange={(value) => handleSelectChange("status", value)}
-                  >
-                    <SelectTrigger id="status">
-                      <SelectValue placeholder="Select status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="active">Active</SelectItem>
-                      <SelectItem value="pending">Pending</SelectItem>
-                      <SelectItem value="sold">Sold</SelectItem>
-                      <SelectItem value="inactive">Inactive</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="bedrooms">Bedrooms</Label>
-                  <Input
-                    id="bedrooms"
-                    name="bedrooms"
-                    type="number"
-                    value={newProperty.bedrooms}
-                    onChange={handleInputChange}
-                    placeholder="e.g. 3"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="bathrooms">Bathrooms</Label>
-                  <Input
-                    id="bathrooms"
-                    name="bathrooms"
-                    type="number"
-                    step="0.5"
-                    value={newProperty.bathrooms}
-                    onChange={handleInputChange}
-                    placeholder="e.g. 2.5"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="size">Size (sq ft)</Label>
-                  <Input
-                    id="size"
-                    name="size"
-                    type="number"
-                    value={newProperty.size}
-                    onChange={handleInputChange}
-                    placeholder="e.g. 2000"
+                    placeholder="e.g. 78701"
                   />
                 </div>
               </div>
-            </ScrollArea>
-          </form>
+              <div className="space-y-2">
+                <Label htmlFor="type">Property Type</Label>
+                <Select 
+                  name="type" 
+                  value={newProperty.type} 
+                  onValueChange={(value) => handleSelectChange("type", value)}
+                >
+                  <SelectTrigger id="type">
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="house">House</SelectItem>
+                    <SelectItem value="apartment">Apartment</SelectItem>
+                    <SelectItem value="condo">Condo</SelectItem>
+                    <SelectItem value="townhouse">Townhouse</SelectItem>
+                    <SelectItem value="land">Land</SelectItem>
+                    <SelectItem value="commercial">Commercial</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="status">Status</Label>
+                <Select 
+                  name="status"
+                  value={newProperty.status} 
+                  onValueChange={(value) => handleSelectChange("status", value)}
+                >
+                  <SelectTrigger id="status">
+                    <SelectValue placeholder="Select status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="sold">Sold</SelectItem>
+                    <SelectItem value="inactive">Inactive</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="bedrooms">Bedrooms</Label>
+                <Input
+                  id="bedrooms"
+                  name="bedrooms"
+                  type="number"
+                  value={newProperty.bedrooms}
+                  onChange={handleInputChange}
+                  placeholder="e.g. 3"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="bathrooms">Bathrooms</Label>
+                <Input
+                  id="bathrooms"
+                  name="bathrooms"
+                  type="number"
+                  step="0.5"
+                  value={newProperty.bathrooms}
+                  onChange={handleInputChange}
+                  placeholder="e.g. 2.5"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="size">Size (sq ft)</Label>
+                <Input
+                  id="size"
+                  name="size"
+                  type="number"
+                  value={newProperty.size}
+                  onChange={handleInputChange}
+                  placeholder="e.g. 2000"
+                />
+              </div>
+            </div>
+          </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
               Cancel
@@ -648,7 +646,7 @@ const PropertyListings = ({ userId, userPlan, isPremiumFeature }) => {
               Upload a CSV file with your property listings.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="space-y-4 py-2">
             <div className="border rounded-md p-4 bg-muted/40">
               <div className="flex items-center gap-2 mb-2">
                 <FileText className="h-4 w-4 text-primary" />
@@ -666,7 +664,7 @@ const PropertyListings = ({ userId, userPlan, isPremiumFeature }) => {
               </details>
             </div>
           
-            <div className="grid w-full items-center gap-1.5">
+            <div className="space-y-2">
               <Label htmlFor="csv-upload">Upload CSV</Label>
               <Input 
                 id="csv-upload" 
