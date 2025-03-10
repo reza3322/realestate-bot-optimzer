@@ -144,10 +144,10 @@ export const formatPropertyRecommendations = (recommendations: any[], maxResults
     let features = [];
     if (property.bedrooms) features.push(`${property.bedrooms} Bedrooms`);
     if (property.bathrooms) features.push(`${property.bathrooms} Bathrooms`);
-    if (property.livingArea) features.push(`${property.livingArea} m² Living Area`);
-    if (property.plotArea) features.push(`${property.plotArea} m² Plot`);
+    if (property.living_area) features.push(`${property.living_area} m² Living Area`);
+    if (property.plot_area) features.push(`${property.plot_area} m² Plot`);
     if (property.terrace) features.push(`${property.terrace} m² Terrace`);
-    if (property.hasPool) features.push(`Private Pool`);
+    if (property.has_pool) features.push(`Private Pool`);
     
     // Add features as bullet points
     if (features.length > 0) {

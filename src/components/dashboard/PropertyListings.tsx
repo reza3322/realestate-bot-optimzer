@@ -43,11 +43,11 @@ const PropertyListings = ({ userId, userPlan, isPremiumFeature }) => {
     bathrooms: "",
     size: "",
     url: "",
-    livingArea: "",
-    plotArea: "",
-    garageArea: "",
+    living_area: "",
+    plot_area: "",
+    garage_area: "",
     terrace: "",
-    hasPool: false,
+    has_pool: false,
     status: "active"
   });
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -232,11 +232,11 @@ const PropertyListings = ({ userId, userPlan, isPremiumFeature }) => {
       bathrooms: "",
       size: "",
       url: "",
-      livingArea: "",
-      plotArea: "",
-      garageArea: "",
+      living_area: "",
+      plot_area: "",
+      garage_area: "",
       terrace: "",
-      hasPool: false,
+      has_pool: false,
       status: "active"
     });
     setIsEditMode(false);
@@ -256,9 +256,9 @@ const PropertyListings = ({ userId, userPlan, isPremiumFeature }) => {
         bedrooms: newProperty.bedrooms ? parseInt(newProperty.bedrooms, 10) : null,
         bathrooms: newProperty.bathrooms ? parseFloat(newProperty.bathrooms) : null,
         size: newProperty.size ? parseFloat(newProperty.size) : null,
-        livingArea: newProperty.livingArea ? parseFloat(newProperty.livingArea) : null,
-        plotArea: newProperty.plotArea ? parseFloat(newProperty.plotArea) : null,
-        garageArea: newProperty.garageArea ? parseFloat(newProperty.garageArea) : null,
+        living_area: newProperty.living_area ? parseFloat(newProperty.living_area) : null,
+        plot_area: newProperty.plot_area ? parseFloat(newProperty.plot_area) : null,
+        garage_area: newProperty.garage_area ? parseFloat(newProperty.garage_area) : null,
         terrace: newProperty.terrace ? parseFloat(newProperty.terrace) : null,
         user_id: userId
       };
@@ -332,11 +332,11 @@ const PropertyListings = ({ userId, userPlan, isPremiumFeature }) => {
       bathrooms: property.bathrooms?.toString() || "",
       size: property.size?.toString() || "",
       url: property.url || "",
-      livingArea: property.livingArea?.toString() || "",
-      plotArea: property.plotArea?.toString() || "",
-      garageArea: property.garageArea?.toString() || "",
+      living_area: property.living_area?.toString() || "",
+      plot_area: property.plot_area?.toString() || "",
+      garage_area: property.garage_area?.toString() || "",
       terrace: property.terrace?.toString() || "",
-      hasPool: property.hasPool === true,
+      has_pool: property.has_pool === true,
       status: property.status || "active"
     });
     setIsEditMode(true);
@@ -372,7 +372,7 @@ const PropertyListings = ({ userId, userPlan, isPremiumFeature }) => {
     }).format(date);
   };
   
-  const csvExample = `title,price,description,address,city,state,zip,type,bedrooms,bathrooms,size,livingArea,plotArea,garageArea,terrace,hasPool,url
+  const csvExample = `title,price,description,address,city,state,zip,type,bedrooms,bathrooms,size,living_area,plot_area,garage_area,terrace,has_pool,url
 "Beautiful 3BR Villa",450000,"A stunning property with mountain views","123 Main St","Marbella","Málaga","29660","villa",3,2,2100,150,1000,30,50,true,"https://youragency.com/listing/123"
 "Downtown Condo",320000,"Modern living in the heart of the city","456 Center Ave","Marbella","Málaga","29601","condo",2,2,1200,100,0,20,30,false,"https://youragency.com/listing/456"`;
 
@@ -486,7 +486,7 @@ const PropertyListings = ({ userId, userPlan, isPremiumFeature }) => {
                             {property.size && (
                               <span className="text-xs bg-secondary px-2 py-1 rounded-md">{Math.round(property.size)} m²</span>
                             )}
-                            {property.hasPool && (
+                            {property.has_pool && (
                               <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-md">Pool</span>
                             )}
                           </div>
@@ -719,34 +719,34 @@ const PropertyListings = ({ userId, userPlan, isPremiumFeature }) => {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="livingArea">Living Area (m²)</Label>
+                <Label htmlFor="living_area">Living Area (m²)</Label>
                 <Input
-                  id="livingArea"
-                  name="livingArea"
+                  id="living_area"
+                  name="living_area"
                   type="number"
-                  value={newProperty.livingArea}
+                  value={newProperty.living_area}
                   onChange={handleInputChange}
                   placeholder="e.g. 150"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="plotArea">Plot Area (m²)</Label>
+                <Label htmlFor="plot_area">Plot Area (m²)</Label>
                 <Input
-                  id="plotArea"
-                  name="plotArea"
+                  id="plot_area"
+                  name="plot_area"
                   type="number"
-                  value={newProperty.plotArea}
+                  value={newProperty.plot_area}
                   onChange={handleInputChange}
                   placeholder="e.g. 1000"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="garageArea">Garage Area (m²)</Label>
+                <Label htmlFor="garage_area">Garage Area (m²)</Label>
                 <Input
-                  id="garageArea"
-                  name="garageArea"
+                  id="garage_area"
+                  name="garage_area"
                   type="number"
-                  value={newProperty.garageArea}
+                  value={newProperty.garage_area}
                   onChange={handleInputChange}
                   placeholder="e.g. 30"
                 />
@@ -764,16 +764,16 @@ const PropertyListings = ({ userId, userPlan, isPremiumFeature }) => {
               </div>
               <div className="flex items-center space-x-2 pt-4">
                 <Checkbox 
-                  id="hasPool" 
-                  checked={newProperty.hasPool}
+                  id="has_pool" 
+                  checked={newProperty.has_pool}
                   onCheckedChange={(checked) => {
                     setNewProperty(prev => ({ 
                       ...prev, 
-                      hasPool: checked === true ? true : false 
+                      has_pool: checked === true ? true : false 
                     }));
                   }}
                 />
-                <Label htmlFor="hasPool" className="text-sm font-normal">
+                <Label htmlFor="has_pool" className="text-sm font-normal">
                   Property has a swimming pool
                 </Label>
               </div>
@@ -819,7 +819,7 @@ const PropertyListings = ({ userId, userPlan, isPremiumFeature }) => {
                     </p>
                     <div className="bg-muted rounded-md p-2 overflow-x-auto">
                       <code className="text-xs text-muted-foreground font-mono">
-                        title, price, description, address, city, state, zip, type, bedrooms, bathrooms, size, livingArea, plotArea, garageArea, terrace, hasPool, url
+                        title, price, description, address, city, state, zip, type, bedrooms, bathrooms, size, living_area, plot_area, garage_area, terrace, has_pool, url
                       </code>
                     </div>
                   </div>
