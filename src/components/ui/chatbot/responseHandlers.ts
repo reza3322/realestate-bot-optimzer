@@ -56,6 +56,8 @@ export const searchProperties = async (
   params: PropertySearchParams
 ): Promise<any[]> => {
   try {
+    console.log(`Searching properties with params:`, params);
+    
     const { data, error } = await supabase.functions.invoke('search-properties', {
       body: { 
         userId,
@@ -68,6 +70,7 @@ export const searchProperties = async (
       return [];
     }
 
+    console.log(`Found ${data?.properties?.length || 0} properties in database`);
     return data?.properties || [];
   } catch (error) {
     console.error("Error searching properties:", error);
@@ -86,6 +89,21 @@ export const testChatbotResponse = async (
   previousMessages: Message[] = []
 ): Promise<ChatbotResponse> => {
   try {
+    // First, explicitly search for property recommendations
+    let propertyRecommendations = [];
+    
+    // Only search for properties if the message seems to be asking about real estate
+    if (message.toLowerCase().match(/propert(y|ies)|house|apartment|villa|home|buy|rent|sale/i)) {
+      console.log("Message appears to be about real estate, searching for properties");
+      
+      // Extract search parameters from the message
+      const searchParams = extractPropertySearchParams(message);
+      
+      // Search for properties in the user's database
+      propertyRecommendations = await searchProperties(userId, searchParams);
+      console.log(`Found ${propertyRecommendations.length} property recommendations`);
+    }
+    
     // Call the Supabase Edge Function to get a response
     const { data, error } = await supabase.functions.invoke('chatbot-response', {
       body: {
@@ -96,7 +114,9 @@ export const testChatbotResponse = async (
         previousMessages: previousMessages.map(msg => ({
           role: msg.role === 'bot' ? 'assistant' : 'user',
           content: msg.content
-        }))
+        })),
+        // Pass the property recommendations we found directly to the chatbot
+        propertyRecommendations
       }
     });
 
@@ -117,6 +137,93 @@ export const testChatbotResponse = async (
       error: errorMessage
     };
   }
+};
+
+/**
+ * Extract property search parameters from a message
+ */
+export const extractPropertySearchParams = (message: string): PropertySearchParams => {
+  const lowerMessage = message.toLowerCase();
+  
+  // Default search parameters
+  const params: PropertySearchParams = {
+    maxResults: 3
+  };
+  
+  // Extract location
+  const locationMatches = [
+    { regex: /in\s+([a-zA-Z\s]+?)(?:,|\s|$|\?|\.)/i, group: 1 },
+    { regex: /(?:marbella|ibiza|malaga|madrid|barcelona|valencia|seville|granada)/gi, group: 0 }
+  ];
+  
+  for (const match of locationMatches) {
+    const locationMatch = lowerMessage.match(match.regex);
+    if (locationMatch) {
+      params.location = locationMatch[match.group];
+      break;
+    }
+  }
+  
+  // Extract property type
+  const typeRegex = /(villa|apartment|penthouse|house|condo|flat|studio)/gi;
+  const typeMatch = lowerMessage.match(typeRegex);
+  if (typeMatch) {
+    params.type = typeMatch[0].toLowerCase();
+  }
+  
+  // Extract price range
+  const minPriceRegex = /(?:from|min|above|over|more than)\s*(?:€|euro|eur|£|\$|usd|dollar)?[ ]?(\d+[,.]\d+|\d+)[ ]?(?:€|euro|eur|£|\$|usd|dollar|k|m)?/i;
+  const minPriceMatch = lowerMessage.match(minPriceRegex);
+  if (minPriceMatch) {
+    let minPrice = minPriceMatch[1].replace(',', '');
+    if (lowerMessage.includes('k')) {
+      minPrice = parseFloat(minPrice) * 1000;
+    } else if (lowerMessage.includes('m')) {
+      minPrice = parseFloat(minPrice) * 1000000;
+    }
+    params.minPrice = parseFloat(minPrice);
+  }
+  
+  const maxPriceRegex = /(?:up to|max|under|below|less than)\s*(?:€|euro|eur|£|\$|usd|dollar)?[ ]?(\d+[,.]\d+|\d+)[ ]?(?:€|euro|eur|£|\$|usd|dollar|k|m)?/i;
+  const maxPriceMatch = lowerMessage.match(maxPriceRegex);
+  if (maxPriceMatch) {
+    let maxPrice = maxPriceMatch[1].replace(',', '');
+    if (lowerMessage.includes('k')) {
+      maxPrice = parseFloat(maxPrice) * 1000;
+    } else if (lowerMessage.includes('m')) {
+      maxPrice = parseFloat(maxPrice) * 1000000;
+    }
+    params.maxPrice = parseFloat(maxPrice);
+  }
+  
+  // Extract bedrooms
+  const bedroomsRegex = /(\d+)\s*(?:bed|bedroom|br)/i;
+  const bedroomsMatch = lowerMessage.match(bedroomsRegex);
+  if (bedroomsMatch) {
+    params.bedrooms = parseInt(bedroomsMatch[1]);
+  }
+  
+  // Extract pool preference
+  if (lowerMessage.includes('pool') || lowerMessage.includes('swimming')) {
+    params.hasPool = true;
+  }
+  
+  // Extract style preferences
+  const styleKeywords = {
+    'modern': ['modern', 'contemporary', 'minimalist', 'sleek'],
+    'classic': ['classic', 'traditional', 'mediterranean', 'rustic', 'spanish'],
+    'luxury': ['luxury', 'high-end', 'premium', 'exclusive']
+  };
+  
+  for (const [style, keywords] of Object.entries(styleKeywords)) {
+    if (keywords.some(keyword => lowerMessage.includes(keyword))) {
+      params.style = style;
+      break;
+    }
+  }
+  
+  console.log("Extracted property search parameters:", params);
+  return params;
 };
 
 /**
