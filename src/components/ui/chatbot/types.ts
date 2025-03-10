@@ -66,6 +66,16 @@ export interface VisitorInfo {
   [key: string]: any;
 }
 
+export interface PropertyRecommendation {
+  title: string;
+  price: number | string;
+  location: string;
+  features: string[];
+  highlight?: string;
+  url?: string;
+  id?: string;
+}
+
 export interface ChatbotResponse {
   response: string;
   suggestedFollowUp?: string;
@@ -74,4 +84,16 @@ export interface ChatbotResponse {
   leadInfo?: VisitorInfo;
   error?: string;
   isVerified?: boolean;
+  propertyRecommendations?: PropertyRecommendation[];
+}
+
+export interface PropertySearchParams {
+  type?: string;
+  location?: string;
+  minPrice?: number;
+  maxPrice?: number;
+  bedrooms?: number;
+  keywords?: string[];
+  style?: string;
+  maxResults?: number;
 }

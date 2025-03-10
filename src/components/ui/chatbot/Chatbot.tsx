@@ -6,8 +6,8 @@ import ChatMessage from './ChatMessage';
 import ChatInput from './ChatInput';
 import TypingIndicator from './TypingIndicator';
 import { getChatStyles } from './chatStyles';
-import { Message, ChatTheme, LanguageCode, ChatStylesType, VisitorInfo } from './types';
-import { testChatbotResponse } from './responseHandlers';
+import { Message, ChatTheme, LanguageCode, ChatStylesType, VisitorInfo, PropertyRecommendation } from './types';
+import { testChatbotResponse, formatPropertyRecommendations } from './responseHandlers';
 
 const DEFAULT_TRANSLATIONS = {
   en: {
@@ -89,6 +89,7 @@ const Chatbot = ({
   const [responseSource, setResponseSource] = useState<'ai' | 'training' | null>(null);
   const [conversationId, setConversationId] = useState<string | undefined>(undefined);
   const [visitorInfo, setVisitorInfo] = useState<VisitorInfo>({});
+  const [propertyRecommendations, setPropertyRecommendations] = useState<PropertyRecommendation[]>([]);
 
   const styles: ChatTheme = getChatStyles(theme, variation, primaryColor);
   
@@ -133,6 +134,7 @@ const Chatbot = ({
     setIsTyping(true);
     setError(null);
     setResponseSource(null);
+    setPropertyRecommendations([]);
     
     const isLandingPageMode = userId === 'demo-user';
     console.log(`Chatbot mode: ${isLandingPageMode ? 'Landing Page Demo' : 'User Chatbot'}`);
@@ -150,7 +152,26 @@ const Chatbot = ({
         console.error('Chatbot error:', result.error);
         setError(`Error: ${result.error}`);
       } else {
-        // Only add the response if there's no error
+        // Store property recommendations if available
+        if (result.propertyRecommendations && result.propertyRecommendations.length > 0) {
+          setPropertyRecommendations(result.propertyRecommendations);
+          
+          // If the response doesn't already include formatted property listings,
+          // format them and append to the response
+          if (!result.response.includes('🏡') && !result.response.includes('View Listing')) {
+            const formattedRecommendations = formatPropertyRecommendations(
+              result.propertyRecommendations,
+              3 // Limit to 3 properties
+            );
+            
+            // Add formatted recommendations to the response
+            if (formattedRecommendations) {
+              result.response = `${result.response}\n\n${formattedRecommendations}`;
+            }
+          }
+        }
+        
+        // Add the response to messages
         setMessages(prev => [...prev, { role: 'bot', content: result.response }]);
         setResponseSource(result.source || null);
         
