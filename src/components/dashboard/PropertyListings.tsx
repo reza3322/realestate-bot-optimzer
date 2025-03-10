@@ -59,6 +59,8 @@ const PropertyListings = ({ userId, userPlan, isPremiumFeature }) => {
     direction: "desc"
   });
   const [importResult, setImportResult] = useState(null);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editPropertyId, setEditPropertyId] = useState(null);
   
   useEffect(() => {
     if (userId) {
@@ -216,6 +218,31 @@ const PropertyListings = ({ userId, userPlan, isPremiumFeature }) => {
     }
   };
   
+  const resetPropertyForm = () => {
+    setNewProperty({
+      title: "",
+      description: "",
+      price: "",
+      address: "",
+      city: "",
+      state: "",
+      zip: "",
+      type: "house",
+      bedrooms: "",
+      bathrooms: "",
+      size: "",
+      url: "",
+      livingArea: "",
+      plotArea: "",
+      garageArea: "",
+      terrace: "",
+      hasPool: false,
+      status: "active"
+    });
+    setIsEditMode(false);
+    setEditPropertyId(null);
+  };
+  
   const handleAddProperty = async () => {
     try {
       if (!newProperty.title || !newProperty.price) {
@@ -236,43 +263,39 @@ const PropertyListings = ({ userId, userPlan, isPremiumFeature }) => {
         user_id: userId
       };
       
-      const { data, error } = await supabase
-        .from("properties")
-        .insert(propertyToAdd)
-        .select();
-      
-      if (error) {
-        throw error;
+      if (isEditMode && editPropertyId) {
+        const { data, error } = await supabase
+          .from("properties")
+          .update(propertyToAdd)
+          .eq("id", editPropertyId)
+          .select();
+        
+        if (error) {
+          console.error("Error updating property:", error);
+          throw error;
+        }
+        
+        toast.success("Property updated successfully");
+      } else {
+        const { data, error } = await supabase
+          .from("properties")
+          .insert(propertyToAdd)
+          .select();
+        
+        if (error) {
+          console.error("Error adding property:", error);
+          throw error;
+        }
+        
+        toast.success("Property added successfully");
       }
       
-      toast.success("Property added successfully");
       fetchProperties();
-      
-      setNewProperty({
-        title: "",
-        description: "",
-        price: "",
-        address: "",
-        city: "",
-        state: "",
-        zip: "",
-        type: "house",
-        bedrooms: "",
-        bathrooms: "",
-        size: "",
-        url: "",
-        livingArea: "",
-        plotArea: "",
-        garageArea: "",
-        terrace: "",
-        hasPool: false,
-        status: "active"
-      });
-      
+      resetPropertyForm();
       setIsAddDialogOpen(false);
     } catch (error) {
-      console.error("Error adding property:", error);
-      toast.error("Failed to add property");
+      console.error("Error adding/updating property:", error);
+      toast.error(`Failed to ${isEditMode ? 'update' : 'add'} property: ${error.message || error}`);
     }
   };
   
@@ -293,6 +316,32 @@ const PropertyListings = ({ userId, userPlan, isPremiumFeature }) => {
       console.error("Error deleting property:", error);
       toast.error("Failed to delete property");
     }
+  };
+  
+  const handleEditProperty = (property) => {
+    setNewProperty({
+      title: property.title || "",
+      description: property.description || "",
+      price: property.price?.toString() || "",
+      address: property.address || "",
+      city: property.city || "",
+      state: property.state || "",
+      zip: property.zip || "",
+      type: property.type || "house",
+      bedrooms: property.bedrooms?.toString() || "",
+      bathrooms: property.bathrooms?.toString() || "",
+      size: property.size?.toString() || "",
+      url: property.url || "",
+      livingArea: property.livingArea?.toString() || "",
+      plotArea: property.plotArea?.toString() || "",
+      garageArea: property.garageArea?.toString() || "",
+      terrace: property.terrace?.toString() || "",
+      hasPool: property.hasPool === true,
+      status: property.status || "active"
+    });
+    setIsEditMode(true);
+    setEditPropertyId(property.id);
+    setIsAddDialogOpen(true);
   };
   
   const handleInputChange = (e) => {
@@ -323,9 +372,9 @@ const PropertyListings = ({ userId, userPlan, isPremiumFeature }) => {
     }).format(date);
   };
   
-  const csvExample = `title,price,description,address,city,state,zip,type,bedrooms,bathrooms,size
-"Beautiful 3BR Home",450000,"A stunning property with mountain views","123 Main St","Austin","TX","78701","house",3,2,2100
-"Downtown Condo",320000,"Modern living in the heart of the city","456 Center Ave","Austin","TX","78704","condo",2,2,1200`;
+  const csvExample = `title,price,description,address,city,state,zip,type,bedrooms,bathrooms,size,livingArea,plotArea,garageArea,terrace,hasPool,url
+"Beautiful 3BR Villa",450000,"A stunning property with mountain views","123 Main St","Marbella","Málaga","29660","villa",3,2,2100,150,1000,30,50,true,"https://youragency.com/listing/123"
+"Downtown Condo",320000,"Modern living in the heart of the city","456 Center Ave","Marbella","Málaga","29601","condo",2,2,1200,100,0,20,30,false,"https://youragency.com/listing/456"`;
 
   return (
     <div className="space-y-6">
@@ -337,7 +386,10 @@ const PropertyListings = ({ userId, userPlan, isPremiumFeature }) => {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button onClick={() => setIsAddDialogOpen(true)}>
+          <Button onClick={() => {
+            resetPropertyForm();
+            setIsAddDialogOpen(true);
+          }}>
             <Plus className="mr-2 h-4 w-4" />
             Add Property
           </Button>
@@ -391,7 +443,10 @@ const PropertyListings = ({ userId, userPlan, isPremiumFeature }) => {
                 <p className="text-muted-foreground mb-4">
                   {searchQuery ? "Try a different search term" : "Add your first property listing to get started"}
                 </p>
-                <Button onClick={() => setIsAddDialogOpen(true)}>
+                <Button onClick={() => {
+                  resetPropertyForm();
+                  setIsAddDialogOpen(true);
+                }}>
                   <Plus className="mr-2 h-4 w-4" />
                   Add Property
                 </Button>
@@ -429,7 +484,10 @@ const PropertyListings = ({ userId, userPlan, isPremiumFeature }) => {
                               <span className="text-xs bg-secondary px-2 py-1 rounded-md">{property.bathrooms} BA</span>
                             )}
                             {property.size && (
-                              <span className="text-xs bg-secondary px-2 py-1 rounded-md">{Math.round(property.size)} sqft</span>
+                              <span className="text-xs bg-secondary px-2 py-1 rounded-md">{Math.round(property.size)} m²</span>
+                            )}
+                            {property.hasPool && (
+                              <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-md">Pool</span>
                             )}
                           </div>
                         ) : (
@@ -462,7 +520,7 @@ const PropertyListings = ({ userId, userPlan, isPremiumFeature }) => {
                               <Eye className="mr-2 h-4 w-4" />
                               View Details
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => alert("Edit property")}>
+                            <DropdownMenuItem onClick={() => handleEditProperty(property)}>
                               <Edit className="mr-2 h-4 w-4" />
                               Edit Property
                             </DropdownMenuItem>
@@ -486,12 +544,17 @@ const PropertyListings = ({ userId, userPlan, isPremiumFeature }) => {
         </Card>
       </div>
 
-      <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+      <Dialog open={isAddDialogOpen} onOpenChange={(open) => {
+        if (!open) resetPropertyForm();
+        setIsAddDialogOpen(open);
+      }}>
         <DialogContent className="sm:max-w-[600px] max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Add New Property</DialogTitle>
+            <DialogTitle>{isEditMode ? 'Edit Property' : 'Add New Property'}</DialogTitle>
             <DialogDescription>
-              Enter the details of your new property listing.
+              {isEditMode 
+                ? 'Update the details of your property listing.' 
+                : 'Enter the details of your new property listing.'}
             </DialogDescription>
           </DialogHeader>
           <div className="py-2">
@@ -717,10 +780,15 @@ const PropertyListings = ({ userId, userPlan, isPremiumFeature }) => {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
+            <Button variant="outline" onClick={() => {
+              resetPropertyForm();
+              setIsAddDialogOpen(false);
+            }}>
               Cancel
             </Button>
-            <Button onClick={handleAddProperty}>Save Property</Button>
+            <Button onClick={handleAddProperty}>
+              {isEditMode ? 'Update Property' : 'Save Property'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -751,7 +819,7 @@ const PropertyListings = ({ userId, userPlan, isPremiumFeature }) => {
                     </p>
                     <div className="bg-muted rounded-md p-2 overflow-x-auto">
                       <code className="text-xs text-muted-foreground font-mono">
-                        title, price, description, address, city, state, zip, type, bedrooms, bathrooms, size
+                        title, price, description, address, city, state, zip, type, bedrooms, bathrooms, size, livingArea, plotArea, garageArea, terrace, hasPool, url
                       </code>
                     </div>
                   </div>
