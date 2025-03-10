@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
-import { Home, UploadCloud, Plus, Edit, MoreHorizontal, Eye, Trash2, Search, Download, Filter, Check, X, FileText, AlertTriangle } from "lucide-react";
+import { Home, UploadCloud, Plus, Edit, MoreHorizontal, Eye, Trash2, Search, Download, Filter, Check, X, FileText, AlertTriangle, FileUpload, HelpCircle } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -641,41 +641,92 @@ const PropertyListings = ({ userId, userPlan, isPremiumFeature }) => {
       <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
         <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
-            <DialogTitle>Import Properties from CSV</DialogTitle>
+            <DialogTitle className="flex items-center">
+              <FileUpload className="h-5 w-5 mr-2 text-primary" />
+              Import Properties from CSV
+            </DialogTitle>
             <DialogDescription>
-              Upload a CSV file with your property listings.
+              Upload a CSV file with your property listings to quickly import multiple properties at once.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="border rounded-md p-4 bg-muted/40">
-              <div className="flex items-center gap-2 mb-2">
-                <FileText className="h-4 w-4 text-primary" />
-                <h3 className="text-sm font-medium">CSV Format Guide</h3>
-              </div>
-              <p className="text-xs text-muted-foreground mb-2">
-                Your CSV file should contain the following column headers:
-              </p>
-              <div className="text-xs font-mono bg-secondary/30 p-2 rounded overflow-auto whitespace-nowrap mb-2">
-                title, price, description, address, city, state, zip, type, bedrooms, bathrooms, size
-              </div>
-              <details className="text-xs">
-                <summary className="font-medium cursor-pointer">CSV Example</summary>
-                <pre className="bg-secondary/30 p-2 rounded mt-1 overflow-auto">{csvExample}</pre>
-              </details>
-            </div>
           
-            <div className="space-y-2">
-              <Label htmlFor="csv-upload">Upload CSV</Label>
-              <Input 
-                id="csv-upload" 
-                type="file" 
-                accept=".csv"
-                onChange={handleFileUpload}
-              />
+          <div className="space-y-6 py-4">
+            <div className="space-y-4">
+              <div className="bg-primary/5 border border-primary/20 rounded-lg p-5">
+                <div className="flex items-start gap-3">
+                  <div className="bg-primary/10 rounded-full p-2 mt-0.5">
+                    <HelpCircle className="h-4 w-4 text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-medium mb-1">CSV Format Requirements</h3>
+                    <p className="text-xs text-muted-foreground mb-2">
+                      Your CSV file must include the following column headers (title and price are required):
+                    </p>
+                    <div className="bg-muted rounded-md p-2 overflow-x-auto">
+                      <code className="text-xs text-muted-foreground font-mono">
+                        title, price, description, address, city, state, zip, type, bedrooms, bathrooms, size
+                      </code>
+                    </div>
+                  </div>
+                </div>
+                
+                <Separator className="my-4" />
+                
+                <details className="text-sm">
+                  <summary className="font-medium cursor-pointer text-primary flex items-center">
+                    <FileText className="h-4 w-4 mr-1 inline" />
+                    View example CSV format
+                  </summary>
+                  <div className="mt-2 bg-muted rounded-md p-3 overflow-x-auto">
+                    <pre className="text-xs font-mono whitespace-pre-wrap">{csvExample}</pre>
+                  </div>
+                </details>
+              </div>
+              
+              <div className="space-y-3">
+                <Label htmlFor="csv-upload" className="text-sm font-medium">Upload your CSV file</Label>
+                <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg px-6 py-8 text-center hover:bg-muted/40 transition-colors cursor-pointer">
+                  <Input 
+                    id="csv-upload" 
+                    type="file" 
+                    accept=".csv"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                  />
+                  <label htmlFor="csv-upload" className="cursor-pointer">
+                    <div className="mx-auto w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-3">
+                      <UploadCloud className="h-6 w-6 text-primary" />
+                    </div>
+                    <p className="text-sm font-medium mb-1">Click to upload or drag and drop</p>
+                    <p className="text-xs text-muted-foreground mb-3">CSV files only (max 10MB)</p>
+                    <Button variant="outline" size="sm" className="pointer-events-none">
+                      Select CSV File
+                    </Button>
+                  </label>
+                </div>
+              </div>
             </div>
             
+            {uploadedFile && (
+              <div className="bg-muted/30 rounded-lg p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="bg-green-100 p-1 rounded">
+                    <Check className="h-4 w-4 text-green-600" />
+                  </div>
+                  <span className="text-sm font-medium">{uploadedFile.name}</span>
+                  <Badge variant="outline" className="ml-auto text-xs">
+                    {(uploadedFile.size / 1024).toFixed(0)} KB
+                  </Badge>
+                </div>
+                
+                {importStatus && (
+                  <p className="text-sm text-muted-foreground">{importStatus}</p>
+                )}
+              </div>
+            )}
+            
             {csvError && (
-              <Alert variant="destructive">
+              <Alert variant="destructive" className="text-sm">
                 <AlertTriangle className="h-4 w-4" />
                 <AlertTitle>Error</AlertTitle>
                 <AlertDescription>{csvError}</AlertDescription>
@@ -683,70 +734,76 @@ const PropertyListings = ({ userId, userPlan, isPremiumFeature }) => {
             )}
             
             {parsedData.length > 0 && (
-              <div className="border rounded-md p-2">
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-sm font-medium">CSV Preview ({parsedData.length} properties)</span>
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-sm font-medium">CSV Preview</h3>
+                  <Badge variant="outline">{parsedData.length} properties</Badge>
                 </div>
-                <ScrollArea className="h-[200px]">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        {Object.keys(parsedData[0]).slice(0, 5).map((header) => (
-                          <TableHead key={header}>{header}</TableHead>
-                        ))}
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {parsedData.slice(0, 5).map((row, i) => (
-                        <TableRow key={i}>
-                          {Object.values(row).slice(0, 5).map((value, j) => (
-                            <TableCell key={j}>{value ? String(value).substring(0, 20) : "-"}</TableCell>
+                <ScrollArea className="h-[200px] rounded-md border">
+                  <div className="p-2">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          {Object.keys(parsedData[0]).slice(0, 5).map((header, i) => (
+                            <TableHead key={i} className="text-xs whitespace-nowrap">{header}</TableHead>
                           ))}
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {parsedData.slice(0, 5).map((row, i) => (
+                          <TableRow key={i}>
+                            {Object.values(row).slice(0, 5).map((value, j) => (
+                              <TableCell key={j} className="text-xs py-2">
+                                {value ? String(value).substring(0, 20) + (String(value).length > 20 ? '...' : '') : "-"}
+                              </TableCell>
+                            ))}
+                          </TableRow>
+                        ))}
+                        {parsedData.length > 5 && (
+                          <TableRow>
+                            <TableCell colSpan={5} className="text-center text-xs text-muted-foreground py-2">
+                              + {parsedData.length - 5} more properties
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
                 </ScrollArea>
               </div>
             )}
             
-            {importStatus && (
-              <div className="text-sm">
-                {importStatus}
-              </div>
-            )}
-            
             {importResult && (
-              <Alert variant={importResult.properties_failed > 0 ? "destructive" : "default"}>
+              <Alert variant={importResult.properties_imported > 0 ? "success" : "warning"} className="text-sm">
                 <div className="flex flex-col">
                   <div className="flex items-center">
-                    {importResult.properties_failed > 0 ? (
-                      <AlertTriangle className="h-4 w-4 mr-2 text-destructive" />
+                    {importResult.properties_imported > 0 ? (
+                      <Check className="h-4 w-4 mr-2 text-green-600" />
                     ) : (
-                      <Check className="h-4 w-4 mr-2 text-success" />
+                      <AlertTriangle className="h-4 w-4 mr-2 text-yellow-600" />
                     )}
-                    <AlertTitle>Import completed</AlertTitle>
+                    <AlertTitle>Import {importResult.properties_imported > 0 ? "Successful" : "Completed"}</AlertTitle>
                   </div>
                   <AlertDescription>
                     <div className="space-y-1 mt-1">
                       <div className="text-sm">
-                        {importResult.properties_imported} properties imported successfully
+                        <span className="font-medium">{importResult.properties_imported}</span> properties imported successfully
                       </div>
                       {importResult.properties_failed > 0 && (
                         <div className="text-sm text-destructive">
-                          {importResult.properties_failed} properties failed to import
+                          <span className="font-medium">{importResult.properties_failed}</span> properties failed to import
                         </div>
                       )}
                       {importResult.errors && importResult.errors.length > 0 && (
                         <details className="text-xs mt-2">
-                          <summary className="cursor-pointer">View Errors</summary>
+                          <summary className="cursor-pointer font-medium">View Errors</summary>
                           <div className="mt-1 bg-muted p-2 rounded">
                             <ul className="list-disc pl-4">
-                              {importResult.errors.slice(0, 5).map((error, i) => (
+                              {importResult.errors.slice(0, 3).map((error, i) => (
                                 <li key={i} className="mb-1">{error}</li>
                               ))}
-                              {importResult.errors.length > 5 && (
-                                <li>...and {importResult.errors.length - 5} more errors</li>
+                              {importResult.errors.length > 3 && (
+                                <li>...and {importResult.errors.length - 3} more errors</li>
                               )}
                             </ul>
                           </div>
@@ -758,7 +815,8 @@ const PropertyListings = ({ userId, userPlan, isPremiumFeature }) => {
               </Alert>
             )}
           </div>
-          <DialogFooter>
+          
+          <DialogFooter className="mt-2">
             <Button 
               variant="outline" 
               onClick={() => {
@@ -775,8 +833,19 @@ const PropertyListings = ({ userId, userPlan, isPremiumFeature }) => {
             <Button 
               onClick={handlePropertyImport} 
               disabled={isImporting || parsedData.length === 0}
+              className="min-w-[120px]"
             >
-              {isImporting ? "Importing..." : "Import Properties"}
+              {isImporting ? (
+                <>
+                  <div className="w-4 h-4 rounded-full border-2 border-t-transparent border-white animate-spin mr-2"></div>
+                  Importing...
+                </>
+              ) : (
+                <>
+                  <UploadCloud className="mr-2 h-4 w-4" />
+                  Import {parsedData.length > 0 ? `(${parsedData.length})` : ""}
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
