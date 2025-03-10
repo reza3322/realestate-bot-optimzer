@@ -13,7 +13,8 @@ export const findRelevantTrainingData = async (userId: string, message: string) 
       console.log("Using demo mode, skipping training data lookup");
       return { 
         qaMatches: [],
-        fileContent: [] 
+        fileContent: [],
+        propertyListings: [] 
       };
     }
 
@@ -117,6 +118,15 @@ const extractLocationTerms = (message: string): string[] => {
     }
   }
   
+  // If no location found in patterns, check if any location is mentioned directly
+  if (locations.length === 0) {
+    const messageLower = message.toLowerCase();
+    const directLocationCheck = messageLower.match(/\b(hacienda las chapas|puerto banus|nueva andalucia|golden mile|marbella)\b/gi);
+    if (directLocationCheck) {
+      locations.push(...directLocationCheck);
+    }
+  }
+  
   return locations;
 };
 
@@ -178,7 +188,7 @@ const extractBedroomCount = (message: string): number | null => {
 
 // Helper function to extract property type from a message
 const extractPropertyType = (message: string): string | null => {
-  const propertyTypes = ['house', 'apartment', 'villa', 'condo', 'townhouse', 'flat', 'studio'];
+  const propertyTypes = ['house', 'apartment', 'villa', 'condo', 'townhouse', 'flat', 'studio', 'luxury'];
   const messageLower = message.toLowerCase();
   
   for (const type of propertyTypes) {
@@ -246,7 +256,7 @@ const fetchCleanPropertyListings = async (
     query = query.ilike('type', `%${propertyType}%`);
   }
   
-  // Limit and sort results
+  // Limit and sort results - only show top 5 properties
   query = query.order('price', { ascending: false }).limit(5);
   
   // Execute the query
@@ -259,7 +269,7 @@ const formatPropertyListings = (properties: any[]): string => {
     return '';
   }
   
-  let formattedListings = `I found ${properties.length} properties that might interest you:\n\n`;
+  let formattedListings = `I found ${properties.length > 1 ? `${properties.length} properties` : 'a property'} that might interest you:\n\n`;
   
   properties.forEach((property, index) => {
     // Format price with currency symbol
@@ -271,7 +281,10 @@ const formatPropertyListings = (properties: any[]): string => {
     
     // Create a property "listing card" in text form
     formattedListings += `🏡 **${property.title || `${property.bedrooms}-Bedroom ${property.type || 'Property'}`}** – ${formattedPrice}\n`;
-    formattedListings += `📍 Location: ${[property.address, property.city, property.state].filter(Boolean).join(', ')}\n`;
+    
+    // Add location info
+    const location = [property.address, property.city, property.state].filter(Boolean).join(', ');
+    formattedListings += `📍 Location: ${location || 'Contact for details'}\n`;
     
     // Add key features
     const features = [];
@@ -283,7 +296,7 @@ const formatPropertyListings = (properties: any[]): string => {
     if (property.description) {
       const highlights = extractHighlights(property.description);
       if (highlights.length > 0) {
-        features.push(...highlights.slice(0, 3));
+        features.push(...highlights.slice(0, 2));
       }
     }
     
@@ -321,8 +334,8 @@ const extractHighlights = (description: string): string[] => {
       highlights.push(formattedKeyword);
     }
     
-    // Limit to 5 highlights
-    if (highlights.length >= 5) break;
+    // Limit to 3 highlights
+    if (highlights.length >= 3) break;
   }
   
   return highlights;
