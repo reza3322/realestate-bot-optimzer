@@ -28,10 +28,11 @@ serve(async (req) => {
   }
 
   try {
-    const { message, userId, visitorInfo, conversationId, previousMessages = [] } = await req.json();
+    const { message, userId, visitorInfo, conversationId, previousMessages = [], propertyRecommendations = [] } = await req.json();
     
     console.log(`🔄 Processing request from user ${userId}, message: ${message.substring(0, 50)}...`);
     console.log(`👤 Visitor info:`, JSON.stringify(visitorInfo));
+    console.log(`🏠 Property recommendations received:`, propertyRecommendations.length);
 
     if (!message) {
       return new Response(
@@ -40,18 +41,16 @@ serve(async (req) => {
       );
     }
 
-    // 1. Search for property recommendations based on the message
-    const propertyRecommendations = await searchForPropertyRecommendations(userId, message);
-    
-    // 2. Generate a response using OpenAI or fall back to hardcoded response
+    // Generate a response using OpenAI or fall back to hardcoded response
     let response, isVerified = false;
     if (openai) {
       console.log("🤖 Using OpenAI to generate response");
+      
       // Get property context for OpenAI
       const propertyContext = propertyRecommendations.length > 0 
         ? `You have found ${propertyRecommendations.length} properties that might interest the user:\n` +
           propertyRecommendations.map((p, i) => 
-            `Property ${i+1}: ${p.title}, Price: ${p.price}, Location: ${p.location || 'N/A'}, Features: ${p.features?.join(', ') || 'N/A'}`
+            `Property ${i+1}: ${p.title || 'Property'}, Price: ${p.price}, Location: ${p.location || p.city || 'N/A'}, Features: ${p.features?.join(', ') || 'N/A'}, URL: ${p.url || 'N/A'}`
           ).join('\n')
         : "You don't have any specific property listings that match the user's query.";
       
@@ -77,6 +76,11 @@ serve(async (req) => {
         );
         isVerified = true; // Assume second attempt is good enough
       }
+      
+      // Check if we need to format property recommendations
+      if (propertyRecommendations.length > 0 && !response.includes('🏡') && !response.includes('View Listing')) {
+        response = formatPropertyRecommendations(response, propertyRecommendations);
+      }
     } else {
       // Fallback to a scripted response if no OpenAI key is available
       console.log("⚠️ No OpenAI API key, using fallback response");
@@ -84,10 +88,10 @@ serve(async (req) => {
       isVerified = true;
     }
 
-    // 3. Extract potential lead information
+    // Extract potential lead information
     const extractedLeadInfo = extractLeadInfo(message, visitorInfo);
 
-    // 4. Save the conversation
+    // Save the conversation
     const newConversationId = await saveConversation(
       userId, 
       message, 
@@ -96,7 +100,7 @@ serve(async (req) => {
       conversationId
     );
 
-    // 5. Return the response with all relevant information
+    // Return the response with all relevant information
     const responseObj = {
       response,
       isVerified,
@@ -120,111 +124,6 @@ serve(async (req) => {
     );
   }
 });
-
-// Helper function to search for properties based on message content
-async function searchForPropertyRecommendations(userId, message) {
-  try {
-    console.log(`🔍 Searching for properties for user ${userId} based on message: ${message.substring(0, 30)}...`);
-    
-    // Extract search parameters from the message
-    const searchParams = extractSearchParams(message);
-    console.log("📊 Extracted search params:", searchParams);
-    
-    // Search for properties
-    const { data, error } = await supabase.functions.invoke('search-properties', {
-      body: { userId, searchParams }
-    });
-    
-    if (error) {
-      console.error("❌ Error searching for properties:", error);
-      return [];
-    }
-    
-    return data?.properties || [];
-  } catch (error) {
-    console.error("❌ Error in property search:", error);
-    return [];
-  }
-}
-
-// Helper function to extract search parameters from a message
-function extractSearchParams(message) {
-  const lowerMessage = message.toLowerCase();
-  
-  // Default search parameters
-  const params = {
-    maxResults: MAX_PROPERTY_RECOMMENDATIONS
-  };
-  
-  // Extract location
-  const locationMatches = [
-    { regex: /in\s+([a-zA-Z\s]+?)(?:,|\s|$|\?|\.)/i, group: 1 },
-    { regex: /(?:marbella|ibiza|malaga|madrid|barcelona|valencia|seville|granada)/gi, group: 0 }
-  ];
-  
-  for (const match of locationMatches) {
-    const locationMatch = lowerMessage.match(match.regex);
-    if (locationMatch) {
-      params.location = locationMatch[match.group];
-      break;
-    }
-  }
-  
-  // Extract property type
-  const typeRegex = /(villa|apartment|penthouse|house|condo|flat|studio)/gi;
-  const typeMatch = lowerMessage.match(typeRegex);
-  if (typeMatch) {
-    params.type = typeMatch[0].toLowerCase();
-  }
-  
-  // Extract price range
-  const minPriceRegex = /(?:from|min|above|over|more than)\s*(?:€|euro|eur|£|\$|usd|dollar)?[ ]?(\d+[,.]\d+|\d+)[ ]?(?:€|euro|eur|£|\$|usd|dollar|k|m)?/i;
-  const minPriceMatch = lowerMessage.match(minPriceRegex);
-  if (minPriceMatch) {
-    let minPrice = minPriceMatch[1].replace(',', '');
-    if (lowerMessage.includes('k')) {
-      minPrice = parseFloat(minPrice) * 1000;
-    } else if (lowerMessage.includes('m')) {
-      minPrice = parseFloat(minPrice) * 1000000;
-    }
-    params.minPrice = parseFloat(minPrice);
-  }
-  
-  const maxPriceRegex = /(?:up to|max|under|below|less than)\s*(?:€|euro|eur|£|\$|usd|dollar)?[ ]?(\d+[,.]\d+|\d+)[ ]?(?:€|euro|eur|£|\$|usd|dollar|k|m)?/i;
-  const maxPriceMatch = lowerMessage.match(maxPriceRegex);
-  if (maxPriceMatch) {
-    let maxPrice = maxPriceMatch[1].replace(',', '');
-    if (lowerMessage.includes('k')) {
-      maxPrice = parseFloat(maxPrice) * 1000;
-    } else if (lowerMessage.includes('m')) {
-      maxPrice = parseFloat(maxPrice) * 1000000;
-    }
-    params.maxPrice = parseFloat(maxPrice);
-  }
-  
-  // Extract bedrooms
-  const bedroomsRegex = /(\d+)\s*(?:bed|bedroom|br)/i;
-  const bedroomsMatch = lowerMessage.match(bedroomsRegex);
-  if (bedroomsMatch) {
-    params.bedrooms = parseInt(bedroomsMatch[1]);
-  }
-  
-  // Extract style preferences
-  const styleKeywords = {
-    'modern': ['modern', 'contemporary', 'minimalist', 'sleek'],
-    'classic': ['classic', 'traditional', 'mediterranean', 'rustic', 'spanish'],
-    'luxury': ['luxury', 'high-end', 'premium', 'exclusive']
-  };
-  
-  for (const [style, keywords] of Object.entries(styleKeywords)) {
-    if (keywords.some(keyword => lowerMessage.includes(keyword))) {
-      params.style = style;
-      break;
-    }
-  }
-  
-  return params;
-}
 
 // Generate a response using OpenAI
 async function generateAIResponse(message, previousMessages, propertyContext, visitorInfo, includeQualityGuidelines = false) {
@@ -271,6 +170,66 @@ When a visitor shows interest in a property, ask for their contact details to or
   });
   
   return completion.data.choices[0].message.content;
+}
+
+// Format the AI response with property recommendations
+function formatPropertyRecommendations(response, propertyRecommendations) {
+  if (!propertyRecommendations || propertyRecommendations.length === 0) {
+    return response;
+  }
+  
+  // Limit to max of 3 properties
+  const limitedRecommendations = propertyRecommendations.slice(0, MAX_PROPERTY_RECOMMENDATIONS);
+  
+  // Generate the formatted property list
+  let formattedProperties = "\n\nHere are some properties that might interest you:\n\n";
+  
+  limitedRecommendations.forEach((property) => {
+    // Format the price
+    const price = typeof property.price === 'number' 
+      ? new Intl.NumberFormat('en-EU', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(property.price)
+      : property.price;
+    
+    // Get the property title
+    const title = property.title || `${property.type || 'Property'} in ${property.city || 'Exclusive Location'}`;
+    
+    // Create the formatted listing
+    formattedProperties += `🏡 **${title} – ${price}**\n`;
+    formattedProperties += `📍 **${property.location || (property.city && property.state ? `${property.city}, ${property.state}` : 'Exclusive Location')}**\n`;
+    
+    // Features
+    if (property.features && property.features.length > 0) {
+      formattedProperties += `✅ ${Array.isArray(property.features) ? property.features.join(', ') : property.features}\n`;
+    }
+    
+    // Highlight
+    if (property.highlight) {
+      formattedProperties += `✨ ${property.highlight}\n`;
+    }
+    
+    // URL
+    if (property.url) {
+      formattedProperties += `🔗 [View Listing](${property.url})\n`;
+    } else {
+      const listingId = property.id ? property.id.substring(0, 6) : Math.floor(Math.random() * 100000);
+      formattedProperties += `🔗 [View Listing](https://youragency.com/listing/${listingId})\n`;
+    }
+    
+    formattedProperties += "\n";
+  });
+  
+  formattedProperties += "Would you like to **schedule a viewing** or hear about **more options**? 😊";
+  
+  // Append the formatted properties to the response
+  if (response.toLowerCase().includes("here are some properties") || 
+      response.toLowerCase().includes("found the following") ||
+      response.toLowerCase().includes("these properties")) {
+    // Response already trying to show properties - replace that part
+    return response.split(/(?:here are|i found|check out|these are).*properties/i)[0] + formattedProperties;
+  } else {
+    // Just append to the end
+    return response + formattedProperties;
+  }
 }
 
 // Verify the quality of the response
@@ -325,20 +284,35 @@ function generateFallbackResponse(message, propertyRecommendations) {
       // Format property recommendations
       let response = `I found some great properties that might interest you!\n\n`;
       
-      propertyRecommendations.slice(0, MAX_PROPERTY_RECOMMENDATIONS).forEach((property, index) => {
-        response += `🏡 **${property.title}** – ${formatPrice(property.price)}\n`;
-        response += `📍 **${property.location || 'Exclusive location'}**\n`;
+      propertyRecommendations.slice(0, MAX_PROPERTY_RECOMMENDATIONS).forEach((property) => {
+        // Format price
+        const price = typeof property.price === 'number' 
+          ? new Intl.NumberFormat('en-EU', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(property.price)
+          : property.price;
         
+        // Get title
+        const title = property.title || `${property.type || 'Property'} in ${property.city || 'Exclusive Location'}`;
+        
+        // Create the formatted listing
+        response += `🏡 **${title} – ${price}**\n`;
+        response += `📍 **${property.location || (property.city && property.state ? `${property.city}, ${property.state}` : 'Exclusive Location')}**\n`;
+        
+        // Features
         if (property.features && property.features.length > 0) {
           response += `✅ ${Array.isArray(property.features) ? property.features.join(', ') : property.features}\n`;
         }
         
+        // Highlight
         if (property.highlight) {
           response += `✨ ${property.highlight}\n`;
         }
         
+        // URL
         if (property.url) {
           response += `🔗 [View Listing](${property.url})\n`;
+        } else {
+          const listingId = property.id ? property.id.substring(0, 6) : Math.floor(Math.random() * 100000);
+          response += `🔗 [View Listing](https://youragency.com/listing/${listingId})\n`;
         }
         
         response += '\n';
