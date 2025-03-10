@@ -642,7 +642,7 @@ const PropertyListings = ({ userId, userPlan, isPremiumFeature }) => {
         <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
             <DialogTitle className="flex items-center">
-              <FileUpload className="h-5 w-5 mr-2 text-primary" />
+              <UploadCloud className="h-5 w-5 mr-2 text-primary" />
               Import Properties from CSV
             </DialogTitle>
             <DialogDescription>
@@ -774,7 +774,7 @@ const PropertyListings = ({ userId, userPlan, isPremiumFeature }) => {
             )}
             
             {importResult && (
-              <Alert variant={importResult.properties_imported > 0 ? "success" : "warning"} className="text-sm">
+              <Alert variant={importResult.properties_imported > 0 ? "default" : "destructive"} className="text-sm">
                 <div className="flex flex-col">
                   <div className="flex items-center">
                     {importResult.properties_imported > 0 ? (

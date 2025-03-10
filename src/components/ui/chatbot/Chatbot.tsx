@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import ChatHeader from './ChatHeader';
@@ -134,7 +133,6 @@ const Chatbot = ({
     setError(null);
     setResponseSource(null);
     
-    // Determine whether we're in landing page mode (demo-user) or user chatbot mode
     const isLandingPageMode = userId === 'demo-user';
     console.log(`Chatbot mode: ${isLandingPageMode ? 'Landing Page Demo' : 'User Chatbot'}`);
     
