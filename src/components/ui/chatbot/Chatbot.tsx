@@ -1,3 +1,4 @@
+
 import { useState, useRef, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import ChatHeader from './ChatHeader';
@@ -149,6 +150,7 @@ const Chatbot = ({
         console.error('Chatbot error:', result.error);
         setError(`Error: ${result.error}`);
       } else {
+        // Only add the response if there's no error
         setMessages(prev => [...prev, { role: 'bot', content: result.response }]);
         setResponseSource(result.source || null);
         

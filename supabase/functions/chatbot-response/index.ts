@@ -54,6 +54,7 @@ Deno.serve(async (req) => {
     let isQualifyingConversation = false;
     let relevantTrainingData = [];
     let propertyRecommendation = false;
+    let propertyListings = [];
     
     // Step 1: Find relevant training data for this user
     if (userId) {
@@ -198,10 +199,16 @@ Deno.serve(async (req) => {
               const priorityMultiplier = 1 + (item.priority || 0) / 10;
               const finalScore = matchScore * priorityMultiplier;
               
+              // Limit length of extracted text to avoid including large chunks
+              const maxExtractLength = 250;
+              const truncatedText = item.extracted_text.length > maxExtractLength ? 
+                                    item.extracted_text.substring(0, maxExtractLength) + "..." : 
+                                    item.extracted_text;
+              
               // Convert file to a "fake" Q&A pair for consistency
               return {
                 question: `What information is in ${item.source_file}?`,
-                answer: item.extracted_text,
+                answer: truncatedText,
                 relevanceScore: finalScore,
                 source: 'file'
               };
@@ -226,24 +233,28 @@ Deno.serve(async (req) => {
               propertyRecommendation = true;
               
               // Try to find properties in the training data that match the query
-              // This would normally be a more sophisticated function to search the properties table
-              // For example:
               try {
                 // Simple proof of concept - in a real system this would be more sophisticated
                 const { data: properties, error: propertiesError } = await supabase
                   .from('properties')
                   .select('*')
                   .eq('user_id', userId)
-                  .limit(3);
+                  .limit(3); // Limit to max 3 properties
                 
                 if (propertiesError) {
                   console.error('❌ Error fetching properties:', propertiesError);
                 } else if (properties && properties.length > 0) {
-                  console.log(`✅ Found ${properties.length} properties to recommend`);
+                  console.log(`✅ Found ${properties.length} properties to recommend (limited to 3)`);
+                  propertyListings = properties;
                   
                   // Format properties for inclusion in the AI prompt
                   const propertyDescriptions = properties.map(property => {
-                    return `${property.title} - $${property.price} - ${property.bedrooms} BR, ${property.bathrooms} Bath - ${property.city}, ${property.state}`;
+                    return `
+🏡 **${property.title}** - $${property.price} 
+📍 Location: ${property.city}, ${property.state}
+✅ ${property.bedrooms} BR, ${property.bathrooms} Bath
+🔗 [View Listing](https://youragency.com/listing/${property.id})
+`;
                   }).join('\n');
                   
                   // Add this to the relevant training data with high priority
@@ -465,24 +476,39 @@ IMPORTANT BEHAVIORS:
 2. If asked about unrelated topics (politics, jokes, etc.), politely steer the conversation back to real estate.
 3. Be friendly, helpful, and conversational in tone. Sound like a knowledgeable real estate tech consultant.
 4. Always try to highlight how RealHomeAI solves problems for real estate professionals.
-5. When appropriate, ask for the visitor's email to "send more information about RealHomeAI" - but don't be pushy.
-
-For any questions about how to use RealHomeAI, explain that agencies can customize their own chatbot with their own data and it will engage with website visitors 24/7.`;
+5. When appropriate, ask for the visitor's email to "send more information about RealHomeAI" - but don't be pushy.`;
         } else {
           // REAL USER CHATBOT SYSTEM PROMPT - Focused on lead generation and property recommendations
           systemPrompt = `You are a friendly, conversational real estate assistant for a property agency. Your goal is to help potential clients find properties, answer questions, and ultimately connect them with a real estate agent.
 
-IMPORTANT BEHAVIORS:
+IMPORTANT GUIDELINES:
 1. Always sound natural, friendly, and helpful - like a real estate agent who genuinely wants to help.
-2. When users express interest in properties or ask about real estate, look for opportunities to recommend specific properties.
-3. If the user expresses interest in a property or area, offer to "send more details" or "share some options" with them.
-4. After offering to send details, ask how they would prefer to receive them (email or phone), making it a natural part of the conversation.
-5. If a user mentions a specific property feature, location, or budget, always suggest available listings that match.
-6. When recommending properties, describe them in an engaging, conversational way (not just listing facts).
-7. Always try to move the conversation toward scheduling a viewing when appropriate - frame it as a helpful next step.
-8. Extract useful lead information (name, email, phone, budget, location preferences) through natural conversation.
-9. Focus on being helpful first - lead capture should feel natural and beneficial to the user.
-10. Ask follow-up questions to maintain a natural conversation flow and learn more about their needs.`;
+2. Keep responses clear, structured, and concise - use bullet points and formatting.
+3. NEVER recommend more than 3 properties at once - quality over quantity.
+4. NEVER include large blocks of unformatted text from websites.
+5. DO NOT include unnecessary metadata, page titles, nav menus or legal disclaimers.
+6. When recommending properties, use a structured format with bullet points and lots of spacing.
+7. After offering property recommendations, ask if they want to see more or schedule a viewing.
+8. If a user expresses interest in a property, ask for their contact information naturally.
+9. Extract useful lead information (name, email, phone, budget, location preferences) through natural conversation.
+10. Focus on being helpful first - lead capture should feel natural and beneficial to the user.
+11. Ask follow-up questions to maintain a natural conversation flow and learn more about their needs.`;
+
+          // Format structured property recommendations if available
+          if (propertyListings.length > 0) {
+            systemPrompt += "\n\nHere are up to 3 properties to recommend if they match the user's request:\n\n";
+            
+            propertyListings.forEach(property => {
+              systemPrompt += `
+🏡 **${property.title}** - $${property.price} 
+📍 Location: ${property.city || 'Local Area'}, ${property.state || ''}
+✅ ${property.bedrooms || '?'} BR, ${property.bathrooms || '?'} Bath${property.size ? ', ' + property.size + ' sqft' : ''}
+${property.description ? '📝 ' + property.description.substring(0, 100) + '...' : ''}
+🔗 Property ID: ${property.id}
+
+`;
+            });
+          }
 
           // Add relevant training data to the system prompt
           if (relevantTrainingData.length > 0) {
@@ -498,10 +524,12 @@ IMPORTANT BEHAVIORS:
           // If we detected property intent, add specific instructions
           if (propertyRecommendation) {
             systemPrompt += "\n\nThe user appears to be looking for property recommendations. Make sure to:\n";
-            systemPrompt += "1. Suggest specific properties that match their criteria when possible.\n";
-            systemPrompt += "2. Ask follow-up questions about their preferences (location, size, amenities, etc.).\n";
-            systemPrompt += "3. Offer to send them more property details, and then naturally ask for their contact information.\n";
-            systemPrompt += "4. Suggest a viewing or consultation with an agent as a helpful next step.\n";
+            systemPrompt += "1. Suggest specific properties that match their criteria when possible (maximum of 3).\n";
+            systemPrompt += "2. Present each property in a structured format with bullet points.\n";
+            systemPrompt += "3. Ask follow-up questions about their preferences (location, size, amenities, etc.).\n";
+            systemPrompt += "4. Offer to send them more property details, and then naturally ask for their contact information.\n";
+            systemPrompt += "5. Suggest a viewing or consultation with an agent as a helpful next step.\n";
+            systemPrompt += "6. Always ask if they want to see more options after showing properties.\n";
           }
           
           // If we need to collect lead info, add specific guidance
@@ -559,6 +587,57 @@ IMPORTANT BEHAVIORS:
         console.log('✅ OpenAI response received');
         response = completion.choices[0]?.message?.content || "I'm not sure how to respond to that.";
         responseSource = 'ai';
+        
+        // NEW: Verify response quality with OpenAI before sending
+        const isQualityResponse = await verifyResponseQuality(
+          openai, 
+          message, 
+          response, 
+          propertyRecommendation
+        );
+        
+        // If response fails verification, regenerate it with stricter guidelines
+        if (!isQualityResponse) {
+          console.log('⚠️ Response failed quality verification, regenerating...');
+          
+          const improvedPrompt = systemPrompt + `
+
+IMPORTANT CORRECTION NEEDED:
+The previous response was too verbose, unstructured, or contained too many recommendations.
+Please follow these STRICT guidelines:
+1. Keep your response BRIEF and structured - use bullet points.
+2. NEVER include more than 3 property recommendations.
+3. DO NOT include metadata, page titles, menus, or legal disclaimers.
+4. Make sure your response is focused on the user's specific question.
+5. Use proper whitespace and formatting for readability.`;
+
+          const updatedMessages = [
+            { role: "system", content: improvedPrompt },
+            { role: "user", content: message }
+          ];
+          
+          if (previousMessages && Array.isArray(previousMessages) && previousMessages.length > 0) {
+            const contextMessages = previousMessages
+              .slice(-4) // Use fewer messages for context to save tokens
+              .map(msg => ({
+                role: msg.role === 'user' ? 'user' : 'assistant',
+                content: msg.content
+              }));
+            
+            updatedMessages.splice(1, 0, ...contextMessages);
+          }
+          
+          console.log('🔄 Sending improved request to OpenAI...');
+          
+          const improvedCompletion = await openai.chat.completions.create({
+            model: "gpt-4o-mini",
+            messages: updatedMessages,
+            max_tokens: 200, // Reduced token count to encourage brevity
+            temperature: 0.5, // Lower temperature for more consistent response
+          });
+          
+          response = improvedCompletion.choices[0]?.message?.content || "I apologize, but I need to provide you with a more focused response. Could you please specify exactly what you're looking for?";
+        }
       } catch (openAiError) {
         console.error('❌ OpenAI error:', openAiError);
         throw new Error('Error connecting to OpenAI: ' + (openAiError.message || 'Unknown error'));
@@ -725,7 +804,8 @@ IMPORTANT BEHAVIORS:
         response,
         source: responseSource,
         conversationId: chatConversationId,
-        leadInfo
+        leadInfo,
+        isVerified: true
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
@@ -749,4 +829,41 @@ function splitIntoPhrases(text) {
     .split('#')
     .map(phrase => phrase.trim())
     .filter(phrase => phrase.length > 0);
+}
+
+// New function to verify response quality with OpenAI
+async function verifyResponseQuality(openai, userQuestion, generatedResponse, isPropertyRecommendation) {
+  try {
+    console.log('🔍 Verifying response quality with OpenAI...');
+    
+    const verificationPrompt = `You are an AI assistant verifying chatbot responses. 
+
+- The user asked: "${userQuestion}"
+- The chatbot wants to reply: "${generatedResponse}"
+
+✅ If the response is correct, relevant to real estate, and useful, reply with "APPROVED".
+❌ If the response contains marketing spam, unnecessary metadata, or is unclear, reply with "REJECTED".
+❌ If the response contains more than 3 property recommendations, reply with "REJECTED".
+❌ If the response contains long, unstructured text, reply with "REJECTED".
+
+Only respond with "APPROVED" or "REJECTED".`;
+
+    const verification = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: verificationPrompt },
+      ],
+      max_tokens: 20,
+      temperature: 0.1,
+    });
+    
+    const result = verification.choices[0]?.message?.content || "";
+    console.log('✅ Verification result:', result);
+    
+    return result.toUpperCase().includes("APPROVED");
+  } catch (error) {
+    console.error('❌ Error during response verification:', error);
+    // If verification fails, assume the response is OK to avoid blocking the conversation
+    return true;
+  }
 }

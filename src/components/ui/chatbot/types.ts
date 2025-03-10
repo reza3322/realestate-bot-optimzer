@@ -73,4 +73,5 @@ export interface ChatbotResponse {
   conversationId?: string;
   leadInfo?: VisitorInfo;
   error?: string;
+  isVerified?: boolean;
 }
