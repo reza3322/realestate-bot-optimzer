@@ -76,7 +76,7 @@ export const findRelevantTrainingData = async (userId: string, message: string) 
     return {
       qaMatches: qaMatches || [],
       fileContent: fileContent || [],
-      propertyListings
+      propertyListings: propertyListings || [] // Ensure this is always an array
     };
   } catch (error) {
     console.error("Error searching training data:", error);
