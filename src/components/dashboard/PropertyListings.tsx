@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -704,7 +703,12 @@ const PropertyListings = ({ userId, userPlan, isPremiumFeature }) => {
                 <Checkbox 
                   id="hasPool" 
                   checked={newProperty.hasPool}
-                  onCheckedChange={(checked) => setNewProperty(prev => ({ ...prev, hasPool: checked }))}
+                  onCheckedChange={(checked) => {
+                    setNewProperty(prev => ({ 
+                      ...prev, 
+                      hasPool: checked === true ? true : false 
+                    }));
+                  }}
                 />
                 <Label htmlFor="hasPool" className="text-sm font-normal">
                   Property has a swimming pool
