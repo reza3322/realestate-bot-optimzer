@@ -177,9 +177,9 @@ export const extractPropertySearchParams = (message: string): PropertySearchPara
   if (minPriceMatch) {
     let minPrice = minPriceMatch[1].replace(',', '');
     if (lowerMessage.includes('k')) {
-      minPrice = parseFloat(minPrice) * 1000;
+      minPrice = String(parseFloat(minPrice) * 1000);
     } else if (lowerMessage.includes('m')) {
-      minPrice = parseFloat(minPrice) * 1000000;
+      minPrice = String(parseFloat(minPrice) * 1000000);
     }
     params.minPrice = parseFloat(minPrice);
   }
@@ -189,9 +189,9 @@ export const extractPropertySearchParams = (message: string): PropertySearchPara
   if (maxPriceMatch) {
     let maxPrice = maxPriceMatch[1].replace(',', '');
     if (lowerMessage.includes('k')) {
-      maxPrice = parseFloat(maxPrice) * 1000;
+      maxPrice = String(parseFloat(maxPrice) * 1000);
     } else if (lowerMessage.includes('m')) {
-      maxPrice = parseFloat(maxPrice) * 1000000;
+      maxPrice = String(parseFloat(maxPrice) * 1000000);
     }
     params.maxPrice = parseFloat(maxPrice);
   }
@@ -237,26 +237,29 @@ export const formatPropertyRecommendations = (recommendations: any[], maxResults
   
   let formattedResponse = "Here are **" + limitedRecommendations.length + " properties** that match what you're looking for:\n\n";
   
-  limitedRecommendations.forEach(property => {
+  limitedRecommendations.forEach((property, index) => {
     // Format price
     const price = typeof property.price === 'number' 
       ? new Intl.NumberFormat('en-EU', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(property.price)
       : property.price;
     
-    // Create property listing
-    formattedResponse += `🏡 **${property.title} – ${price}**\n`;
-    formattedResponse += `📍 **${property.location || (property.city && property.state ? `${property.city}, ${property.state}` : 'Location available upon request')}**\n`;
+    // Get the property title or create one
+    const title = property.title || `${property.type || 'Property'} in ${property.city || 'Exclusive Location'}`;
+    
+    // Create property listing with the exact requested format
+    formattedResponse += `🏡 **${title} – ${price}**\n`;
+    formattedResponse += `📍 **${property.location || (property.city && property.state ? `${property.city}, ${property.state}` : 'Exclusive Location')}**\n`;
     
     // Build features list
     let features = [];
     if (property.bedrooms) features.push(`${property.bedrooms} Bedrooms`);
     if (property.bathrooms) features.push(`${property.bathrooms} Bathrooms`);
+    if (property.has_pool) features.push(`Private Pool`);
     if (property.living_area) features.push(`${property.living_area} m² Living Area`);
     if (property.plot_area) features.push(`${property.plot_area} m² Plot`);
     if (property.terrace) features.push(`${property.terrace} m² Terrace`);
-    if (property.has_pool) features.push(`Private Pool`);
     
-    // Add features as bullet points
+    // Add features as a single line with commas
     if (features.length > 0) {
       formattedResponse += `✅ ${features.join(', ')}\n`;
     } else if (property.features && property.features.length > 0) {
@@ -266,11 +269,26 @@ export const formatPropertyRecommendations = (recommendations: any[], maxResults
     // Add highlight if available
     if (property.highlight) {
       formattedResponse += `✨ ${property.highlight}\n`;
+    } else {
+      // Generate a fallback highlight if none is provided
+      const typePrefix = property.type ? property.type.toLowerCase() : '';
+      const isLuxury = (property.price && property.price > 1000000) || 
+                       (property.description && property.description.toLowerCase().includes('luxury'));
+      
+      let highlight = isLuxury ? 
+        `Stunning ${typePrefix} luxury property with premium finishes!` : 
+        `Perfect ${typePrefix} home in an ideal location!`;
+        
+      formattedResponse += `✨ ${highlight}\n`;
     }
     
-    // Add URL if available
+    // Add URL if available, or a placeholder URL
     if (property.url) {
       formattedResponse += `🔗 [View Listing](${property.url})\n`;
+    } else {
+      // Use property ID if available, otherwise use a placeholder
+      const listingId = property.id ? property.id.substring(0, 6) : (10000 + index);
+      formattedResponse += `🔗 [View Listing](https://youragency.com/listing/${listingId})\n`;
     }
     
     formattedResponse += "\n";

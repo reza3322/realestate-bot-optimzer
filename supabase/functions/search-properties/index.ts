@@ -76,25 +76,43 @@ serve(async (req) => {
         console.error('Error searching properties by style:', styleError);
       } else if (styleResults && styleResults.length > 0) {
         console.log(`Found ${styleResults.length} properties by style`);
+        
+        // Make sure URLs are included in the response
+        const enhancedResults = styleResults.map(property => {
+          // Make sure URL exists, create a placeholder if not
+          if (!property.url) {
+            property.url = `https://youragency.com/listing/${property.id.substring(0, 6)}`;
+          }
+          
+          return {
+            ...property,
+            features: extractFeatures(property),
+            highlight: getHighlight(property),
+            location: property.city ? (property.state ? `${property.city}, ${property.state}` : property.city) : 'Exclusive Location'
+          }
+        });
+        
         return new Response(
-          JSON.stringify({ 
-            properties: styleResults.map(property => ({
-              ...property,
-              features: extractFeatures(property),
-              highlight: getHighlight(property)
-            })) 
-          }),
+          JSON.stringify({ properties: enhancedResults }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
     }
 
     // Format and return properties
-    const formattedProperties = properties.map(property => ({
-      ...property,
-      features: extractFeatures(property),
-      highlight: getHighlight(property)
-    }));
+    const formattedProperties = properties.map(property => {
+      // Make sure URL exists, create a placeholder if not
+      if (!property.url) {
+        property.url = `https://youragency.com/listing/${property.id.substring(0, 6)}`;
+      }
+      
+      return {
+        ...property,
+        features: extractFeatures(property),
+        highlight: getHighlight(property),
+        location: property.city ? (property.state ? `${property.city}, ${property.state}` : property.city) : 'Exclusive Location'
+      };
+    });
 
     return new Response(
       JSON.stringify({ properties: formattedProperties }),
