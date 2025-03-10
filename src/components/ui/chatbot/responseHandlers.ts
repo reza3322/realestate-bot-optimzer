@@ -16,6 +16,9 @@ export const findRelevantTrainingData = async (userId: string, message: string) 
         fileContent: [] 
       };
     }
+
+    // Check if the message is about property listings
+    const isPropertyQuery = checkIfPropertyQuery(message);
     
     // Find Q&A matches with improved property and lead-capture focused matching
     const { data: qaMatches, error: qaError } = await supabase
@@ -29,7 +32,7 @@ export const findRelevantTrainingData = async (userId: string, message: string) 
       throw qaError;
     }
     
-    // Find relevant file content
+    // Find relevant file content with improved filtering for properties
     const { data: fileContent, error: fileError } = await supabase
       .from('chatbot_training_files')
       .select('extracted_text, source_file, priority, category')
@@ -41,18 +44,288 @@ export const findRelevantTrainingData = async (userId: string, message: string) 
       console.error("Error searching file content:", fileError);
       throw fileError;
     }
+
+    // If this is a property query, let's also fetch clean property data
+    let propertyListings = [];
+    if (isPropertyQuery) {
+      const locationTerms = extractLocationTerms(message);
+      const priceRange = extractPriceRange(message);
+      const bedrooms = extractBedroomCount(message);
+      const propertyType = extractPropertyType(message);
+      
+      console.log("Property query detected with filters:", { locationTerms, priceRange, bedrooms, propertyType });
+      
+      // Fetch clean property data
+      const { data: properties, error: propError } = await fetchCleanPropertyListings(
+        userId, 
+        locationTerms,
+        priceRange,
+        bedrooms,
+        propertyType
+      );
+      
+      if (propError) {
+        console.error("Error fetching property listings:", propError);
+      } else if (properties && properties.length > 0) {
+        propertyListings = formatPropertyListings(properties);
+        console.log(`Found ${properties.length} matching properties, formatted for display`);
+      }
+    }
     
     return {
       qaMatches: qaMatches || [],
-      fileContent: fileContent || []
+      fileContent: fileContent || [],
+      propertyListings
     };
   } catch (error) {
     console.error("Error searching training data:", error);
     return { 
       qaMatches: [],
-      fileContent: [] 
+      fileContent: [],
+      propertyListings: []
     };
   }
+};
+
+// Helper function to determine if a message is a property query
+const checkIfPropertyQuery = (message: string): boolean => {
+  const propertyTerms = [
+    'property', 'properties', 'house', 'home', 'apartment', 'villa', 'condo',
+    'flat', 'listing', 'listings', 'real estate', 'buy', 'purchase', 'rent'
+  ];
+  
+  const messageLower = message.toLowerCase();
+  return propertyTerms.some(term => messageLower.includes(term));
+};
+
+// Helper function to extract location terms from a message
+const extractLocationTerms = (message: string): string[] => {
+  // Simple extraction of potential location terms
+  // In a real implementation, this could use NLP or a location database
+  const locationPatterns = [
+    /in\s+([A-Za-z\s]+)/, 
+    /near\s+([A-Za-z\s]+)/, 
+    /around\s+([A-Za-z\s]+)/,
+    /at\s+([A-Za-z\s]+)/
+  ];
+  
+  const locations = [];
+  for (const pattern of locationPatterns) {
+    const match = message.match(pattern);
+    if (match && match[1]) {
+      locations.push(match[1].trim());
+    }
+  }
+  
+  return locations;
+};
+
+// Helper function to extract price range from a message
+const extractPriceRange = (message: string): {min?: number, max?: number} => {
+  const priceRange = {};
+  
+  // Extract maximum price
+  const maxPriceMatch = message.match(/under\s+(\$?[\d,.]+k?)|less\s+than\s+(\$?[\d,.]+k?)|up\s+to\s+(\$?[\d,.]+k?)|maximum\s+(\$?[\d,.]+k?)/i);
+  if (maxPriceMatch) {
+    const maxPrice = maxPriceMatch[1] || maxPriceMatch[2] || maxPriceMatch[3] || maxPriceMatch[4];
+    priceRange['max'] = parseCurrencyValue(maxPrice);
+  }
+  
+  // Extract minimum price
+  const minPriceMatch = message.match(/over\s+(\$?[\d,.]+k?)|more\s+than\s+(\$?[\d,.]+k?)|at\s+least\s+(\$?[\d,.]+k?)|minimum\s+(\$?[\d,.]+k?)/i);
+  if (minPriceMatch) {
+    const minPrice = minPriceMatch[1] || minPriceMatch[2] || minPriceMatch[3] || minPriceMatch[4];
+    priceRange['min'] = parseCurrencyValue(minPrice);
+  }
+  
+  // Extract price range in format "between X and Y"
+  const rangePriceMatch = message.match(/between\s+(\$?[\d,.]+k?)\s+and\s+(\$?[\d,.]+k?)/i);
+  if (rangePriceMatch) {
+    priceRange['min'] = parseCurrencyValue(rangePriceMatch[1]);
+    priceRange['max'] = parseCurrencyValue(rangePriceMatch[2]);
+  }
+  
+  return priceRange;
+};
+
+// Helper to parse currency values including shorthand like "1.5M" or "500k"
+const parseCurrencyValue = (value: string): number => {
+  if (!value) return 0;
+  
+  // Remove currency symbols and commas
+  let cleanValue = value.replace(/[$,]/g, '');
+  
+  // Handle shorthand notations
+  if (cleanValue.toLowerCase().endsWith('k')) {
+    cleanValue = cleanValue.slice(0, -1);
+    return parseFloat(cleanValue) * 1000;
+  } else if (cleanValue.toLowerCase().endsWith('m')) {
+    cleanValue = cleanValue.slice(0, -1);
+    return parseFloat(cleanValue) * 1000000;
+  }
+  
+  return parseFloat(cleanValue);
+};
+
+// Helper function to extract bedroom count from a message
+const extractBedroomCount = (message: string): number | null => {
+  const bedroomMatch = message.match(/(\d+)\s+bed(room)?s?/i);
+  if (bedroomMatch && bedroomMatch[1]) {
+    return parseInt(bedroomMatch[1], 10);
+  }
+  return null;
+};
+
+// Helper function to extract property type from a message
+const extractPropertyType = (message: string): string | null => {
+  const propertyTypes = ['house', 'apartment', 'villa', 'condo', 'townhouse', 'flat', 'studio'];
+  const messageLower = message.toLowerCase();
+  
+  for (const type of propertyTypes) {
+    if (messageLower.includes(type)) {
+      return type;
+    }
+  }
+  
+  return null;
+};
+
+// Function to fetch clean property listings from Supabase
+const fetchCleanPropertyListings = async (
+  userId: string, 
+  locations: string[] = [], 
+  priceRange: {min?: number, max?: number} = {}, 
+  bedrooms: number | null = null,
+  propertyType: string | null = null
+) => {
+  // Start building the query
+  let query = supabase
+    .from('properties')
+    .select(`
+      id,
+      title,
+      price,
+      city,
+      state,
+      address,
+      bedrooms,
+      bathrooms,
+      type,
+      size,
+      description,
+      status,
+      images
+    `)
+    .eq('user_id', userId)
+    .eq('status', 'active');
+  
+  // Apply location filters
+  if (locations.length > 0) {
+    // Try to match any of the provided locations
+    const locationFilters = locations.map(location => {
+      return `city.ilike.%${location}% or state.ilike.%${location}% or address.ilike.%${location}%`;
+    });
+    query = query.or(locationFilters.join(','));
+  }
+  
+  // Apply price range filters
+  if (priceRange.min !== undefined) {
+    query = query.gte('price', priceRange.min);
+  }
+  if (priceRange.max !== undefined) {
+    query = query.lte('price', priceRange.max);
+  }
+  
+  // Apply bedroom filter
+  if (bedrooms !== null) {
+    query = query.eq('bedrooms', bedrooms);
+  }
+  
+  // Apply property type filter
+  if (propertyType !== null) {
+    query = query.ilike('type', `%${propertyType}%`);
+  }
+  
+  // Limit and sort results
+  query = query.order('price', { ascending: false }).limit(5);
+  
+  // Execute the query
+  return await query;
+};
+
+// Function to format property listings for clean display
+const formatPropertyListings = (properties: any[]): string => {
+  if (!properties || properties.length === 0) {
+    return '';
+  }
+  
+  let formattedListings = `I found ${properties.length} properties that might interest you:\n\n`;
+  
+  properties.forEach((property, index) => {
+    // Format price with currency symbol
+    const formattedPrice = new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'EUR',
+      maximumFractionDigits: 0
+    }).format(property.price);
+    
+    // Create a property "listing card" in text form
+    formattedListings += `🏡 **${property.title || `${property.bedrooms}-Bedroom ${property.type || 'Property'}`}** – ${formattedPrice}\n`;
+    formattedListings += `📍 Location: ${[property.address, property.city, property.state].filter(Boolean).join(', ')}\n`;
+    
+    // Add key features
+    const features = [];
+    if (property.bedrooms) features.push(`${property.bedrooms} Bedrooms`);
+    if (property.bathrooms) features.push(`${property.bathrooms} Bathrooms`);
+    if (property.size) features.push(`${property.size} m²`);
+    
+    // Extract key highlights from description (if available)
+    if (property.description) {
+      const highlights = extractHighlights(property.description);
+      if (highlights.length > 0) {
+        features.push(...highlights.slice(0, 3));
+      }
+    }
+    
+    formattedListings += `✅ ${features.join(', ')}\n`;
+    
+    // Add a placeholder link (in a real implementation, this would be a valid link)
+    formattedListings += `🔗 [View Listing](https://youragency.com/listing/${property.id})\n\n`;
+  });
+  
+  // Add a call-to-action
+  formattedListings += "Would you like more details about any of these properties or to see more options?";
+  
+  return formattedListings;
+};
+
+// Helper to extract key highlights from a property description
+const extractHighlights = (description: string): string[] => {
+  // List of feature keywords to look for
+  const featureKeywords = [
+    'pool', 'garden', 'view', 'sea view', 'mountain view', 'private', 'secure', 
+    'gated', 'modern', 'renovated', 'garage', 'parking', 'terrace', 'balcony',
+    'air conditioning', 'heating', 'furnished', 'unfurnished', 'new', 'luxury'
+  ];
+  
+  const highlights = [];
+  const descLower = description.toLowerCase();
+  
+  // Find mentioned features
+  for (const keyword of featureKeywords) {
+    if (descLower.includes(keyword)) {
+      // Capitalize first letter of each word in the keyword
+      const formattedKeyword = keyword.split(' ')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+      highlights.push(formattedKeyword);
+    }
+    
+    // Limit to 5 highlights
+    if (highlights.length >= 5) break;
+  }
+  
+  return highlights;
 };
 
 // Helper function to check if a string is a valid UUID
@@ -152,6 +425,9 @@ export const testChatbotResponse = async (
   console.log(`Processing message: "${message}" for user ${userId}`);
 
   try {
+    // Enhance the query to include the formatted property listings
+    const trainingData = await findRelevantTrainingData(userId, message);
+    
     // Call our Edge Function
     const response = await supabase.functions.invoke('chatbot-response', {
       body: {
@@ -159,7 +435,8 @@ export const testChatbotResponse = async (
         userId,
         visitorInfo,
         conversationId,
-        previousMessages
+        previousMessages,
+        trainingData, // Pass the enhanced training data including formatted property listings
       }
     });
     
