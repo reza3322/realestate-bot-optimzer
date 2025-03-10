@@ -386,12 +386,17 @@ export type Database = {
           created_at: string
           description: string | null
           featured: boolean | null
+          garage_area: number | null
+          has_pool: boolean | null
           id: string
           images: Json | null
+          living_area: number | null
+          plot_area: number | null
           price: number
           size: number | null
           state: string | null
           status: string | null
+          terrace: number | null
           title: string
           type: string | null
           updated_at: string
@@ -406,12 +411,17 @@ export type Database = {
           created_at?: string
           description?: string | null
           featured?: boolean | null
+          garage_area?: number | null
+          has_pool?: boolean | null
           id?: string
           images?: Json | null
+          living_area?: number | null
+          plot_area?: number | null
           price: number
           size?: number | null
           state?: string | null
           status?: string | null
+          terrace?: number | null
           title: string
           type?: string | null
           updated_at?: string
@@ -426,12 +436,17 @@ export type Database = {
           created_at?: string
           description?: string | null
           featured?: boolean | null
+          garage_area?: number | null
+          has_pool?: boolean | null
           id?: string
           images?: Json | null
+          living_area?: number | null
+          plot_area?: number | null
           price?: number
           size?: number | null
           state?: string | null
           status?: string | null
+          terrace?: number | null
           title?: string
           type?: string | null
           updated_at?: string
@@ -590,6 +605,31 @@ export type Database = {
       get_auth_user_id: {
         Args: Record<PropertyKey, never>
         Returns: string
+      }
+      search_properties_by_style: {
+        Args: {
+          user_id_param: string
+          style_query: string
+          max_results?: number
+        }
+        Returns: {
+          id: string
+          title: string
+          description: string
+          price: number
+          bedrooms: number
+          bathrooms: number
+          city: string
+          state: string
+          status: string
+          url: string
+          living_area: number
+          plot_area: number
+          garage_area: number
+          terrace: number
+          has_pool: boolean
+          relevance: number
+        }[]
       }
     }
     Enums: {

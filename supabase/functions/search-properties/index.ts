@@ -36,12 +36,13 @@ serve(async (req) => {
       bedrooms, 
       keywords = [],
       style,
-      maxResults = 3
+      maxResults = 3,
+      hasPool
     } = searchParams || {};
 
     let query = supabaseClient
       .from('properties')
-      .select('id, title, description, price, bedrooms, bathrooms, city, state, status, url')
+      .select('id, title, description, price, bedrooms, bathrooms, city, state, status, url, living_area, plot_area, garage_area, terrace, has_pool')
       .eq('user_id', userId)
       .eq('status', 'active');
 
@@ -51,6 +52,7 @@ serve(async (req) => {
     if (minPrice) query = query.gte('price', minPrice);
     if (maxPrice) query = query.lte('price', maxPrice);
     if (bedrooms) query = query.gte('bedrooms', bedrooms);
+    if (hasPool !== undefined) query = query.eq('has_pool', hasPool);
 
     // Get results
     const { data: properties, error } = await query.limit(maxResults);
@@ -113,10 +115,15 @@ function extractFeatures(property) {
   
   if (property.bedrooms) features.push(`${property.bedrooms} Bedrooms`);
   if (property.bathrooms) features.push(`${property.bathrooms} Bathrooms`);
+  if (property.living_area) features.push(`${property.living_area} m² Living Area`);
+  if (property.plot_area) features.push(`${property.plot_area} m² Plot`);
+  if (property.garage_area) features.push(`${property.garage_area} m² Garage`);
+  if (property.terrace) features.push(`${property.terrace} m² Terrace`);
+  if (property.has_pool) features.push(`Swimming Pool`);
   
   // Extract additional features from description if available
   if (property.description) {
-    const featureKeywords = ['pool', 'garden', 'terrace', 'view', 'garage', 'furnished', 'renovated', 'modern'];
+    const featureKeywords = ['garden', 'view', 'furnished', 'renovated', 'modern'];
     
     featureKeywords.forEach(keyword => {
       if (property.description.toLowerCase().includes(keyword)) {
@@ -153,6 +160,10 @@ function getHighlight(property) {
   
   if (description.includes('beach') || description.includes('sea')) {
     return 'Just steps away from the beautiful Mediterranean Sea!';
+  }
+  
+  if (property.has_pool) {
+    return 'Enjoy your own private swimming pool!';
   }
   
   // Default highlight
