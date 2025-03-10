@@ -138,7 +138,7 @@ export const formatPropertyRecommendations = (recommendations: any[], maxResults
     
     // Create property listing
     formattedResponse += `🏡 **${property.title} – ${price}**\n`;
-    formattedResponse += `📍 **${property.location || property.city && property.state ? `${property.city}, ${property.state}` : 'Location available upon request'}**\n`;
+    formattedResponse += `📍 **${property.location || (property.city && property.state ? `${property.city}, ${property.state}` : 'Location available upon request')}**\n`;
     
     // Build features list
     let features = [];
