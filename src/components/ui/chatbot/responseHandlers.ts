@@ -1,3 +1,4 @@
+
 import { supabase } from "@/lib/supabase";
 import { ChatbotResponse, Message, PropertySearchParams } from "./types";
 
@@ -90,10 +91,16 @@ export const testChatbotResponse = async (
   try {
     // First, explicitly search for property recommendations
     let propertyRecommendations = [];
+    let leadInfo = visitorInfo;
+    let shouldCaptureLeadInfo = false;
     
-    // Only search for properties if the message seems to be asking about real estate
-    if (message.toLowerCase().match(/propert(y|ies)|house|apartment|villa|home|buy|rent|sale/i)) {
+    // Check if the message seems to be asking about properties or contains potential lead information
+    const isPropertyQuery = message.toLowerCase().match(/propert(y|ies)|house|apartment|villa|home|buy|rent|sale/i);
+    const isPotentialLeadInfo = message.toLowerCase().match(/name|email|phone|call|contact|reach|interested/i);
+    
+    if (isPropertyQuery) {
       console.log("Message appears to be about real estate, searching for properties");
+      shouldCaptureLeadInfo = true;
       
       // Extract search parameters from the message
       const searchParams = extractPropertySearchParams(message);
@@ -103,19 +110,29 @@ export const testChatbotResponse = async (
       console.log(`Found ${propertyRecommendations.length} property recommendations`);
     }
     
+    // Extract potential lead information from the message
+    if (isPotentialLeadInfo || isPropertyQuery) {
+      const extractedInfo = extractLeadInformation(message, leadInfo);
+      if (extractedInfo) {
+        leadInfo = { ...leadInfo, ...extractedInfo };
+        console.log("Extracted lead information:", extractedInfo);
+      }
+    }
+    
     // Call the Supabase Edge Function to get a response
     const { data, error } = await supabase.functions.invoke('chatbot-response', {
       body: {
         message,
         userId,
-        visitorInfo,
+        visitorInfo: leadInfo,
         conversationId,
         previousMessages: previousMessages.map(msg => ({
           role: msg.role === 'bot' ? 'assistant' : 'user',
           content: msg.content
         })),
         // Pass the property recommendations we found directly to the chatbot
-        propertyRecommendations
+        propertyRecommendations,
+        shouldCaptureLeadInfo
       }
     });
 
@@ -124,6 +141,14 @@ export const testChatbotResponse = async (
       return { 
         response: "Sorry, there was an error processing your request.",
         error: error.message
+      };
+    }
+
+    // If we have any new lead information, include it in the response
+    if (leadInfo && Object.keys(leadInfo).length > 0) {
+      return {
+        ...data,
+        leadInfo
       };
     }
 
@@ -223,6 +248,64 @@ export const extractPropertySearchParams = (message: string): PropertySearchPara
   
   console.log("Extracted property search parameters:", params);
   return params;
+};
+
+/**
+ * Extract lead information from a message
+ */
+export const extractLeadInformation = (message: string, existingInfo: any = {}): any => {
+  const leadInfo: any = {};
+  
+  // Extract email
+  const emailRegex = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g;
+  const emailMatch = message.match(emailRegex);
+  if (emailMatch && !existingInfo.email) {
+    leadInfo.email = emailMatch[0];
+  }
+  
+  // Extract phone number (various formats)
+  const phoneRegex = /(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/g;
+  const phoneMatch = message.match(phoneRegex);
+  if (phoneMatch && !existingInfo.phone) {
+    leadInfo.phone = phoneMatch[0];
+  }
+  
+  // Extract names - this is more complex and could lead to false positives
+  // Look for phrases like "my name is" or "I am"
+  const nameRegex = /(?:my name is|I am|I'm) ([A-Z][a-z]+ [A-Z][a-z]+)/i;
+  const nameMatch = message.match(nameRegex);
+  if (nameMatch && !existingInfo.firstName) {
+    const fullName = nameMatch[1].split(' ');
+    if (fullName.length >= 2) {
+      leadInfo.firstName = fullName[0];
+      leadInfo.lastName = fullName.slice(1).join(' ');
+    }
+  }
+  
+  // Extract budget - look for currency amounts in context of budget
+  const budgetRegex = /(?:budget|afford|looking|spend|price range|range).*?(?:€|euro|eur|£|\$|usd|dollars?)?[ ]?(\d+[,.]\d+|\d+)[ ]?(?:k|m|million|thousand|€|euro|eur|£|\$|usd|dollars?)/i;
+  const budgetMatch = message.match(budgetRegex);
+  if (budgetMatch && !existingInfo.budget) {
+    let budget = budgetMatch[1].replace(',', '');
+    const budgetText = budgetMatch[0].toLowerCase();
+    
+    if (budgetText.includes('k') || budgetText.includes('thousand')) {
+      budget = String(parseFloat(budget) * 1000);
+    } else if (budgetText.includes('m') || budgetText.includes('million')) {
+      budget = String(parseFloat(budget) * 1000000);
+    }
+    
+    leadInfo.budget = budget;
+  }
+  
+  // Extract property interest if mentioned
+  const propertyTypeRegex = /(villa|apartment|penthouse|house|condo|flat|studio)/i;
+  const propertyMatch = message.match(propertyTypeRegex);
+  if (propertyMatch && !existingInfo.propertyInterest) {
+    leadInfo.propertyInterest = propertyMatch[0];
+  }
+  
+  return Object.keys(leadInfo).length > 0 ? leadInfo : null;
 };
 
 /**

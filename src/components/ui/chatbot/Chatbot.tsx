@@ -91,19 +91,9 @@ const Chatbot = ({
   const [visitorInfo, setVisitorInfo] = useState<VisitorInfo>({});
   const [propertyRecommendations, setPropertyRecommendations] = useState<PropertyRecommendation[]>([]);
 
-  const styles: ChatTheme = getChatStyles(theme, variation, primaryColor);
+  // Get chat styles and make sure it conforms to the ChatTheme type
+  const chatStyles: ChatTheme = getChatStyles(theme, variation, primaryColor);
   
-  const chatStyles: ChatStylesType = {
-    botBubble: styles.botBubble,
-    userBubble: styles.userBubble,
-    botIcon: styles.botIcon,
-    userIcon: styles.userIcon,
-    font: styles.font,
-    container: styles.container,
-    header: styles.header,
-    inputContainer: styles.inputContainer
-  };
-
   useEffect(() => {
     if (messages.length === 1 && messages[0].role === 'bot') {
       setMessages([{ role: 'bot', content: defaultWelcomeMessage }]);
@@ -206,16 +196,16 @@ const Chatbot = ({
     }
   };
 
-  const headerStyle = styles.customColor ? {
-    backgroundColor: styles.customColor
+  const headerStyle = chatStyles.customColor ? {
+    backgroundColor: chatStyles.customColor
   } : undefined;
 
-  const botIconStyle = styles.customColor ? {
-    backgroundColor: styles.customColor
+  const botIconStyle = chatStyles.customColor ? {
+    backgroundColor: chatStyles.customColor
   } : undefined;
 
-  const userBubbleStyle = styles.customColor ? {
-    backgroundColor: `${styles.customColor}25`
+  const userBubbleStyle = chatStyles.customColor ? {
+    backgroundColor: `${chatStyles.customColor}25`
   } : undefined;
 
   const sendButtonStyle = buttonStyle ? {
@@ -226,14 +216,14 @@ const Chatbot = ({
     <div className={cn(
       'flex flex-col overflow-hidden rounded-lg shadow-md',
       'h-[500px]',
-      styles.container,
+      chatStyles.container,
       getFontClass(),
       className
     )}>
       <ChatHeader 
         botName={botName}
-        headerStyle={styles.header}
-        fontStyle={styles.font}
+        headerStyle={chatStyles.header}
+        fontStyle={chatStyles.font}
         apiKeyStatus={useRealAPI ? "set" : "not-set"}
         botIconName={botIconName}
         customStyle={headerStyle}
@@ -248,7 +238,16 @@ const Chatbot = ({
             key={index}
             message={message}
             index={index}
-            styles={chatStyles}
+            styles={{
+              botBubble: chatStyles.botBubble,
+              userBubble: chatStyles.userBubble,
+              botIcon: chatStyles.botIcon,
+              userIcon: chatStyles.userIcon,
+              font: chatStyles.font,
+              container: chatStyles.container,
+              header: chatStyles.header,
+              inputContainer: chatStyles.inputContainer
+            }}
             botIconName={botIconName}
             customBotIconStyle={botIconStyle}
             customUserBubbleStyle={userBubbleStyle}
@@ -257,8 +256,8 @@ const Chatbot = ({
         
         {isTyping && (
           <TypingIndicator 
-            botIconStyle={styles.botIcon}
-            botBubbleStyle={styles.botBubble}
+            botIconStyle={chatStyles.botIcon}
+            botBubbleStyle={chatStyles.botBubble}
             botIconName={botIconName}
             customBotIconStyle={botIconStyle}
           />
@@ -280,7 +279,7 @@ const Chatbot = ({
       </div>
       
       <ChatInput 
-        inputContainerStyle={styles.inputContainer}
+        inputContainerStyle={chatStyles.inputContainer}
         onSendMessage={handleSendMessage}
         placeholderText={defaultPlaceholderText}
         buttonStyle={sendButtonStyle}
