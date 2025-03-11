@@ -1,3 +1,4 @@
+
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.0";
@@ -41,6 +42,10 @@ serve(async (req) => {
       );
     }
 
+    // Fetch crawled content from training files (NEW!)
+    const crawledContent = await fetchCrawledContent(userId, message);
+    console.log(`📚 Crawled content found: ${crawledContent.length > 0 ? 'Yes' : 'No'}`);
+    
     // Generate a response using OpenAI or fall back to hardcoded response
     let response, isVerified = false;
     if (openai) {
@@ -59,7 +64,8 @@ serve(async (req) => {
         message, 
         previousMessages, 
         propertyContext, 
-        visitorInfo
+        visitorInfo,
+        crawledContent
       );
       
       // Verify the response meets our quality standards
@@ -72,6 +78,7 @@ serve(async (req) => {
           previousMessages, 
           propertyContext, 
           visitorInfo,
+          crawledContent,
           true // Include quality guidelines
         );
         isVerified = true; // Assume second attempt is good enough
@@ -125,13 +132,53 @@ serve(async (req) => {
   }
 });
 
+// NEW: Fetch crawled content from the database
+async function fetchCrawledContent(userId, query) {
+  try {
+    console.log(`🔍 Searching for crawled content related to: "${query.substring(0, 30)}..."`);
+    
+    // Search chatbot_training_files table for relevant content
+    const { data, error } = await supabase
+      .from('chatbot_training_files')
+      .select('id, extracted_text, source_file, category')
+      .eq('user_id', userId)
+      .eq('content_type', 'text/html')
+      .limit(3);
+    
+    if (error) {
+      console.error("Error fetching crawled content:", error);
+      return [];
+    }
+    
+    if (!data || data.length === 0) {
+      console.log("No crawled content found");
+      return [];
+    }
+    
+    console.log(`Found ${data.length} crawled content items`);
+    
+    // Process the crawled content to find the most relevant parts
+    const relevantContent = data.map(item => {
+      // Extract a relevant snippet from the text (up to 500 characters)
+      const snippet = item.extracted_text.substring(0, 1500);
+      return {
+        source: item.source_file,
+        category: item.category,
+        content: snippet
+      };
+    });
+    
+    return relevantContent;
+  } catch (error) {
+    console.error("Error in fetchCrawledContent:", error);
+    return [];
+  }
+}
+
 // Generate a response using OpenAI
-async function generateAIResponse(message, previousMessages, propertyContext, visitorInfo, includeQualityGuidelines = false) {
-  // Create messages array for OpenAI
-  const messages = [
-    {
-      role: "system",
-      content: `You are a helpful real estate assistant for a luxury real estate agency. 
+async function generateAIResponse(message, previousMessages, propertyContext, visitorInfo, crawledContent = [], includeQualityGuidelines = false) {
+  // Create system message with crawled content
+  let systemContent = `You are a helpful real estate assistant for a luxury real estate agency. 
       ${includeQualityGuidelines ? `
 IMPORTANT GUIDELINES:
 1. When recommending properties, NEVER list more than 3 properties at a time.
@@ -144,7 +191,24 @@ IMPORTANT GUIDELINES:
 
 ${propertyContext}
 
-When a visitor shows interest in a property, ask for their contact details to organize a viewing or provide more information.`
+When a visitor shows interest in a property, ask for their contact details to organize a viewing or provide more information.`;
+
+  // Add crawled content if available
+  if (crawledContent && crawledContent.length > 0) {
+    systemContent += `\n\nHere is some additional information about our real estate agency and properties:\n\n`;
+    
+    crawledContent.forEach((item, index) => {
+      systemContent += `Source: ${item.source}\nCategory: ${item.category}\nContent: ${item.content}\n\n`;
+    });
+    
+    systemContent += `\nUse this information when answering questions about our agency, services, or locations.`;
+  }
+
+  // Create messages array for OpenAI with the enhanced system message
+  const messages = [
+    {
+      role: "system",
+      content: systemContent
     }
   ];
   
