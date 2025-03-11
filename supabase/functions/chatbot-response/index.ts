@@ -42,7 +42,20 @@ serve(async (req) => {
       );
     }
 
-    // Fetch crawled content from training files (NEW!)
+    // Fetch properties from database if none were provided
+    let finalPropertyRecommendations = [...propertyRecommendations];
+    
+    if (finalPropertyRecommendations.length === 0 && message.toLowerCase().match(/propert(y|ies)|house|apartment|villa|home|buy|rent|sale/i)) {
+      console.log("🔍 No properties provided but message is about real estate. Fetching from database...");
+      const dbProperties = await fetchPropertiesFromDatabase(userId, message);
+      
+      if (dbProperties && dbProperties.length > 0) {
+        console.log(`📊 Found ${dbProperties.length} properties in database`);
+        finalPropertyRecommendations = dbProperties;
+      }
+    }
+
+    // Fetch crawled content from training files
     const crawledContent = await fetchCrawledContent(userId, message);
     console.log(`📚 Crawled content found: ${crawledContent.length > 0 ? 'Yes' : 'No'}`);
     
@@ -52,9 +65,9 @@ serve(async (req) => {
       console.log("🤖 Using OpenAI to generate response");
       
       // Get property context for OpenAI
-      const propertyContext = propertyRecommendations.length > 0 
-        ? `You have found ${propertyRecommendations.length} properties that might interest the user:\n` +
-          propertyRecommendations.map((p, i) => 
+      const propertyContext = finalPropertyRecommendations.length > 0 
+        ? `You have found ${finalPropertyRecommendations.length} properties that might interest the user:\n` +
+          finalPropertyRecommendations.map((p, i) => 
             `Property ${i+1}: ${p.title || 'Property'}, Price: ${p.price}, Location: ${p.location || p.city || 'N/A'}, Features: ${p.features?.join(', ') || 'N/A'}, URL: ${p.url || 'N/A'}`
           ).join('\n')
         : "You don't have any specific property listings that match the user's query.";
@@ -69,7 +82,7 @@ serve(async (req) => {
       );
       
       // Verify the response meets our quality standards
-      isVerified = await verifyResponse(message, response, propertyRecommendations);
+      isVerified = await verifyResponse(message, response, finalPropertyRecommendations);
       
       if (!isVerified) {
         console.log("❌ Response verification failed, regenerating...");
@@ -85,13 +98,13 @@ serve(async (req) => {
       }
       
       // Check if we need to format property recommendations
-      if (propertyRecommendations.length > 0 && !response.includes('🏡') && !response.includes('View Listing')) {
-        response = formatPropertyRecommendations(response, propertyRecommendations);
+      if (finalPropertyRecommendations.length > 0 && !response.includes('🏡') && !response.includes('View Listing')) {
+        response = formatPropertyRecommendations(response, finalPropertyRecommendations);
       }
     } else {
       // Fallback to a scripted response if no OpenAI key is available
       console.log("⚠️ No OpenAI API key, using fallback response");
-      response = generateFallbackResponse(message, propertyRecommendations);
+      response = generateFallbackResponse(message, finalPropertyRecommendations);
       isVerified = true;
     }
 
@@ -113,7 +126,7 @@ serve(async (req) => {
       isVerified,
       conversationId: newConversationId || conversationId,
       leadInfo: extractedLeadInfo,
-      propertyRecommendations: propertyRecommendations.slice(0, MAX_PROPERTY_RECOMMENDATIONS)
+      propertyRecommendations: finalPropertyRecommendations.slice(0, MAX_PROPERTY_RECOMMENDATIONS)
     };
 
     return new Response(
@@ -132,7 +145,142 @@ serve(async (req) => {
   }
 });
 
-// NEW: Fetch crawled content from the database
+// NEW: Fetch properties directly from the database
+async function fetchPropertiesFromDatabase(userId, query) {
+  try {
+    console.log(`🔍 Searching for properties related to: "${query.substring(0, 30)}..."`);
+    
+    // Extract keywords from the query
+    const keywords = extractKeywords(query);
+    const locationMatch = query.match(/in\s+([a-zA-Z\s]+?)(?:,|\s|$|\?|\.)/i);
+    const location = locationMatch ? locationMatch[1].trim() : null;
+    
+    // Prepare query
+    let propertyQuery = supabase
+      .from('properties')
+      .select('id, title, description, price, bedrooms, bathrooms, city, state, status, url, living_area, plot_area, garage_area, terrace, has_pool')
+      .eq('user_id', userId)
+      .eq('status', 'active')
+      .limit(MAX_PROPERTY_RECOMMENDATIONS);
+    
+    // Add location filter if available
+    if (location) {
+      propertyQuery = propertyQuery.or(`city.ilike.%${location}%,state.ilike.%${location}%`);
+    }
+    
+    // Execute query
+    const { data, error } = await propertyQuery;
+    
+    if (error) {
+      console.error("Error fetching properties:", error);
+      return [];
+    }
+    
+    if (!data || data.length === 0) {
+      console.log("No properties found in database");
+      
+      // Try searching by style if no direct match
+      if (keywords.length > 0) {
+        console.log("Attempting to search by style/keywords:", keywords.join(', '));
+        const styleQuery = keywords.join(' ');
+        
+        const { data: styleData, error: styleError } = await supabase
+          .rpc('search_properties_by_style', {
+            user_id_param: userId,
+            style_query: styleQuery,
+            max_results: MAX_PROPERTY_RECOMMENDATIONS
+          });
+        
+        if (styleError) {
+          console.error("Error searching by style:", styleError);
+          return [];
+        }
+        
+        if (styleData && styleData.length > 0) {
+          console.log(`Found ${styleData.length} properties by style matching`);
+          
+          return styleData.map(property => formatPropertyData(property));
+        }
+      }
+      
+      return [];
+    }
+    
+    console.log(`Found ${data.length} properties in database`);
+    
+    // Format the properties for the response
+    return data.map(property => formatPropertyData(property));
+  } catch (error) {
+    console.error("Error in fetchPropertiesFromDatabase:", error);
+    return [];
+  }
+}
+
+// Format property data to match the expected format
+function formatPropertyData(property) {
+  // Create URL if not provided
+  const url = property.url || `https://youragency.com/listing/${property.id.substring(0, 6)}`;
+  
+  // Extract features
+  const features = [];
+  if (property.bedrooms) features.push(`${property.bedrooms} Bedrooms`);
+  if (property.bathrooms) features.push(`${property.bathrooms} Bathrooms`);
+  if (property.living_area) features.push(`${property.living_area} m² Living Area`);
+  if (property.plot_area) features.push(`${property.plot_area} m² Plot`);
+  if (property.has_pool) features.push(`Swimming Pool`);
+  
+  // Format location
+  const location = property.city ? 
+    (property.state ? `${property.city}, ${property.state}` : property.city) : 
+    'Exclusive Location';
+  
+  // Generate a highlight if not available
+  let highlight = null;
+  if (property.description) {
+    const descLower = property.description.toLowerCase();
+    if (descLower.includes('view') || descLower.includes('panoramic')) {
+      highlight = 'Breathtaking views from your private terrace!';
+    } else if (descLower.includes('modern') || descLower.includes('contemporary')) {
+      highlight = 'Stunning modern design with high-end finishes!';
+    } else if (property.has_pool) {
+      highlight = 'Enjoy your own private swimming pool!';
+    } else {
+      highlight = 'Perfect home in a prime location!';
+    }
+  }
+  
+  return {
+    id: property.id,
+    title: property.title || `${property.type || 'Property'} in ${property.city || 'Exclusive Location'}`,
+    price: property.price,
+    location: location,
+    features: features,
+    highlight: highlight,
+    url: url
+  };
+}
+
+// Extract keywords from query
+function extractKeywords(query) {
+  const keywords = [];
+  const lowerQuery = query.toLowerCase();
+  
+  // Property types
+  const propertyTypes = ['villa', 'apartment', 'penthouse', 'house', 'condo', 'flat', 'studio'];
+  propertyTypes.forEach(type => {
+    if (lowerQuery.includes(type)) keywords.push(type);
+  });
+  
+  // Features
+  const features = ['pool', 'garden', 'view', 'sea', 'beach', 'golf', 'modern', 'luxury'];
+  features.forEach(feature => {
+    if (lowerQuery.includes(feature)) keywords.push(feature);
+  });
+  
+  return keywords;
+}
+
+// Fetch crawled content from the database
 async function fetchCrawledContent(userId, query) {
   try {
     console.log(`🔍 Searching for crawled content related to: "${query.substring(0, 30)}..."`);
@@ -159,7 +307,7 @@ async function fetchCrawledContent(userId, query) {
     
     // Process the crawled content to find the most relevant parts
     const relevantContent = data.map(item => {
-      // Extract a relevant snippet from the text (up to 500 characters)
+      // Extract a relevant snippet from the text (up to 1500 characters)
       const snippet = item.extracted_text.substring(0, 1500);
       return {
         source: item.source_file,
