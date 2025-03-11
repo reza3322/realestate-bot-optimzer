@@ -111,14 +111,20 @@ const getChatStyles = (theme: 'default' | 'modern' | 'minimal' = 'default', vari
       baseStyles = { ...defaultStyles };
   }
 
+  // Create header object that matches the ChatTheme interface
+  const headerObject = {
+    container: baseStyles.header,
+    font: ""
+  };
+
   // Apply color variations
-  let customColorStyles = {};
+  let themeStyles;
   if (customColor) {
-    customColorStyles = {
+    themeStyles = {
       customColor,
       font: "",
       container: baseStyles.container,
-      header: baseStyles.header,
+      header: headerObject,
       botBubble: baseStyles.botBubble,
       userBubble: baseStyles.userBubble,
       botIcon: baseStyles.botIcon,
@@ -129,11 +135,11 @@ const getChatStyles = (theme: 'default' | 'modern' | 'minimal' = 'default', vari
     // Apply predefined color variations
     switch (variation) {
       case 'blue':
-        customColorStyles = {
+        themeStyles = {
           customColor: '#3b82f6', // blue-500
           font: "",
           container: baseStyles.container,
-          header: baseStyles.header,
+          header: headerObject,
           botBubble: baseStyles.botBubble,
           userBubble: baseStyles.userBubble,
           botIcon: baseStyles.botIcon,
@@ -142,11 +148,11 @@ const getChatStyles = (theme: 'default' | 'modern' | 'minimal' = 'default', vari
         };
         break;
       case 'green':
-        customColorStyles = {
+        themeStyles = {
           customColor: '#10b981', // emerald-500
           font: "",
           container: baseStyles.container,
-          header: baseStyles.header,
+          header: headerObject,
           botBubble: baseStyles.botBubble,
           userBubble: baseStyles.userBubble,
           botIcon: baseStyles.botIcon,
@@ -155,11 +161,11 @@ const getChatStyles = (theme: 'default' | 'modern' | 'minimal' = 'default', vari
         };
         break;
       case 'purple':
-        customColorStyles = {
+        themeStyles = {
           customColor: '#8b5cf6', // violet-500
           font: "",
           container: baseStyles.container,
-          header: baseStyles.header,
+          header: headerObject,
           botBubble: baseStyles.botBubble,
           userBubble: baseStyles.userBubble,
           botIcon: baseStyles.botIcon,
@@ -168,11 +174,11 @@ const getChatStyles = (theme: 'default' | 'modern' | 'minimal' = 'default', vari
         };
         break;
       default:
-        customColorStyles = {
+        themeStyles = {
           customColor: undefined,
           font: "",
           container: baseStyles.container,
-          header: baseStyles.header,
+          header: headerObject,
           botBubble: baseStyles.botBubble,
           userBubble: baseStyles.userBubble,
           botIcon: baseStyles.botIcon,
@@ -182,7 +188,7 @@ const getChatStyles = (theme: 'default' | 'modern' | 'minimal' = 'default', vari
     }
   }
 
-  return customColorStyles;
+  return themeStyles;
 };
 
 // Export the styles
