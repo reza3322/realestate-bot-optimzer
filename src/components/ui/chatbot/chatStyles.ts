@@ -1,3 +1,4 @@
+
 const defaultStyles = {
   container: "relative w-full max-w-md rounded-md border border-border bg-card text-card-foreground shadow-sm",
   header: "flex items-center justify-between py-2 px-4 border-b border-border",
@@ -93,5 +94,103 @@ const globalChatStyles = `
 }
 `;
 
+/**
+ * Gets the appropriate chat styles based on theme and variation
+ */
+const getChatStyles = (theme: 'default' | 'modern' | 'minimal' = 'default', variation: 'default' | 'blue' | 'green' | 'purple' = 'default', customColor?: string) => {
+  // Base styles based on theme
+  let baseStyles;
+  switch (theme) {
+    case 'modern':
+      baseStyles = { ...modernStyles };
+      break;
+    case 'minimal':
+      baseStyles = { ...minimalStyles };
+      break;
+    default:
+      baseStyles = { ...defaultStyles };
+  }
+
+  // Apply color variations
+  let customColorStyles = {};
+  if (customColor) {
+    customColorStyles = {
+      customColor,
+      font: "",
+      container: baseStyles.container,
+      header: baseStyles.header,
+      botBubble: baseStyles.botBubble,
+      userBubble: baseStyles.userBubble,
+      botIcon: baseStyles.botIcon,
+      userIcon: baseStyles.userIcon,
+      inputContainer: baseStyles.inputArea,
+    };
+  } else {
+    // Apply predefined color variations
+    switch (variation) {
+      case 'blue':
+        customColorStyles = {
+          customColor: '#3b82f6', // blue-500
+          font: "",
+          container: baseStyles.container,
+          header: baseStyles.header,
+          botBubble: baseStyles.botBubble,
+          userBubble: baseStyles.userBubble,
+          botIcon: baseStyles.botIcon,
+          userIcon: baseStyles.userIcon,
+          inputContainer: baseStyles.inputArea,
+        };
+        break;
+      case 'green':
+        customColorStyles = {
+          customColor: '#10b981', // emerald-500
+          font: "",
+          container: baseStyles.container,
+          header: baseStyles.header,
+          botBubble: baseStyles.botBubble,
+          userBubble: baseStyles.userBubble,
+          botIcon: baseStyles.botIcon,
+          userIcon: baseStyles.userIcon,
+          inputContainer: baseStyles.inputArea,
+        };
+        break;
+      case 'purple':
+        customColorStyles = {
+          customColor: '#8b5cf6', // violet-500
+          font: "",
+          container: baseStyles.container,
+          header: baseStyles.header,
+          botBubble: baseStyles.botBubble,
+          userBubble: baseStyles.userBubble,
+          botIcon: baseStyles.botIcon,
+          userIcon: baseStyles.userIcon,
+          inputContainer: baseStyles.inputArea,
+        };
+        break;
+      default:
+        customColorStyles = {
+          customColor: undefined,
+          font: "",
+          container: baseStyles.container,
+          header: baseStyles.header,
+          botBubble: baseStyles.botBubble,
+          userBubble: baseStyles.userBubble,
+          botIcon: baseStyles.botIcon,
+          userIcon: baseStyles.userIcon,
+          inputContainer: baseStyles.inputArea,
+        };
+    }
+  }
+
+  return customColorStyles;
+};
+
 // Export the styles
-export { defaultStyles, darkStyles, modernStyles, minimalStyles, globalChatStyles };
+export { 
+  defaultStyles, 
+  darkStyles, 
+  modernStyles, 
+  minimalStyles, 
+  globalChatStyles,
+  getChatStyles
+};
