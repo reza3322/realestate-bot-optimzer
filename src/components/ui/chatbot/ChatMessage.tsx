@@ -4,6 +4,7 @@ import { User } from 'lucide-react';
 import { BotIcon } from './BotIcon';
 import { cn } from '@/lib/utils';
 import { Message, ChatStylesType } from './types';
+import ReactMarkdown from 'react-markdown';
 
 export interface ChatMessageProps {
   message: Message;
@@ -51,11 +52,53 @@ const ChatMessage = ({
       
       <div 
         className={cn(
-          message.role === 'user' ? styles.userBubble : styles.botBubble
+          message.role === 'user' ? styles.userBubble : styles.botBubble,
+          "chatbot-message"
         )}
         style={message.role === 'user' ? customUserBubbleStyle : {}}
       >
-        {message.content}
+        {message.role === 'user' ? (
+          message.content
+        ) : (
+          <ReactMarkdown
+            components={{
+              a: ({ node, ...props }) => (
+                <a 
+                  {...props} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-blue-500 underline hover:text-blue-700 transition-colors" 
+                />
+              ),
+              p: ({ node, ...props }) => (
+                <p {...props} className="mb-3" />
+              ),
+              ul: ({ node, ...props }) => (
+                <ul {...props} className="list-disc pl-5 mb-3" />
+              ),
+              ol: ({ node, ...props }) => (
+                <ol {...props} className="list-decimal pl-5 mb-3" />
+              ),
+              li: ({ node, ...props }) => (
+                <li {...props} className="mb-1" />
+              ),
+              strong: ({ node, ...props }) => (
+                <strong {...props} className="font-semibold" />
+              ),
+              em: ({ node, ...props }) => (
+                <em {...props} className="italic" />
+              ),
+              h2: ({ node, ...props }) => (
+                <h2 {...props} className="text-lg font-bold mt-4 mb-2" />
+              ),
+              h3: ({ node, ...props }) => (
+                <h3 {...props} className="text-md font-bold mt-3 mb-2" />
+              )
+            }}
+          >
+            {message.content}
+          </ReactMarkdown>
+        )}
       </div>
       
       {message.role === 'user' && (
