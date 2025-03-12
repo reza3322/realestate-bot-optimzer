@@ -82,10 +82,10 @@ const WebsiteCrawler = ({ userId, onCrawlComplete }: WebsiteCrawlerProps) => {
       }
 
       setProgress(100);
-      setStatus("Website crawled successfully!");
+      setStatus("Initial pages crawled successfully! Continuing in the background...");
       setResult(data);
       
-      toast.success("Website crawled and content processed for chatbot training!");
+      toast.success("Website crawling has started! Initial pages processed for chatbot training. The rest will continue in the background.");
       
       setTimeout(() => {
         setProgress(0);
@@ -170,7 +170,8 @@ const WebsiteCrawler = ({ userId, onCrawlComplete }: WebsiteCrawlerProps) => {
           <Alert className="mt-2 bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-900">
             <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
             <AlertDescription>
-              Successfully crawled {result.pages_imported} pages from your website.
+              Successfully started crawling your website. Initial pages processed: {result.pages_imported}.
+              {result.status === "processing" && " The crawler is continuing to process more pages in the background."}
               {result.pages_failed > 0 && ` (${result.pages_failed} pages failed)`}
             </AlertDescription>
           </Alert>
@@ -198,8 +199,9 @@ const WebsiteCrawler = ({ userId, onCrawlComplete }: WebsiteCrawlerProps) => {
           <p className="font-medium mb-1">For best results:</p>
           <ul className="list-disc pl-5 space-y-1">
             <li>Make sure your website is publicly accessible</li>
-            <li>The crawler will extract content from all pages on your website</li>
+            <li>The crawler processes your entire website in batches to avoid timeouts</li>
             <li>Only pages on the same domain will be crawled</li>
+            <li>Large websites may take some time to fully process in the background</li>
             <li>The crawler automatically adjusts its speed to avoid rate limiting</li>
           </ul>
         </div>

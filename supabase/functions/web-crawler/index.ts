@@ -12,6 +12,10 @@ const MAX_CONCURRENT_REQUESTS = 2;
 const REQUEST_DELAY = 3000;
 // Add jitter to the delay to make requests less predictable
 const DELAY_JITTER = 1000;
+// Maximum number of pages to process in a single batch
+const BATCH_SIZE = 5;
+// Maximum CPU time before we need to yield (in ms)
+const MAX_CPU_TIME = 25000;
 
 Deno.serve(async (req) => {
   // Handle CORS preflight requests
@@ -72,6 +76,8 @@ Deno.serve(async (req) => {
     // Track rate limiting issues
     let rateLimitDetected = false;
     let consecutiveFailures = 0;
+    // Start time to track CPU usage
+    const startTime = Date.now();
 
     // Helper function to wait for a specified time with some jitter
     const wait = (ms: number) => {
@@ -202,82 +208,126 @@ Deno.serve(async (req) => {
       }
     };
 
-    // Process all URLs in the queue with adaptive rate limiting
-    while (urlQueue.length > 0 && !rateLimitDetected) {
-      // Dynamically adjust batch size based on consecutive failures
-      let currentBatchSize = MAX_CONCURRENT_REQUESTS;
+    // Store the first batch of crawled pages in the database
+    const storePages = async (pages: { url: string; content: string }[]): Promise<number> => {
+      let importedCount = 0;
       
-      if (consecutiveFailures > 3) {
-        currentBatchSize = 1; // Reduce to sequential requests if having consistent failures
-        await wait(REQUEST_DELAY * 3); // Triple the delay
-        console.log("Multiple failures detected, slowing down significantly");
+      for (const page of pages) {
+        try {
+          const { data, error } = await supabase
+            .from('chatbot_training_files')
+            .insert({
+              user_id: userId,
+              source_file: page.url,
+              extracted_text: page.content,
+              category: 'Web Crawler',
+              priority: 5,
+              content_type: 'text/html',
+              processing_status: 'complete'
+            })
+            .select();
+
+          if (error) {
+            console.error(`Error storing page ${page.url}:`, error);
+            continue;
+          }
+
+          if (data && data.length > 0) {
+            importedCount++;
+          }
+        } catch (error) {
+          console.error(`Error in database operation for ${page.url}:`, error);
+        }
       }
       
-      const batchSize = Math.min(currentBatchSize, urlQueue.length);
-      const batch = urlQueue.splice(0, batchSize);
+      return importedCount;
+    };
 
-      // Process batch of URLs with individual delays between each request
-      if (batchSize === 1) {
-        // Sequential processing with longer delays
+    // Process and store the initial batch to provide immediate feedback to the user
+    const initialBatchSize = Math.min(BATCH_SIZE, urlQueue.length);
+    const initialBatch = urlQueue.splice(0, initialBatchSize);
+    
+    for (const url of initialBatch) {
+      await fetchPage(url);
+      await wait(REQUEST_DELAY);
+    }
+    
+    // Store the initial batch
+    const initialImportCount = await storePages(crawledPages);
+    
+    // Create a background task to continue processing the rest
+    const continueProcessing = async () => {
+      let totalImported = initialImportCount;
+      const totalBatchesToProcess = Math.min(100, urlQueue.length); // Limit to avoid infinite crawling
+      let processedBatches = 0;
+      
+      console.log(`Starting background processing for ${urlQueue.length} remaining URLs`);
+      
+      while (urlQueue.length > 0 && !rateLimitDetected && processedBatches < totalBatchesToProcess) {
+        // Check if we've used too much CPU time and need to stop
+        if (Date.now() - startTime > MAX_CPU_TIME) {
+          console.log(`CPU time exceeded, stopping after ${processedBatches} batches`);
+          break;
+        }
+        
+        const batchSize = Math.min(BATCH_SIZE, urlQueue.length);
+        const batch = urlQueue.splice(0, batchSize);
+        const batchPages: { url: string; content: string }[] = [];
+        
+        // Process batch
         for (const url of batch) {
-          await fetchPage(url);
-          await wait(REQUEST_DELAY);
+          if (!visitedUrls.has(url)) {
+            await fetchPage(url);
+            await wait(REQUEST_DELAY);
+          }
         }
-      } else {
-        // Process with staggered starts
-        const promises = batch.map(async (url, index) => {
-          await wait(index * (REQUEST_DELAY / batch.length)); // Staggered start
-          return fetchPage(url);
-        });
-        await Promise.all(promises);
+        
+        // Collect pages from this batch
+        const newPages = crawledPages.slice(totalImported);
+        
+        // Store the batch
+        const importedCount = await storePages(newPages);
+        totalImported += importedCount;
+        
+        processedBatches++;
+        
+        // Wait between batches
+        await wait(REQUEST_DELAY * 2);
       }
-
-      // Wait between batches to be polite
+      
+      console.log(`Background processing complete. Total imported: ${totalImported}`);
+      
+      // If more URLs remain but we had to stop, log this
       if (urlQueue.length > 0) {
-        await wait(REQUEST_DELAY);
+        console.log(`Stopped with ${urlQueue.length} URLs remaining in queue due to limits`);
       }
+    };
+    
+    // Use EdgeRuntime.waitUntil for background processing if available
+    // @ts-ignore - EdgeRuntime may not be defined in all environments
+    if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime.waitUntil) {
+      // @ts-ignore
+      EdgeRuntime.waitUntil(continueProcessing());
+      console.log("Background processing started using EdgeRuntime.waitUntil");
+    } else {
+      // Fallback for environments without EdgeRuntime.waitUntil
+      setTimeout(() => {
+        continueProcessing().catch(err => {
+          console.error("Error in background processing:", err);
+        });
+      }, 0);
+      console.log("Background processing started using setTimeout");
     }
 
-    console.log(`Crawling complete. Processed ${crawledPages.length} pages, failed on ${failedUrls.length} pages`);
-
-    // Store results in the database
-    const importedPages = [];
-    for (const page of crawledPages) {
-      try {
-        const { data, error } = await supabase
-          .from('chatbot_training_files')
-          .insert({
-            user_id: userId,
-            source_file: page.url,
-            extracted_text: page.content,
-            category: 'Web Crawler',
-            priority: 5,
-            content_type: 'text/html',
-            processing_status: 'complete'
-          })
-          .select();
-
-        if (error) {
-          console.error(`Error storing page ${page.url}:`, error);
-          continue;
-        }
-
-        if (data && data.length > 0) {
-          importedPages.push(data[0]);
-        }
-      } catch (error) {
-        console.error(`Error in database operation for ${page.url}:`, error);
-      }
-    }
-
-    // Return the results
+    // Return immediate response with initial results
     return new Response(
       JSON.stringify({
         success: true,
         pages_crawled: crawledPages.length,
-        pages_imported: importedPages.length,
+        pages_imported: initialImportCount,
         pages_failed: failedUrls.length,
-        message: `Successfully crawled ${crawledPages.length} pages and imported ${importedPages.length} pages.`
+        message: `Started crawling ${initialBatchSize} pages and imported ${initialImportCount} pages. Continuing in the background.`,
+        status: "processing"
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
