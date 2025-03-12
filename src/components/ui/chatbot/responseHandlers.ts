@@ -1,4 +1,3 @@
-
 import { supabase } from "@/lib/supabase";
 import { ChatbotResponse, Message, PropertySearchParams } from "./types";
 
@@ -119,6 +118,14 @@ export const testChatbotResponse = async (
       }
     }
     
+    // Format previous messages for API
+    const formattedPreviousMessages = previousMessages.map(msg => ({
+      role: msg.role === 'bot' ? 'assistant' : 'user',
+      content: msg.content
+    }));
+    
+    console.log(`Sending ${formattedPreviousMessages.length} previous messages for context`);
+    
     // Call the Supabase Edge Function to get a response
     const { data, error } = await supabase.functions.invoke('chatbot-response', {
       body: {
@@ -126,10 +133,7 @@ export const testChatbotResponse = async (
         userId,
         visitorInfo: leadInfo,
         conversationId,
-        previousMessages: previousMessages.map(msg => ({
-          role: msg.role === 'bot' ? 'assistant' : 'user',
-          content: msg.content
-        })),
+        previousMessages: formattedPreviousMessages,
         // Pass the property recommendations we found directly to the chatbot
         propertyRecommendations,
         shouldCaptureLeadInfo
@@ -311,10 +315,10 @@ export const extractLeadInformation = (message: string, existingInfo: any = {}):
 /**
  * Format property recommendations into a structured, markdown-friendly format
  */
-export const formatPropertyRecommendations = (recommendations: any[], maxResults = 3) => {
+export const formatPropertyRecommendations = (recommendations: any[], maxResults = 2) => {
   if (!recommendations || recommendations.length === 0) return "";
   
-  // Limit to max number of results (default 3)
+  // Limit to max number of results (default now 2)
   const limitedRecommendations = recommendations.slice(0, maxResults);
   
   let formattedResponse = "Here are **" + limitedRecommendations.length + " properties** that match what you're looking for:\n\n";
@@ -328,55 +332,38 @@ export const formatPropertyRecommendations = (recommendations: any[], maxResults
     // Get the property title or create one
     const title = property.title || `${property.type || 'Property'} in ${property.city || 'Exclusive Location'}`;
     
-    // Create property listing with the exact requested format
+    // Create property listing with the exact requested format (but more concise)
     formattedResponse += `🏡 **${title} – ${price}**\n`;
     formattedResponse += `📍 **${property.location || (property.city && property.state ? `${property.city}, ${property.state}` : 'Exclusive Location')}**\n`;
     
-    // Build features list
+    // Build features list - limited to 3 max features
     let features = [];
-    if (property.bedrooms) features.push(`${property.bedrooms} Bedrooms`);
-    if (property.bathrooms) features.push(`${property.bathrooms} Bathrooms`);
-    if (property.has_pool) features.push(`Private Pool`);
-    if (property.living_area) features.push(`${property.living_area} m² Living Area`);
-    if (property.plot_area) features.push(`${property.plot_area} m² Plot`);
-    if (property.terrace) features.push(`${property.terrace} m² Terrace`);
+    if (property.bedrooms) features.push(`${property.bedrooms} Bed`);
+    if (property.bathrooms) features.push(`${property.bathrooms} Bath`);
+    if (property.has_pool) features.push(`Pool`);
     
-    // Add features as a single line with commas
+    // Add features as a single line with commas - more concise
     if (features.length > 0) {
       formattedResponse += `✅ ${features.join(', ')}\n`;
     } else if (property.features && property.features.length > 0) {
-      formattedResponse += `✅ ${Array.isArray(property.features) ? property.features.join(', ') : property.features}\n`;
+      // Limit features to first 3
+      const limitedFeatures = Array.isArray(property.features) ? 
+        property.features.slice(0, 3).join(', ') : 
+        property.features.split(',').slice(0, 3).join(',');
+      formattedResponse += `✅ ${limitedFeatures}\n`;
     }
     
-    // Add highlight if available
-    if (property.highlight) {
-      formattedResponse += `✨ ${property.highlight}\n`;
-    } else {
-      // Generate a fallback highlight if none is provided
-      const typePrefix = property.type ? property.type.toLowerCase() : '';
-      const isLuxury = (property.price && property.price > 1000000) || 
-                       (property.description && property.description.toLowerCase().includes('luxury'));
-      
-      let highlight = isLuxury ? 
-        `Stunning ${typePrefix} luxury property with premium finishes!` : 
-        `Perfect ${typePrefix} home in an ideal location!`;
-        
-      formattedResponse += `✨ ${highlight}\n`;
-    }
-    
-    // Add URL if available, or a placeholder URL
+    // URL
     if (property.url) {
-      formattedResponse += `🔗 [View Listing](${property.url})\n`;
+      formattedResponse += `🔗 [View Listing](${property.url})\n\n`;
     } else {
       // Use property ID if available, otherwise use a placeholder
       const listingId = property.id ? property.id.substring(0, 6) : (10000 + index);
-      formattedResponse += `🔗 [View Listing](https://youragency.com/listing/${listingId})\n`;
+      formattedResponse += `🔗 [View Listing](https://youragency.com/listing/${listingId})\n\n`;
     }
-    
-    formattedResponse += "\n";
   });
   
-  formattedResponse += "Would you like to **schedule a viewing** or hear about **more options**? 😊";
+  formattedResponse += "Would you like to see more options or schedule a viewing?";
   
   return formattedResponse;
 };

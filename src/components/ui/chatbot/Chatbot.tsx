@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import ChatHeader from './ChatHeader';
@@ -91,8 +90,7 @@ const Chatbot = ({
   const [visitorInfo, setVisitorInfo] = useState<VisitorInfo>({});
   const [propertyRecommendations, setPropertyRecommendations] = useState<PropertyRecommendation[]>([]);
 
-  // Get chat styles and make sure it conforms to the ChatTheme type
-  const chatStyles: ChatTheme = getChatStyles(theme, variation, primaryColor);
+  const chatStyles: ChatTheme = getChatStyles(theme, variation, primaryColor) as ChatTheme;
   
   useEffect(() => {
     if (messages.length === 1 && messages[0].role === 'bot') {
@@ -124,50 +122,39 @@ const Chatbot = ({
     setIsTyping(true);
     setError(null);
     setResponseSource(null);
-    setPropertyRecommendations([]);
     
     const isLandingPageMode = userId === 'demo-user';
     console.log(`Chatbot mode: ${isLandingPageMode ? 'Landing Page Demo' : 'User Chatbot'}`);
+    console.log(`Conversation ID: ${conversationId || 'New conversation'}`);
     
     try {
+      const previousMsgs = messages.filter(msg => 
+        !(msg.role === 'bot' && msg.content === defaultWelcomeMessage) 
+      );
+      
       const result = await testChatbotResponse(
         message, 
         userId, 
         visitorInfo, 
         conversationId,
-        messages
+        previousMsgs
       );
       
       if (result.error) {
         console.error('Chatbot error:', result.error);
         setError(`Error: ${result.error}`);
       } else {
-        // Store property recommendations if available
-        if (result.propertyRecommendations && result.propertyRecommendations.length > 0) {
-          setPropertyRecommendations(result.propertyRecommendations);
-          
-          // If the response doesn't already include formatted property listings,
-          // format them and append to the response
-          if (!result.response.includes('🏡') && !result.response.includes('View Listing')) {
-            const formattedRecommendations = formatPropertyRecommendations(
-              result.propertyRecommendations,
-              3 // Limit to 3 properties
-            );
-            
-            // Add formatted recommendations to the response
-            if (formattedRecommendations) {
-              result.response = `${result.response}\n\n${formattedRecommendations}`;
-            }
-          }
-        }
-        
-        // Add the response to messages
-        setMessages(prev => [...prev, { role: 'bot', content: result.response }]);
-        setResponseSource(result.source || null);
-        
         if (result.conversationId && !conversationId) {
+          console.log(`Setting conversation ID: ${result.conversationId}`);
           setConversationId(result.conversationId);
         }
+        
+        if (result.propertyRecommendations && result.propertyRecommendations.length > 0) {
+          setPropertyRecommendations(result.propertyRecommendations);
+        }
+        
+        setMessages(prev => [...prev, { role: 'bot', content: result.response }]);
+        setResponseSource(result.source || null);
         
         if (result.leadInfo) {
           setVisitorInfo(prev => ({

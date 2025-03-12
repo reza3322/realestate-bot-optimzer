@@ -1,12 +1,13 @@
-
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.0";
 import { Configuration, OpenAIApi } from "https://esm.sh/openai@3.3.0";
 
 // Constants
-const MAX_PROPERTY_RECOMMENDATIONS = 3;
+const MAX_PROPERTY_RECOMMENDATIONS = 2;
 const OPENAI_MODEL = "gpt-4o-mini";
+const MAX_PREVIOUS_MESSAGES = 10;
+const MAX_RESPONSE_LENGTH = 300;
 
 // Initialize Supabase client
 const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
@@ -34,6 +35,7 @@ serve(async (req) => {
     console.log(`🔄 Processing request from user ${userId}, message: ${message.substring(0, 50)}...`);
     console.log(`👤 Visitor info:`, JSON.stringify(visitorInfo));
     console.log(`🏠 Property recommendations received:`, propertyRecommendations.length);
+    console.log(`💬 Previous messages count:`, previousMessages.length);
 
     if (!message) {
       return new Response(
@@ -41,6 +43,40 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    // Persist conversation history in database for better context retention
+    let existingConversation = null;
+    let storedPreviousMessages = [];
+    
+    if (conversationId) {
+      // Fetch any existing conversation history from the database
+      const { data: conversationHistory } = await supabase
+        .from('chatbot_conversations')
+        .select('message, response')
+        .eq('conversation_id', conversationId)
+        .order('created_at', { ascending: true })
+        .limit(MAX_PREVIOUS_MESSAGES);
+      
+      if (conversationHistory && conversationHistory.length > 0) {
+        console.log(`📚 Found ${conversationHistory.length} previous messages in database`);
+        
+        // Convert database history to message format
+        storedPreviousMessages = conversationHistory.flatMap(entry => [
+          { role: 'user', content: entry.message },
+          { role: 'assistant', content: entry.response }
+        ]);
+      }
+    }
+    
+    // Combine stored messages with client-provided previous messages, prioritizing client messages
+    const mergedPreviousMessages = previousMessages.length > 0 ? 
+      previousMessages : 
+      storedPreviousMessages;
+    
+    // Limit to most recent messages to keep context relevant
+    const recentMessages = mergedPreviousMessages.slice(-MAX_PREVIOUS_MESSAGES);
+    
+    console.log(`💬 Using ${recentMessages.length} messages for context`);
 
     // Fetch properties from database if none were provided
     let finalPropertyRecommendations = [...propertyRecommendations];
@@ -64,18 +100,15 @@ serve(async (req) => {
     if (openai) {
       console.log("🤖 Using OpenAI to generate response");
       
-      // Get property context for OpenAI
+      // Get property context for OpenAI - keep it shorter now
       const propertyContext = finalPropertyRecommendations.length > 0 
-        ? `You have found ${finalPropertyRecommendations.length} properties that might interest the user:\n` +
-          finalPropertyRecommendations.map((p, i) => 
-            `Property ${i+1}: ${p.title || 'Property'}, Price: ${p.price}, Location: ${p.location || p.city || 'N/A'}, Features: ${p.features?.join(', ') || 'N/A'}, URL: ${p.url || 'N/A'}`
-          ).join('\n')
+        ? `You have found ${finalPropertyRecommendations.length} properties that might interest the user. Only mention them if directly relevant.`
         : "You don't have any specific property listings that match the user's query.";
       
       // Generate response
       response = await generateAIResponse(
         message, 
-        previousMessages, 
+        recentMessages, 
         propertyContext, 
         visitorInfo,
         crawledContent
@@ -88,7 +121,7 @@ serve(async (req) => {
         console.log("❌ Response verification failed, regenerating...");
         response = await generateAIResponse(
           message, 
-          previousMessages, 
+          recentMessages, 
           propertyContext, 
           visitorInfo,
           crawledContent,
@@ -97,8 +130,11 @@ serve(async (req) => {
         isVerified = true; // Assume second attempt is good enough
       }
       
-      // Check if we need to format property recommendations
-      if (finalPropertyRecommendations.length > 0 && !response.includes('🏡') && !response.includes('View Listing')) {
+      // Check if we need to format property recommendations - only if user explicitly asked for properties
+      const explicitPropertyRequest = message.toLowerCase().match(/show me|list|properties|houses|apartments|villas/i);
+      
+      if (finalPropertyRecommendations.length > 0 && explicitPropertyRequest && 
+          !response.includes('🏡') && !response.includes('View Listing')) {
         response = formatPropertyRecommendations(response, finalPropertyRecommendations);
       }
     } else {
@@ -145,7 +181,7 @@ serve(async (req) => {
   }
 });
 
-// NEW: Fetch properties directly from the database
+// Fetch properties directly from the database
 async function fetchPropertiesFromDatabase(userId, query) {
   try {
     console.log(`🔍 Searching for properties related to: "${query.substring(0, 30)}..."`);
@@ -323,33 +359,31 @@ async function fetchCrawledContent(userId, query) {
   }
 }
 
-// Generate a response using OpenAI
+// Generate a response using OpenAI with improved instructions for conversational responses
 async function generateAIResponse(message, previousMessages, propertyContext, visitorInfo, crawledContent = [], includeQualityGuidelines = false) {
-  // Create system message with crawled content
-  let systemContent = `You are a helpful real estate assistant for a luxury real estate agency. 
-      ${includeQualityGuidelines ? `
+  // Create system message with crawled content and better instructions
+  let systemContent = `You are a friendly and conversational real estate assistant. Keep your responses SHORT (5-6 lines max) and ENGAGING.
+      
 IMPORTANT GUIDELINES:
-1. When recommending properties, NEVER list more than 3 properties at a time.
-2. Format property recommendations clearly with emojis, bullet points, and proper spacing.
-3. Always structure your answers in a conversational, friendly tone.
-4. Avoid overwhelming the user with long blocks of text.
-5. If you mention a property, always provide a well-formatted listing with price, location, and key features.
-6. Ask clarifying questions if the user's request is vague.
-7. Always try to capture lead information by asking for name, email, or phone when appropriate.` : ''}
+1. Be concise and direct - users prefer brief, helpful answers over lengthy explanations.
+2. Ask follow-up questions to keep the conversation flowing naturally.
+3. Vary your responses instead of repeating the same information or phrases.
+4. Use a warm, friendly tone like a helpful human agent would.
+5. When recommending properties, only do so if explicitly asked, and limit to ${MAX_PROPERTY_RECOMMENDATIONS} max.
+6. Remember previous parts of the conversation and refer back to them when relevant.
+7. Don't repeat information the user already knows.
 
 ${propertyContext}
 
-When a visitor shows interest in a property, ask for their contact details to organize a viewing or provide more information.`;
+When a visitor shows interest in a property, ask for their contact details to organize a viewing.`;
 
   // Add crawled content if available
   if (crawledContent && crawledContent.length > 0) {
-    systemContent += `\n\nHere is some additional information about our real estate agency and properties:\n\n`;
+    systemContent += `\n\nHere is some additional information about our real estate agency and properties (only reference if directly relevant):\n\n`;
     
     crawledContent.forEach((item, index) => {
-      systemContent += `Source: ${item.source}\nCategory: ${item.category}\nContent: ${item.content}\n\n`;
+      systemContent += `Source: ${item.source}\nCategory: ${item.category}\nContent: ${item.content.substring(0, 300)}...\n\n`;
     });
-    
-    systemContent += `\nUse this information when answering questions about our agency, services, or locations.`;
   }
 
   // Create messages array for OpenAI with the enhanced system message
@@ -360,7 +394,7 @@ When a visitor shows interest in a property, ask for their contact details to or
     }
   ];
   
-  // Add previous messages
+  // Add previous messages to maintain conversation context
   if (previousMessages && previousMessages.length > 0) {
     previousMessages.forEach(msg => {
       messages.push({
@@ -373,28 +407,30 @@ When a visitor shows interest in a property, ask for their contact details to or
   // Add current message
   messages.push({ role: "user", content: message });
   
-  // Call OpenAI API
+  // Call OpenAI API with modified parameters
   const completion = await openai.createChatCompletion({
     model: OPENAI_MODEL,
     messages,
-    temperature: 0.7,
-    max_tokens: 500
+    temperature: 0.8,
+    max_tokens: MAX_RESPONSE_LENGTH,
+    frequency_penalty: 0.7,
+    presence_penalty: 0.6
   });
   
   return completion.data.choices[0].message.content;
 }
 
-// Format the AI response with property recommendations
+// More concise property recommendations format
 function formatPropertyRecommendations(response, propertyRecommendations) {
   if (!propertyRecommendations || propertyRecommendations.length === 0) {
     return response;
   }
   
-  // Limit to max of 3 properties
+  // Only show top properties
   const limitedRecommendations = propertyRecommendations.slice(0, MAX_PROPERTY_RECOMMENDATIONS);
   
-  // Generate the formatted property list
-  let formattedProperties = "\n\nHere are some properties that might interest you:\n\n";
+  // Create a concise format
+  let formattedProperties = "\n\nHere are some properties you might like:\n\n";
   
   limitedRecommendations.forEach((property) => {
     // Format the price
@@ -405,34 +441,29 @@ function formatPropertyRecommendations(response, propertyRecommendations) {
     // Get the property title
     const title = property.title || `${property.type || 'Property'} in ${property.city || 'Exclusive Location'}`;
     
-    // Create the formatted listing
+    // Create a more concise listing
     formattedProperties += `🏡 **${title} – ${price}**\n`;
-    formattedProperties += `📍 **${property.location || (property.city && property.state ? `${property.city}, ${property.state}` : 'Exclusive Location')}**\n`;
     
-    // Features
+    // Only show key features (limit to most important)
     if (property.features && property.features.length > 0) {
-      formattedProperties += `✅ ${Array.isArray(property.features) ? property.features.join(', ') : property.features}\n`;
-    }
-    
-    // Highlight
-    if (property.highlight) {
-      formattedProperties += `✨ ${property.highlight}\n`;
+      const featuresText = Array.isArray(property.features) ? 
+        property.features.slice(0, 3).join(', ') : 
+        property.features.split(',').slice(0, 3).join(',');
+      formattedProperties += `✅ ${featuresText}\n`;
     }
     
     // URL
     if (property.url) {
-      formattedProperties += `🔗 [View Listing](${property.url})\n`;
+      formattedProperties += `🔗 [View Listing](${property.url})\n\n`;
     } else {
       const listingId = property.id ? property.id.substring(0, 6) : Math.floor(Math.random() * 100000);
-      formattedProperties += `🔗 [View Listing](https://youragency.com/listing/${listingId})\n`;
+      formattedProperties += `🔗 [View Listing](https://youragency.com/listing/${listingId})\n\n`;
     }
-    
-    formattedProperties += "\n";
   });
   
-  formattedProperties += "Would you like to **schedule a viewing** or hear about **more options**? 😊";
+  formattedProperties += "Would you like to see more options or schedule a viewing?";
   
-  // Append the formatted properties to the response
+  // Append or replace existing property listings
   if (response.toLowerCase().includes("here are some properties") || 
       response.toLowerCase().includes("found the following") ||
       response.toLowerCase().includes("these properties")) {
@@ -444,22 +475,31 @@ function formatPropertyRecommendations(response, propertyRecommendations) {
   }
 }
 
-// Verify the quality of the response
+// Verify the quality of the response with improved check for conversational quality
 async function verifyResponse(userQuestion, generatedResponse, propertyRecommendations) {
   try {
     // Skip verification if no OpenAI API key
     if (!openai) return true;
     
-    // Create verification prompt
+    // Create verification prompt with emphasis on conciseness and conversation
     const prompt = `You are an AI assistant verifying chatbot responses.
 
 - The user asked: "${userQuestion}"
 - The chatbot wants to reply: "${generatedResponse}"
 
-✅ If the response is correct, relevant to real estate, and useful, reply with "APPROVED".
-❌ If the response contains marketing spam, unnecessary metadata, or is unclear, reply with "REJECTED".
-❌ If the response contains more than 3 property recommendations, reply with "REJECTED".
-❌ If the response contains long, unstructured text, reply with "REJECTED".
+✅ Give "APPROVED" if the response is:
+- Concise (5-6 lines or less)
+- Conversational and engaging
+- Relevant to real estate
+- Free from repetition
+- Includes follow-up questions where appropriate
+
+❌ Give "REJECTED" if the response:
+- Is too long or verbose
+- Sounds robotic or generic
+- Contains repetitive phrases
+- Shows more than ${MAX_PROPERTY_RECOMMENDATIONS} property recommendations
+- Is overly formal or lacks conversational flow
 
 Only respond with "APPROVED" or "REJECTED".`;
 
@@ -482,70 +522,33 @@ Only respond with "APPROVED" or "REJECTED".`;
   }
 }
 
-// Generate a fallback response when OpenAI is not available
+// More conversational fallback responses
 function generateFallbackResponse(message, propertyRecommendations) {
   const lowerMessage = message.toLowerCase();
   
-  // Check for property inquiry
+  // Check for property inquiry with shorter responses
   if (lowerMessage.includes('property') || 
       lowerMessage.includes('house') || 
       lowerMessage.includes('villa') || 
       lowerMessage.includes('apartment')) {
     
     if (propertyRecommendations.length > 0) {
-      // Format property recommendations
-      let response = `I found some great properties that might interest you!\n\n`;
-      
-      propertyRecommendations.slice(0, MAX_PROPERTY_RECOMMENDATIONS).forEach((property) => {
-        // Format price
-        const price = typeof property.price === 'number' 
-          ? new Intl.NumberFormat('en-EU', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(property.price)
-          : property.price;
-        
-        // Get title
-        const title = property.title || `${property.type || 'Property'} in ${property.city || 'Exclusive Location'}`;
-        
-        // Create the formatted listing
-        response += `🏡 **${title} – ${price}**\n`;
-        response += `📍 **${property.location || (property.city && property.state ? `${property.city}, ${property.state}` : 'Exclusive Location')}**\n`;
-        
-        // Features
-        if (property.features && property.features.length > 0) {
-          response += `✅ ${Array.isArray(property.features) ? property.features.join(', ') : property.features}\n`;
-        }
-        
-        // Highlight
-        if (property.highlight) {
-          response += `✨ ${property.highlight}\n`;
-        }
-        
-        // URL
-        if (property.url) {
-          response += `🔗 [View Listing](${property.url})\n`;
-        } else {
-          const listingId = property.id ? property.id.substring(0, 6) : Math.floor(Math.random() * 100000);
-          response += `🔗 [View Listing](https://youragency.com/listing/${listingId})\n`;
-        }
-        
-        response += '\n';
-      });
-      
-      response += "Would you like to **schedule a viewing** or hear about **more options**? 😊";
-      return response;
+      // Format property recommendations (more concise)
+      return `I found some great options for you! What kind of features are most important to you?`;
     } else {
-      return "I'd be happy to help you find the perfect property! Could you tell me a bit more about what you're looking for? For example, are you interested in a villa, apartment, or house? And do you have a specific location or budget in mind?";
+      return "I'd be happy to help you find a property! What area are you interested in and what's your budget?";
     }
   }
   
-  // Greeting
+  // Greeting - more conversational
   if (lowerMessage.includes('hello') || 
       lowerMessage.includes('hi') || 
       lowerMessage.includes('hey')) {
-    return "Hello! 👋 I'm your personal real estate assistant. How can I help you today? Are you looking to buy, sell, or rent a property?";
+    return "Hello! 👋 How can I help with your property search today?";
   }
   
-  // Default response
-  return "Thank you for your message. I'm your personal real estate assistant and I'm here to help you find your dream property. Please let me know what you're looking for, and I'll be happy to assist you!";
+  // Default response - shorter and with a question
+  return "Thanks for reaching out! I'm your personal real estate assistant. Are you looking to buy, sell, or rent a property?";
 }
 
 // Extract potential lead information from the message
