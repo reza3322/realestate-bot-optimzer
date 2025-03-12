@@ -84,16 +84,27 @@ serve(async (req) => {
     if (includeProperties) {
       // First check if the query seems to be about properties
       const propertyTerms = ['property', 'properties', 'house', 'home', 'apartment', 'villa', 'flat', 'condo', 
-                             'real estate', 'buy', 'rent', 'sale', 'bedroom', 'bathroom', 'pool'];
+                             'real estate', 'buy', 'rent', 'sale', 'bedroom', 'bathroom', 'pool', 'listing', 'listings'];
       
-      const isPropertyQuery = propertyTerms.some(term => query.toLowerCase().includes(term));
+      // Set isPropertyQuery to true for empty queries or general listings requests
+      // This handles cases like "show me listings" or "what properties do you have"
+      const emptyOrGeneralQuery = !query.trim() || 
+                                query.toLowerCase().includes('list') || 
+                                query.toLowerCase().includes('show me') ||
+                                query.toLowerCase().includes('do you have');
+      
+      const isPropertyQuery = emptyOrGeneralQuery || 
+                              propertyTerms.some(term => query.toLowerCase().includes(term));
       
       if (isPropertyQuery) {
+        console.log("Query appears to be about properties, searching database...");
+        
         // Extract potential location from query
         let locationFilter = '';
         const locationMatches = query.match(/in\s+([a-zA-Z\s]+?)(?:,|\s|$|\?|\.)/i);
         if (locationMatches && locationMatches[1]) {
           locationFilter = locationMatches[1].trim();
+          console.log(`Extracted location filter: ${locationFilter}`);
         }
         
         // Extract potential bedrooms from query
@@ -101,50 +112,107 @@ serve(async (req) => {
         const bedroomsMatches = query.match(/(\d+)\s*(?:bed|bedroom|bedrooms|br)/i);
         if (bedroomsMatches && bedroomsMatches[1]) {
           bedroomsFilter = parseInt(bedroomsMatches[1]);
+          console.log(`Extracted bedrooms filter: ${bedroomsFilter}`);
         }
         
         // Build query based on extracted filters
-        let query = supabaseClient
+        let propertyQuery = supabaseClient
           .from('properties')
-          .select('id, title, description, price, bedrooms, bathrooms, city, state, status, url, has_pool')
+          .select('id, title, description, price, bedrooms, bathrooms, city, state, status, url, has_pool, type')
           .eq('user_id', userId)
           .eq('status', 'active');
         
         // Add location filter if present
         if (locationFilter) {
-          query = query.or(`city.ilike.%${locationFilter}%,state.ilike.%${locationFilter}%,description.ilike.%${locationFilter}%`);
+          propertyQuery = propertyQuery.or(`city.ilike.%${locationFilter}%,state.ilike.%${locationFilter}%,description.ilike.%${locationFilter}%`);
         }
         
         // Add bedrooms filter if present
         if (bedroomsFilter !== null) {
-          query = query.eq('bedrooms', bedroomsFilter);
+          propertyQuery = propertyQuery.eq('bedrooms', bedroomsFilter);
         }
         
         // Add pool filter if mentioned
         if (query.toLowerCase().includes('pool')) {
-          query = query.eq('has_pool', true);
+          propertyQuery = propertyQuery.eq('has_pool', true);
         }
         
-        // Execute query
-        const { data: propertiesData, error: propertiesError } = await query.limit(maxResults);
+        // Add type filter if mentioned
+        const typeKeywords = {
+          'villa': ['villa'],
+          'apartment': ['apartment', 'flat'],
+          'house': ['house', 'home'],
+          'penthouse': ['penthouse'],
+          'condo': ['condo', 'condominium']
+        };
+        
+        for (const [type, keywords] of Object.entries(typeKeywords)) {
+          if (keywords.some(keyword => query.toLowerCase().includes(keyword))) {
+            console.log(`Filtering by property type: ${type}`);
+            propertyQuery = propertyQuery.eq('type', type);
+            break;
+          }
+        }
+        
+        // Execute query with limit and order by featured properties first
+        const { data: propertiesData, error: propertiesError } = await propertyQuery
+          .order('featured', { ascending: false })
+          .order('price', { ascending: false })
+          .limit(maxResults);
         
         if (propertiesError) {
           console.error('Error fetching properties:', propertiesError);
         } else if (propertiesData && propertiesData.length > 0) {
-          propertyListings = propertiesData;
+          // Format the property data to ensure consistent structure
+          propertyListings = propertiesData.map(property => ({
+            id: property.id,
+            title: property.title || `${property.type || 'Property'} in ${property.city || 'Exclusive Location'}`,
+            description: property.description,
+            price: property.price,
+            bedrooms: property.bedrooms,
+            bathrooms: property.bathrooms,
+            city: property.city,
+            state: property.state,
+            status: property.status,
+            url: property.url || `https://youragency.com/listing/${property.id.substring(0, 6)}`,
+            has_pool: property.has_pool,
+            type: property.type,
+            // Create location field for easier formatting
+            location: property.city ? (property.state ? `${property.city}, ${property.state}` : property.city) : 'Exclusive Location'
+          }));
           console.log(`Found ${propertyListings.length} property listings matching query terms`);
         } else {
+          console.log("No properties found with specific filters, returning general listings");
           // If no specific filters matched, just return some properties
           const { data: fallbackProperties, error: fallbackError } = await supabaseClient
             .from('properties')
-            .select('id, title, description, price, bedrooms, bathrooms, city, state, status, url, has_pool')
+            .select('id, title, description, price, bedrooms, bathrooms, city, state, status, url, has_pool, type')
             .eq('user_id', userId)
             .eq('status', 'active')
+            .order('featured', { ascending: false })
             .limit(maxResults);
           
           if (!fallbackError && fallbackProperties && fallbackProperties.length > 0) {
-            propertyListings = fallbackProperties;
+            propertyListings = fallbackProperties.map(property => ({
+              id: property.id,
+              title: property.title || `${property.type || 'Property'} in ${property.city || 'Exclusive Location'}`,
+              description: property.description,
+              price: property.price,
+              bedrooms: property.bedrooms,
+              bathrooms: property.bathrooms,
+              city: property.city,
+              state: property.state,
+              status: property.status,
+              url: property.url || `https://youragency.com/listing/${property.id.substring(0, 6)}`,
+              has_pool: property.has_pool,
+              type: property.type,
+              location: property.city ? (property.state ? `${property.city}, ${property.state}` : property.city) : 'Exclusive Location'
+            }));
             console.log(`Found ${propertyListings.length} fallback property listings`);
+          } else if (fallbackError) {
+            console.error('Error fetching fallback properties:', fallbackError);
+          } else {
+            console.log("No properties found in the database");
           }
         }
       }
