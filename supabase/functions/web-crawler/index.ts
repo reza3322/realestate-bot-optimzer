@@ -7,7 +7,7 @@ import { corsHeaders } from "../_shared/cors.ts";
 import { load } from "https://esm.sh/cheerio@1.0.0-rc.12";
 
 // Define the number of concurrent requests allowed
-const MAX_CONCURRENT_REQUESTS = 5;
+const MAX_CONCURRENT_REQUESTS = 10;
 // Define the delay between requests in ms
 const REQUEST_DELAY = 500;
 
@@ -33,7 +33,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { url, userId, maxPages = 10 } = await req.json();
+    const { url, userId } = await req.json();
     
     if (!url || !userId) {
       return new Response(
@@ -42,7 +42,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log(`Starting to crawl: ${url} for user: ${userId}, max pages: ${maxPages}`);
+    console.log(`Starting to crawl: ${url} for user: ${userId}`);
 
     // Create Supabase client
     const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
@@ -137,8 +137,6 @@ Deno.serve(async (req) => {
       try {
         console.log(`Fetching page: ${url}`);
         
-        // Fetch the page with JavaScript support using a headless browser service
-        // Here we're using a direct fetch, but in production you might use a headless browser service
         const response = await fetch(url, {
           headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
@@ -174,18 +172,16 @@ Deno.serve(async (req) => {
       }
     };
 
-    // Process the URL queue
-    let processedCount = 0;
-    while (urlQueue.length > 0 && processedCount < maxPages) {
-      const batchSize = Math.min(MAX_CONCURRENT_REQUESTS, urlQueue.length, maxPages - processedCount);
+    // Process all URLs in the queue
+    while (urlQueue.length > 0) {
+      const batchSize = Math.min(MAX_CONCURRENT_REQUESTS, urlQueue.length);
       const batch = urlQueue.splice(0, batchSize);
 
       // Process batch of URLs concurrently
       await Promise.all(batch.map(url => fetchPage(url)));
-      processedCount += batchSize;
 
       // Wait between batches to be polite
-      if (urlQueue.length > 0 && processedCount < maxPages) {
+      if (urlQueue.length > 0) {
         await wait(REQUEST_DELAY);
       }
     }
