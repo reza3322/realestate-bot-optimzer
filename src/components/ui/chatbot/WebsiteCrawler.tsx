@@ -114,7 +114,7 @@ const WebsiteCrawler = ({ userId, onCrawlComplete }: WebsiteCrawlerProps) => {
         </CardTitle>
         <CardDescription>
           Enter your website URL to extract content for chatbot training.
-          Your chatbot will learn from your website content, including JavaScript-rendered content, and provide more relevant responses.
+          Your chatbot will learn from your website content to provide more relevant responses.
         </CardDescription>
       </CardHeader>
 
@@ -194,20 +194,13 @@ const WebsiteCrawler = ({ userId, onCrawlComplete }: WebsiteCrawlerProps) => {
           )}
         </Button>
 
-        <div className="flex items-center space-x-2 p-2 bg-blue-50 dark:bg-blue-950/30 rounded border border-blue-200 dark:border-blue-900">
-          <Code className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-          <p className="text-xs text-blue-700 dark:text-blue-300">
-            The crawler will now process all pages on your website to provide comprehensive training data.
-          </p>
-        </div>
-
         <div className="text-xs text-muted-foreground mt-2 bg-muted/40 p-3 rounded-md border">
           <p className="font-medium mb-1">For best results:</p>
           <ul className="list-disc pl-5 space-y-1">
             <li>Make sure your website is publicly accessible</li>
-            <li>The crawler will extract content from HTML pages and JavaScript-rendered content</li>
+            <li>The crawler will extract content from all pages on your website</li>
             <li>Only pages on the same domain will be crawled</li>
-            <li>The crawler will process all pages found on your website</li>
+            <li>The crawler automatically adjusts its speed to avoid rate limiting</li>
           </ul>
         </div>
       </CardContent>
