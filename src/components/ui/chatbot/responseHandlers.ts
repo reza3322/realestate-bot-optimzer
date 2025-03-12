@@ -1,3 +1,4 @@
+
 import { supabase } from "@/lib/supabase";
 import { ChatbotResponse, Message, PropertySearchParams } from "./types";
 
@@ -373,7 +374,7 @@ export const formatPropertyRecommendations = (recommendations: any[], maxResults
     } else {
       // Use property ID if available, otherwise use a placeholder
       const listingId = property.id ? property.id.substring(0, 6) : (10000 + index);
-      formattedResponse += `🔗 [View Listing](${https://youragency.com/listing/${listingId})\n\n`;
+      formattedResponse += `🔗 [View Listing](https://youragency.com/listing/${listingId})\n\n`;
     }
   });
   
