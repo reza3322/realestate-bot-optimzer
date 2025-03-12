@@ -4,3 +4,4 @@ project_id = "ckgaqkbsnrvccctqxsqv"
 
 [global.env]
 # Any environment variables for Edge Functions
+ENABLE_ALL_FEATURES = "true"

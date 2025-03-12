@@ -10,63 +10,12 @@ import { Switch } from '@/components/ui/switch';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
-interface PricingPlan {
-  price: string;
-  yearlyPrice: string;
-  period: string;
-  features: string[];
-  description: string;
-  buttonText: string;
-  href: string;
-}
-
-const pricingPlan: PricingPlan = {
-  price: "199",
-  yearlyPrice: "169", // 15% discount for annual payment
-  period: "per month",
-  features: [
-    "AI Chatbot integration",
-    "Advanced CRM functionality",
-    "Unlimited qualified leads",
-    "Automated follow-ups",
-    "Property matching engine",
-    "Priority support",
-    "Social media AI agent",
-    "Custom integrations",
-    "White-label solutions",
-    "Advanced analytics",
-    "API access"
-  ],
-  description: "All features included for real estate professionals",
-  buttonText: "Get Started",
-  href: "#",
-};
-
 const Cta = () => {
   const [isMonthly, setIsMonthly] = useState(true);
   const switchRef = useRef<HTMLButtonElement>(null);
   const navigate = useNavigate();
   const [isSignedIn, setIsSignedIn] = useState(false);
   
-  const useMediaQuery = (query: string): boolean => {
-    const [matches, setMatches] = useState(false);
-    
-    useState(() => {
-      const media = window.matchMedia(query);
-      if (media.matches !== matches) {
-        setMatches(media.matches);
-      }
-      
-      const listener = () => setMatches(media.matches);
-      window.addEventListener("resize", listener);
-      return () => window.removeEventListener("resize", listener);
-    });
-    
-    return matches;
-  };
-  
-  const isDesktop = useMediaQuery("(min-width: 768px)");
-
   const handleToggle = (checked: boolean) => {
     setIsMonthly(!checked);
     if (checked && switchRef.current) {
@@ -96,9 +45,9 @@ const Cta = () => {
     }
   };
 
-  const handlePlanSelection = () => {
+  const handlePlanSelection = (event: React.MouseEvent) => {
     // Prevent any default scrolling behavior
-    event?.preventDefault();
+    event.preventDefault();
     
     if (isSignedIn) {
       navigate('/dashboard');
@@ -108,6 +57,27 @@ const Cta = () => {
     }
   };
 
+  const features = [
+    "AI Chatbot integration",
+    "Advanced CRM functionality",
+    "Unlimited qualified leads",
+    "Automated follow-ups",
+    "Property matching engine",
+    "Priority support",
+    "Social media AI agent",
+    "Custom integrations",
+    "White-label solutions",
+    "Advanced analytics",
+    "API access"
+  ];
+
+  const perks = [
+    "24/7 Support",
+    "Exclusive Webinars",
+    "Priority Assistance",
+    "Early Feature Access"
+  ];
+
   return (
     <section id="pricing" className="py-20 relative">
       <div className="container">
@@ -116,7 +86,7 @@ const Cta = () => {
             Simple, Transparent Pricing
           </h2>
           <p className="text-muted-foreground text-lg max-w-3xl mx-auto">
-            One plan with all features included. Get access to our platform, lead generation tools, and dedicated support.
+            One ultimate plan with all features included. Get access to our platform, lead generation tools, and dedicated support.
           </p>
         </div>
 
@@ -137,72 +107,74 @@ const Cta = () => {
           </div>
         </div>
 
-        <div className="max-w-lg mx-auto">
-          <motion.div
-            initial={{ y: 50, opacity: 0 }}
-            whileInView={{ y: 0, opacity: 1 }}
-            viewport={{ once: true }}
-            transition={{
-              duration: 1.2,
-              type: "spring",
-              stiffness: 100,
-              damping: 30,
-              delay: 0.3,
-              opacity: { duration: 0.5 },
-            }}
-            className="rounded-2xl border-2 border-primary p-6 bg-background text-center flex flex-col relative"
-          >
-            <div className="absolute top-0 right-0 bg-primary py-0.5 px-2 rounded-bl-xl rounded-tr-xl flex items-center">
-              <Star className="text-primary-foreground h-4 w-4 fill-current" />
-              <span className="text-primary-foreground ml-1 font-sans font-semibold text-xs">
-                All Features
+        <motion.div
+          initial={{ y: 50, opacity: 0 }}
+          whileInView={{ y: 0, opacity: 1 }}
+          viewport={{ once: true }}
+          transition={{
+            duration: 1.2,
+            type: "spring",
+            stiffness: 100,
+            damping: 30,
+            delay: 0.3,
+            opacity: { duration: 0.5 },
+          }}
+          className="max-w-lg mx-auto rounded-2xl border border-border bg-background overflow-hidden"
+        >
+          {/* Plan header */}
+          <div className="p-6 pb-4">
+            <h3 className="text-2xl font-bold">Ultimate Plan</h3>
+            <p className="text-muted-foreground mt-1">
+              Access everything you need to grow your business.
+            </p>
+            
+            <div className="mt-6 flex items-baseline">
+              <span className="text-5xl font-bold">
+                €{isMonthly ? "199" : "169"}
               </span>
+              {isMonthly && (
+                <span className="text-muted-foreground ml-2 line-through">€199</span>
+              )}
             </div>
-            <div className="flex-1 flex flex-col">
-              <p className="text-base font-semibold text-muted-foreground">
-                COMPLETE SOLUTION
-              </p>
-              <div className="mt-6 flex items-center justify-center gap-x-2">
-                <span className="text-5xl font-bold tracking-tight text-foreground">
-                  €{isMonthly ? pricingPlan.price : pricingPlan.yearlyPrice}
-                </span>
-                <span className="text-sm font-semibold leading-6 tracking-wide text-muted-foreground">
-                  / {pricingPlan.period}
-                </span>
-              </div>
-
-              <p className="text-xs leading-5 text-muted-foreground mt-1">
-                {isMonthly ? "billed monthly" : "billed annually"}
-              </p>
-
-              <ul className="mt-6 space-y-3">
-                {pricingPlan.features.map((feature, idx) => (
-                  <li key={idx} className="flex items-start gap-2">
-                    <Check className="h-4 w-4 text-primary mt-1 flex-shrink-0" />
-                    <span className="text-left text-sm">{feature}</span>
-                  </li>
-                ))}
-              </ul>
-
-              <div className="mt-auto pt-8">
-                <Button 
-                  variant="default" 
-                  size="lg"
-                  className={cn(
-                    "w-full group relative overflow-hidden",
-                    "transform-gpu transition-all duration-300 ease-out hover:ring-2 hover:ring-primary hover:ring-offset-1 hover:bg-primary hover:text-primary-foreground"
-                  )}
-                  onClick={handlePlanSelection}
-                >
-                  {pricingPlan.buttonText}
-                </Button>
-                <p className="mt-4 text-xs leading-5 text-muted-foreground">
-                  {pricingPlan.description}
-                </p>
-              </div>
+            <p className="text-sm text-muted-foreground mt-1">
+              {isMonthly ? "per month" : "per month, billed annually"}
+            </p>
+            
+            <Button 
+              className="w-full mt-6"
+              size="lg"
+              onClick={handlePlanSelection}
+            >
+              Get Started
+            </Button>
+          </div>
+          
+          {/* Features section */}
+          <div className="border-t bg-muted/40 p-6">
+            <h4 className="font-semibold mb-4">Features:</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {features.slice(0, 4).map((feature, i) => (
+                <div key={`feature-${i}`} className="flex items-start gap-2">
+                  <Check className="h-4 w-4 text-primary mt-1 flex-shrink-0" />
+                  <span className="text-sm">{feature}</span>
+                </div>
+              ))}
             </div>
-          </motion.div>
-        </div>
+          </div>
+          
+          {/* Perks section */}
+          <div className="border-t bg-muted/40 p-6">
+            <h4 className="font-semibold mb-4">Perks:</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {perks.map((perk, i) => (
+                <div key={`perk-${i}`} className="flex items-start gap-2">
+                  <Check className="h-4 w-4 text-primary mt-1 flex-shrink-0" />
+                  <span className="text-sm">{perk}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </motion.div>
       </div>
     </section>
   );
