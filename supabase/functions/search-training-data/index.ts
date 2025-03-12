@@ -80,20 +80,73 @@ serve(async (req) => {
       }
     }
 
-    // Fetch property listings
+    // Fetch property listings - directly from the database, not hardcoded
     if (includeProperties) {
-      const { data: propertiesData, error: propertiesError } = await supabaseClient
-        .from('properties')
-        .select('id, title, description, price, bedrooms, bathrooms, city, state, status, url')
-        .eq('user_id', userId)
-        .eq('status', 'active')
-        .limit(maxResults);
+      // First check if the query seems to be about properties
+      const propertyTerms = ['property', 'properties', 'house', 'home', 'apartment', 'villa', 'flat', 'condo', 
+                             'real estate', 'buy', 'rent', 'sale', 'bedroom', 'bathroom', 'pool'];
       
-      if (propertiesError) {
-        console.error('Error fetching properties:', propertiesError);
-      } else if (propertiesData && propertiesData.length > 0) {
-        propertyListings = propertiesData;
-        console.log(`Found ${propertyListings.length} property listings`);
+      const isPropertyQuery = propertyTerms.some(term => query.toLowerCase().includes(term));
+      
+      if (isPropertyQuery) {
+        // Extract potential location from query
+        let locationFilter = '';
+        const locationMatches = query.match(/in\s+([a-zA-Z\s]+?)(?:,|\s|$|\?|\.)/i);
+        if (locationMatches && locationMatches[1]) {
+          locationFilter = locationMatches[1].trim();
+        }
+        
+        // Extract potential bedrooms from query
+        let bedroomsFilter = null;
+        const bedroomsMatches = query.match(/(\d+)\s*(?:bed|bedroom|bedrooms|br)/i);
+        if (bedroomsMatches && bedroomsMatches[1]) {
+          bedroomsFilter = parseInt(bedroomsMatches[1]);
+        }
+        
+        // Build query based on extracted filters
+        let query = supabaseClient
+          .from('properties')
+          .select('id, title, description, price, bedrooms, bathrooms, city, state, status, url, has_pool')
+          .eq('user_id', userId)
+          .eq('status', 'active');
+        
+        // Add location filter if present
+        if (locationFilter) {
+          query = query.or(`city.ilike.%${locationFilter}%,state.ilike.%${locationFilter}%,description.ilike.%${locationFilter}%`);
+        }
+        
+        // Add bedrooms filter if present
+        if (bedroomsFilter !== null) {
+          query = query.eq('bedrooms', bedroomsFilter);
+        }
+        
+        // Add pool filter if mentioned
+        if (query.toLowerCase().includes('pool')) {
+          query = query.eq('has_pool', true);
+        }
+        
+        // Execute query
+        const { data: propertiesData, error: propertiesError } = await query.limit(maxResults);
+        
+        if (propertiesError) {
+          console.error('Error fetching properties:', propertiesError);
+        } else if (propertiesData && propertiesData.length > 0) {
+          propertyListings = propertiesData;
+          console.log(`Found ${propertyListings.length} property listings matching query terms`);
+        } else {
+          // If no specific filters matched, just return some properties
+          const { data: fallbackProperties, error: fallbackError } = await supabaseClient
+            .from('properties')
+            .select('id, title, description, price, bedrooms, bathrooms, city, state, status, url, has_pool')
+            .eq('user_id', userId)
+            .eq('status', 'active')
+            .limit(maxResults);
+          
+          if (!fallbackError && fallbackProperties && fallbackProperties.length > 0) {
+            propertyListings = fallbackProperties;
+            console.log(`Found ${propertyListings.length} fallback property listings`);
+          }
+        }
       }
     }
 
