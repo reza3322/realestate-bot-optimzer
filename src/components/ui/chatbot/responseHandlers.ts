@@ -1,3 +1,4 @@
+
 import { supabase } from "@/lib/supabase";
 import { ChatbotResponse, Message, PropertySearchParams } from "./types";
 
@@ -93,8 +94,8 @@ export const testChatbotResponse = async (
     let leadInfo = visitorInfo;
     let shouldCaptureLeadInfo = false;
     
-    // Check if the message seems to be asking about properties or contains potential lead information
-    const isPropertyQuery = message.toLowerCase().match(/propert(y|ies)|house|apartment|villa|home|buy|rent|sale/i);
+    // Check if the message seems to be asking about properties - IMPROVED DETECTION
+    const isPropertyQuery = message.toLowerCase().match(/propert(y|ies)|house|apartment|villa|home|buy|rent|sale|listing|show me|find|looking for/i);
     const isPotentialLeadInfo = message.toLowerCase().match(/name|email|phone|call|contact|reach|interested/i);
     
     if (isPropertyQuery) {
@@ -104,7 +105,7 @@ export const testChatbotResponse = async (
       // Extract search parameters from the message
       const searchParams = extractPropertySearchParams(message);
       
-      // Search for properties in the user's database
+      // Search for properties in the user's database - PRIORITIZE PROPERTY SEARCH
       propertyRecommendations = await searchProperties(userId, searchParams);
       console.log(`Found ${propertyRecommendations.length} property recommendations`);
     }
@@ -168,7 +169,7 @@ export const testChatbotResponse = async (
 };
 
 /**
- * Extract property search parameters from a message
+ * Extract property search parameters from a message - ENHANCED TO CATCH MORE CRITERIA
  */
 export const extractPropertySearchParams = (message: string): PropertySearchParams => {
   const lowerMessage = message.toLowerCase();
@@ -178,10 +179,12 @@ export const extractPropertySearchParams = (message: string): PropertySearchPara
     maxResults: 3
   };
   
-  // Extract location
+  // Extract location - MORE PATTERNS
   const locationMatches = [
     { regex: /in\s+([a-zA-Z\s]+?)(?:,|\s|$|\?|\.)/i, group: 1 },
-    { regex: /(?:marbella|ibiza|malaga|madrid|barcelona|valencia|seville|granada)/gi, group: 0 }
+    { regex: /(?:at|near|close to|around)\s+([a-zA-Z\s]+?)(?:,|\s|$|\?|\.)/i, group: 1 },
+    { regex: /(?:marbella|ibiza|malaga|madrid|barcelona|valencia|seville|granada|golden mile|puerto banus)/gi, group: 0 },
+    { regex: /(?:property|house|apartment|villa) in ([a-zA-Z\s]+?)(?:,|\s|$|\?|\.)/i, group: 1 }
   ];
   
   for (const match of locationMatches) {
@@ -192,15 +195,15 @@ export const extractPropertySearchParams = (message: string): PropertySearchPara
     }
   }
   
-  // Extract property type
-  const typeRegex = /(villa|apartment|penthouse|house|condo|flat|studio)/gi;
+  // Extract property type - MORE VARIATIONS
+  const typeRegex = /(villa|apartment|penthouse|house|condo|flat|studio|property)/gi;
   const typeMatch = lowerMessage.match(typeRegex);
   if (typeMatch) {
     params.type = typeMatch[0].toLowerCase();
   }
   
-  // Extract price range
-  const minPriceRegex = /(?:from|min|above|over|more than)\s*(?:€|euro|eur|£|\$|usd|dollar)?[ ]?(\d+[,.]\d+|\d+)[ ]?(?:€|euro|eur|£|\$|usd|dollar|k|m)?/i;
+  // Extract price range - MORE FLEXIBLE
+  const minPriceRegex = /(?:from|min|above|over|more than|starting at|at least)\s*(?:€|euro|eur|£|\$|usd|dollar)?[ ]?(\d+[,.]\d+|\d+)[ ]?(?:€|euro|eur|£|\$|usd|dollar|k|m)?/i;
   const minPriceMatch = lowerMessage.match(minPriceRegex);
   if (minPriceMatch) {
     let minPrice = minPriceMatch[1].replace(',', '');
@@ -212,7 +215,7 @@ export const extractPropertySearchParams = (message: string): PropertySearchPara
     params.minPrice = parseFloat(minPrice);
   }
   
-  const maxPriceRegex = /(?:up to|max|under|below|less than)\s*(?:€|euro|eur|£|\$|usd|dollar)?[ ]?(\d+[,.]\d+|\d+)[ ]?(?:€|euro|eur|£|\$|usd|dollar|k|m)?/i;
+  const maxPriceRegex = /(?:up to|max|under|below|less than|no more than|maximum)\s*(?:€|euro|eur|£|\$|usd|dollar)?[ ]?(\d+[,.]\d+|\d+)[ ]?(?:€|euro|eur|£|\$|usd|dollar|k|m)?/i;
   const maxPriceMatch = lowerMessage.match(maxPriceRegex);
   if (maxPriceMatch) {
     let maxPrice = maxPriceMatch[1].replace(',', '');
@@ -224,7 +227,7 @@ export const extractPropertySearchParams = (message: string): PropertySearchPara
     params.maxPrice = parseFloat(maxPrice);
   }
   
-  // Extract bedrooms
+  // Extract bedrooms - MORE VARIATIONS
   const bedroomsRegex = /(\d+)\s*(?:bed|bedroom|br)/i;
   const bedroomsMatch = lowerMessage.match(bedroomsRegex);
   if (bedroomsMatch) {
@@ -250,44 +253,56 @@ export const extractPropertySearchParams = (message: string): PropertySearchPara
     }
   }
   
+  // Add keywords from message
+  params.keywords = [];
+  
+  // Extract feature keywords
+  const featureKeywords = ['sea view', 'garden', 'terrace', 'balcony', 'garage', 'parking', 'furnished'];
+  featureKeywords.forEach(keyword => {
+    if (lowerMessage.includes(keyword)) {
+      params.keywords.push(keyword);
+    }
+  });
+  
   console.log("Extracted property search parameters:", params);
   return params;
 };
 
 /**
- * Extract lead information from a message
+ * Extract lead information from a message - IMPROVED TO CATCH MORE INFO
  */
 export const extractLeadInformation = (message: string, existingInfo: any = {}): any => {
   const leadInfo: any = {};
   
-  // Extract email
+  // Extract email - IMPROVED PATTERN
   const emailRegex = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g;
   const emailMatch = message.match(emailRegex);
   if (emailMatch && !existingInfo.email) {
     leadInfo.email = emailMatch[0];
   }
   
-  // Extract phone number (various formats)
-  const phoneRegex = /(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/g;
+  // Extract phone number - MORE VARIATIONS
+  const phoneRegex = /(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}|\d{3}[-.\s]?\d{3}[-.\s]?\d{4}|\+\d{10,12}/g;
   const phoneMatch = message.match(phoneRegex);
   if (phoneMatch && !existingInfo.phone) {
     leadInfo.phone = phoneMatch[0];
   }
   
-  // Extract names - this is more complex and could lead to false positives
-  // Look for phrases like "my name is" or "I am"
-  const nameRegex = /(?:my name is|I am|I'm) ([A-Z][a-z]+ [A-Z][a-z]+)/i;
+  // Extract names - MORE VARIATIONS
+  const nameRegex = /(?:my name is|I am|I'm|this is) ([A-Z][a-z]+(?: [A-Z][a-z]+)?)/i;
   const nameMatch = message.match(nameRegex);
   if (nameMatch && !existingInfo.firstName) {
     const fullName = nameMatch[1].split(' ');
     if (fullName.length >= 2) {
       leadInfo.firstName = fullName[0];
       leadInfo.lastName = fullName.slice(1).join(' ');
+    } else {
+      leadInfo.firstName = fullName[0];
     }
   }
   
-  // Extract budget - look for currency amounts in context of budget
-  const budgetRegex = /(?:budget|afford|looking|spend|price range|range).*?(?:€|euro|eur|£|\$|usd|dollars?)?[ ]?(\d+[,.]\d+|\d+)[ ]?(?:k|m|million|thousand|€|euro|eur|£|\$|usd|dollars?)/i;
+  // Extract budget - MORE VARIATIONS
+  const budgetRegex = /(?:budget|afford|looking|spend|price range|range|willing to pay).*?(?:€|euro|eur|£|\$|usd|dollars?)?[ ]?(\d+[,.]\d+|\d+)[ ]?(?:k|m|million|thousand|€|euro|eur|£|\$|usd|dollars?)/i;
   const budgetMatch = message.match(budgetRegex);
   if (budgetMatch && !existingInfo.budget) {
     let budget = budgetMatch[1].replace(',', '');
@@ -315,10 +330,10 @@ export const extractLeadInformation = (message: string, existingInfo: any = {}):
 /**
  * Format property recommendations into a structured, markdown-friendly format
  */
-export const formatPropertyRecommendations = (recommendations: any[], maxResults = 2) => {
+export const formatPropertyRecommendations = (recommendations: any[], maxResults = 3) => {
   if (!recommendations || recommendations.length === 0) return "";
   
-  // Limit to max number of results (default now 2)
+  // Limit to max number of results (now 3)
   const limitedRecommendations = recommendations.slice(0, maxResults);
   
   let formattedResponse = "Here are **" + limitedRecommendations.length + " properties** that match what you're looking for:\n\n";
@@ -332,7 +347,7 @@ export const formatPropertyRecommendations = (recommendations: any[], maxResults
     // Get the property title or create one
     const title = property.title || `${property.type || 'Property'} in ${property.city || 'Exclusive Location'}`;
     
-    // Create property listing with the exact requested format (but more concise)
+    // Create property listing with the exact requested format
     formattedResponse += `🏡 **${title} – ${price}**\n`;
     formattedResponse += `📍 **${property.location || (property.city && property.state ? `${property.city}, ${property.state}` : 'Exclusive Location')}**\n`;
     
@@ -342,7 +357,7 @@ export const formatPropertyRecommendations = (recommendations: any[], maxResults
     if (property.bathrooms) features.push(`${property.bathrooms} Bath`);
     if (property.has_pool) features.push(`Pool`);
     
-    // Add features as a single line with commas - more concise
+    // Add features as a single line with commas
     if (features.length > 0) {
       formattedResponse += `✅ ${features.join(', ')}\n`;
     } else if (property.features && property.features.length > 0) {
@@ -353,7 +368,7 @@ export const formatPropertyRecommendations = (recommendations: any[], maxResults
       formattedResponse += `✅ ${limitedFeatures}\n`;
     }
     
-    // URL
+    // URL - ALWAYS INCLUDE
     if (property.url) {
       formattedResponse += `🔗 [View Listing](${property.url})\n\n`;
     } else {
