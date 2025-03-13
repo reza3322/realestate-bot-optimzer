@@ -37,7 +37,8 @@ serve(async (req) => {
       conversationId, 
       previousMessages = [], 
       propertyRecommendations = [],
-      trainingResults = {} 
+      trainingResults = {},
+      systemMessage = '' // Allow custom system message override
     } = await req.json();
     
     console.log(`🔄 Processing request from user ${userId}, message: ${message.substring(0, 50)}...`);
@@ -108,7 +109,8 @@ serve(async (req) => {
     // NEVER create fictional properties
     let finalPropertyRecommendations = [...propertyRecommendations];
     
-    if (finalPropertyRecommendations.length === 0 && shouldSearchProperties) {
+    // MODIFIED: Always fetch from database if it's a property query, regardless of what was passed
+    if (shouldSearchProperties) {
       console.log("🔍 User appears to be asking about properties. Fetching from database...");
       const dbProperties = await fetchPropertiesFromDatabase(userId, message);
       
@@ -123,23 +125,74 @@ serve(async (req) => {
       ((trainingResults.qaMatches && trainingResults.qaMatches.length > 0) || 
        (trainingResults.fileContent && trainingResults.fileContent.length > 0));
     
+    // MODIFIED: Check if user is asking about specific property attributes
+    const askingAboutPrice = message.toLowerCase().includes('price') || message.toLowerCase().includes('cost') || message.toLowerCase().includes('how much');
+    const askingAboutBedrooms = message.toLowerCase().includes('bedroom') || message.toLowerCase().includes('how many room');
+    const askingAboutPool = message.toLowerCase().includes('pool') || message.toLowerCase().includes('swimming');
+    const askingSpecificAttribute = askingAboutPrice || askingAboutBedrooms || askingAboutPool;
+    
     let response = '';
     let isVerified = false;
     
-    // If we have matching training data, prioritize using that
-    if (canUseTrainingData) {
-      console.log("🧠 Using training data to generate response");
+    // Handle specific property attribute queries directly if we have matching properties
+    if (finalPropertyRecommendations.length > 0 && askingSpecificAttribute) {
+      console.log("🎯 User is asking about specific property attributes, generating direct response");
+      if (askingAboutPrice) {
+        const property = finalPropertyRecommendations[0];
+        const price = typeof property.price === 'number' 
+          ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(property.price)
+          : property.price;
+        response = `${property.title || 'This property'} is priced at ${price}. Would you like to know more about it or schedule a viewing? 😊`;
+      } else if (askingAboutBedrooms) {
+        const property = finalPropertyRecommendations[0];
+        response = `${property.title || 'This property'} has ${property.bedroomCount || 'several'} bedrooms. Would you like to see it in person?`;
+      } else if (askingAboutPool) {
+        const property = finalPropertyRecommendations[0];
+        if (property.hasPool) {
+          response = `Yes, ${property.title || 'this property'} has a swimming pool. It's a beautiful feature of the property!`;
+        } else {
+          response = `${property.title || 'This property'} doesn't have a swimming pool. Would you like me to find properties with pools instead?`;
+        }
+      }
+      isVerified = true;
+    }
+    // If we haven't generated a direct response and we have training data, use that
+    else if (!response && !shouldSearchProperties && canUseTrainingData) {
+      console.log("🧠 Using training data to generate response for non-property question");
       response = generateTrainingDataResponse(message, trainingResults);
       isVerified = true;
     } 
     // Otherwise, use OpenAI if available with strict instructions not to make up properties
-    else if (openai) {
-      console.log("🤖 Using OpenAI to generate response with strict property guidelines");
+    else if (!response && openai) {
+      console.log("🤖 Using OpenAI to generate response with human-like communication");
       
       // Check if we need to ask for contact information (no properties found)
       const shouldAskForContact = finalPropertyRecommendations.length === 0 && shouldSearchProperties;
       
-      // Update system prompt to emphasize: ONLY use properties from database & ask for contact when no properties
+      // Default system message with more human-like tone if not provided
+      const defaultSystemMessage = `You are a helpful and human-like real estate assistant.
+
+Guidelines:
+- Always check the user's property database for answers.
+- If a user asks about a specific property, respond only with the relevant detail (e.g., just the price, just the number of bedrooms).
+- If a user asks general real estate questions, check the provided training data.
+- Keep responses short (3-5 lines max) and engaging like a human assistant would.
+- If no property matches, ask if they want to be contacted instead of making up details.
+- Remember what the user previously asked so you don't repeat questions.
+- NEVER invent property listings or details. Do not make up any property information.
+- ONLY recommend properties that exist in the provided propertyRecommendations array.
+
+Example Interactions:
+**User:** "What is the price of the Golden Mile villa?"
+**Chatbot:** "The Golden Mile Villa is priced at €2,500,000. Would you like to schedule a viewing? 😊"
+
+**User:** "Does it have a pool?"
+**Chatbot:** "Yes, this villa has a private swimming pool. Let me know if you'd like more details!"`;
+      
+      // Use provided system message or default
+      const finalSystemMessage = systemMessage || defaultSystemMessage;
+      
+      // Update property context with available properties
       const propertyContext = finalPropertyRecommendations.length > 0 
         ? `You have found ${finalPropertyRecommendations.length} properties in the database that match the user's criteria. ONLY show these properties when the user asks about real estate.` 
         : "You don't have any specific property listings that match the user's query in our database. DO NOT make up or invent properties. Instead, ask for their contact details (email/phone) so we can notify them when matching properties become available.";
@@ -148,7 +201,8 @@ serve(async (req) => {
       response = await generateAIResponse(
         message, 
         recentMessages, 
-        propertyContext, 
+        finalSystemMessage,
+        propertyContext,
         visitorInfo,
         trainingResults?.fileContent || [],
         shouldAskForContact
@@ -162,6 +216,7 @@ serve(async (req) => {
         response = await generateAIResponse(
           message, 
           recentMessages, 
+          finalSystemMessage,
           propertyContext, 
           visitorInfo,
           trainingResults?.fileContent || [],
@@ -177,12 +232,12 @@ serve(async (req) => {
       isVerified = true;
     }
     
-    // CRITICAL FIX: Always show property recommendations when we have them
-    // Never show property recommendations that don't exist in the database
-    const showPropertyRecommendations = shouldSearchProperties || 
-      (finalPropertyRecommendations.length > 0 && message.toLowerCase().match(/property|house|villa|apartment|flat|condo|real estate|buy|rent|purchase/i));
+    // CRITICAL FIX: Always show property recommendations when we have them and user is asking about properties
+    const showPropertyRecommendations = shouldSearchProperties && 
+      finalPropertyRecommendations.length > 0 &&
+      !askingSpecificAttribute; // Don't show all properties if asking about specific attribute
     
-    if (finalPropertyRecommendations.length > 0 && showPropertyRecommendations && 
+    if (showPropertyRecommendations && 
         !response.includes('🏡') && !response.includes('View Listing')) {
       response = formatPropertyRecommendations(response, finalPropertyRecommendations);
     } else if (finalPropertyRecommendations.length === 0 && shouldSearchProperties && 
@@ -413,26 +468,13 @@ function addContactRequestToResponse(response) {
     return response; // Already has contact request
   }
   
-  return `${response}\n\nI couldn't find any properties matching your criteria in our database right now. Would you like to leave your email or phone number so we can contact you when properties that match your requirements become available?`;
+  return `${response}\n\nI couldn't find any properties matching your criteria in our database right now. Would you like to leave your email or phone number so we can contact you when properties that match your requirements become available? 😊`;
 }
 
 // Generate a response using OpenAI with improved instructions for ONLY using database properties
-async function generateAIResponse(message, previousMessages, propertyContext, visitorInfo, crawledContent = [], shouldAskForContact = false, includeQualityGuidelines = false) {
+async function generateAIResponse(message, previousMessages, systemMessage, propertyContext, visitorInfo, crawledContent = [], shouldAskForContact = false, includeQualityGuidelines = false) {
   // Create system message with improved instructions to NEVER invent properties
-  let systemContent = `You are a friendly and conversational real estate assistant. Your PRIMARY GOAL is to recommend properties that ACTUALLY EXIST in the database when users ask for them.
-
-CRITICAL GUIDELINES:
-1. ONLY show properties from the database - NEVER make up or invent property details that don't exist.
-2. If NO properties match a user's search, DO NOT make up properties. Instead, ask for their contact details (email/phone).
-3. Keep responses BRIEF (2-3 lines) - users prefer direct answers over explanations.
-4. Don't ask questions the user has already answered (like location, bedrooms, etc).
-5. When recommending properties, ALWAYS use the property URL provided.
-6. Only ask for contact details AFTER showing properties OR when no properties match their search.
-7. Remember previous parts of the conversation and don't repeat questions.
-
-${propertyContext}
-
-${shouldAskForContact ? 'IMPORTANT: Since we have no matching properties, ask the user for their contact information (email/phone) so we can notify them when suitable properties become available.' : ''}`;
+  let systemContent = systemMessage + `\n\n${propertyContext}`;
 
   // Add crawled content if available
   if (crawledContent && crawledContent.length > 0) {
@@ -441,6 +483,10 @@ ${shouldAskForContact ? 'IMPORTANT: Since we have no matching properties, ask th
     crawledContent.forEach((item, index) => {
       systemContent += `Source: ${item.source}\nCategory: ${item.category}\nContent: ${item.text.substring(0, 300)}...\n\n`;
     });
+  }
+
+  if (shouldAskForContact) {
+    systemContent += '\n\nIMPORTANT: Since we have no matching properties, ask the user for their contact information (email/phone) so we can notify them when suitable properties become available.';
   }
 
   // Create messages array for OpenAI with the enhanced system message
@@ -608,7 +654,7 @@ function generateFallbackResponse(message, propertyRecommendations) {
   
   // Check if the query seems to be about properties
   if (message.toLowerCase().match(/house|property|apartment|villa|flat|condo|real estate|buy|rent|purchase/i)) {
-    return "I couldn't find any properties matching your criteria in our database right now. Would you like to leave your email or phone number so we can contact you when properties that match your requirements become available?";
+    return "I couldn't find any properties matching your criteria in our database right now. Would you like to leave your email or phone number so we can contact you when properties that match your requirements become available? 😊";
   }
   
   // Generic fallback

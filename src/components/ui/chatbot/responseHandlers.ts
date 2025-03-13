@@ -61,10 +61,10 @@ export const testChatbotResponse = async (
     return {
       response: "I'm sorry, I encountered an error while processing your request.",
       error: error instanceof Error ? error.message : String(error),
-      conversationId: conversationId,
+      conversationId: conversationId || ('conv_error_' + Date.now()),
       propertyRecommendations: [],
       source: 'ai',
-      leadInfo: {}
+      leadInfo: {} // Add empty leadInfo
     };
   }
 };
@@ -98,7 +98,10 @@ const handleDemoChatbotResponse = async (
           IMPORTANT: You should NEVER recommend any properties yourself. Instead, explain that our client chatbots recommend properties from real estate agencies' databases.
           Explain that RealHomeAI helps real estate agents qualify leads and recommend properties to their customers.
           You can explain how the chatbot technology works, pricing, features, but do NOT pretend to be a real estate agent or try to sell properties.
-          NEVER invent or make up any details that are not provided in this instruction.`
+          NEVER invent or make up any details that are not provided in this instruction.
+          
+          Keep your responses short (3-5 lines max) and engaging, like a friendly human assistant would.
+          Use conversational language and be helpful.`
         }),
       }
     );
@@ -122,7 +125,7 @@ const handleDemoChatbotResponse = async (
     return {
       response: "I'm sorry, I encountered an error while processing your request.",
       error: error instanceof Error ? error.message : String(error),
-      conversationId: conversationId,
+      conversationId: conversationId || ('conv_error_' + Date.now()),
       propertyRecommendations: [],
       source: 'ai',
       leadInfo: {} // Add empty leadInfo
@@ -173,7 +176,7 @@ const handleClientChatbotResponse = async (
     // 2. Check if the message is about properties to search directly in the database
     const isPropertyQuery = message.toLowerCase().match(/buy|rent|house|apartment|villa|property|home|spain|marbella|location|bedroom|bathroom|pool/i);
     
-    // 3. Search for properties in the database directly if it's a property query or if no training data was found
+    // 3. Search for properties in the database - MODIFIED: ALWAYS search for properties when it's a property query
     let dbProperties = [];
     if (isPropertyQuery) {
       console.log('Property query detected, searching properties directly in database');
@@ -182,7 +185,7 @@ const handleClientChatbotResponse = async (
       const locationMatch = message.toLowerCase().match(/in\s+([a-zA-Z\s]+)/i);
       const location = locationMatch ? locationMatch[1].trim() : null;
       
-      // Search for properties in the database directly
+      // Search for properties in the database directly - ALWAYS search when property-related
       try {
         const propertiesResponse = await fetch(
           'https://ckgaqkbsnrvccctqxsqv.supabase.co/functions/v1/search-properties',
@@ -217,10 +220,10 @@ const handleClientChatbotResponse = async (
     let useTrainingDataResponse = false;
     let trainingDataResponse = '';
     
-    // First check if we have direct QA matches from training data
-    if (trainingResults.qaMatches && trainingResults.qaMatches.length > 0) {
+    // Non-property queries should prioritize training data
+    if (!isPropertyQuery && trainingResults.qaMatches && trainingResults.qaMatches.length > 0) {
       const bestMatch = trainingResults.qaMatches[0];
-      if (bestMatch.similarity > 0.75) { // Higher threshold for better matches
+      if (bestMatch.similarity > 0.7) { // Higher threshold for better matches
         console.log(`Using training data QA match with similarity ${bestMatch.similarity}`);
         trainingDataResponse = bestMatch.answer;
         useTrainingDataResponse = true;
@@ -228,7 +231,7 @@ const handleClientChatbotResponse = async (
     }
     
     // Next check for file content matches if no good QA match
-    if (!useTrainingDataResponse && trainingResults.fileContent && trainingResults.fileContent.length > 0) {
+    if (!useTrainingDataResponse && !isPropertyQuery && trainingResults.fileContent && trainingResults.fileContent.length > 0) {
       const bestFileMatch = trainingResults.fileContent[0];
       if (bestFileMatch.similarity > 0.7) { // Higher threshold for better matches
         console.log(`Using training file content match with similarity ${bestFileMatch.similarity}`);
@@ -280,13 +283,33 @@ const handleClientChatbotResponse = async (
             previousMessages: combinedHistory.length > 0 ? combinedHistory : [],
             trainingResults,
             propertyRecommendations: dbProperties,
-            // Specific instructions for the client chatbot
-            systemMessage: `You are an AI assistant for a real estate agency. 
-            IMPORTANT: ONLY recommend properties that are in the provided propertyRecommendations array.
-            NEVER invent property listings or details. Do not make up any property information.
-            If no properties are available matching the query, ask for the user's contact information (email/phone) to follow up when matching properties become available.
-            When answering questions, prioritize information from the provided training data.
-            Be conversational, helpful and professional. Your goal is to help visitors find properties and qualify them as leads.`
+            // IMPROVED system message for more human-like responses
+            systemMessage: `You are a helpful and human-like real estate assistant.
+
+Guidelines:
+- Always check the user's property database for answers.
+- If a user asks about a specific property, respond only with the relevant detail (e.g., just the price, just the number of bedrooms).
+- If a user asks general real estate questions, use the provided training data.
+- Keep responses short (3-5 lines max) and engaging like a human assistant would.
+- If no property matches, ask if they want to be contacted instead of making up details.
+- Remember what the user previously asked so you don't repeat questions.
+- NEVER invent property listings or details. Do not make up any property information.
+- ONLY recommend properties that exist in the provided propertyRecommendations array.
+
+Example Interactions:
+**User:** "What is the price of the Golden Mile villa?"
+**Chatbot:** "The Golden Mile Villa is priced at €2,500,000. Would you like to schedule a viewing? 😊"
+
+**User:** "Does it have a pool?"
+**Chatbot:** "Yes, this villa has a private swimming pool. Let me know if you'd like more details!"
+
+**User:** "Can you show me beachfront villas?"
+**Chatbot:** "Here are 3 beachfront villas in Marbella: 
+🏡 **Villa Azul – €3,100,000**  
+📍 Location: Marbella Beach  
+✅ 4 Bedrooms, Private Pool  
+🔗 [View Listing](https://youragency.com/listing/67890)"
+            `
           }),
         }
       );
@@ -302,14 +325,24 @@ const handleClientChatbotResponse = async (
       propertyRecommendations = result.propertyRecommendations || dbProperties || [];
     }
     
-    // 6. Format the response based on property availability
+    // 6. Format the response based on property availability and question specificity
     if (isPropertyQuery) {
       if (dbProperties.length > 0) {
-        // If we have properties, ensure they are shown properly
-        response = formatPropertyRecommendations(response, dbProperties);
+        // Determine if user is asking about specific property attributes
+        const askingAboutPrice = message.toLowerCase().includes('price') || message.toLowerCase().includes('cost') || message.toLowerCase().includes('how much');
+        const askingAboutBedrooms = message.toLowerCase().includes('bedroom') || message.toLowerCase().includes('how many room');
+        const askingAboutPool = message.toLowerCase().includes('pool') || message.toLowerCase().includes('swimming');
+        
+        if (askingAboutPrice || askingAboutBedrooms || askingAboutPool) {
+          // Format a response that focuses just on what was asked
+          response = formatSpecificPropertyResponse(message, dbProperties, askingAboutPrice, askingAboutBedrooms, askingAboutPool);
+        } else {
+          // If we have properties, ensure they are shown properly
+          response = formatPropertyRecommendations(response, dbProperties);
+        }
       } else if (!response.toLowerCase().includes('contact') && !response.toLowerCase().includes('email') && !response.toLowerCase().includes('phone')) {
         // If no properties found but it's a property query, ensure we ask for contact details
-        response += "\n\nI couldn't find any properties matching your criteria in our database right now. Would you like to leave your email or phone number so we can contact you when properties that match your requirements become available?";
+        response += "\n\nI couldn't find any properties matching your criteria in our database right now. Would you like to leave your email or phone number so we can contact you when properties that match your requirements become available? 😊";
       }
     }
 
@@ -331,6 +364,48 @@ const handleClientChatbotResponse = async (
       leadInfo: {} // Add empty leadInfo
     };
   }
+};
+
+/**
+ * Format a response that focuses on a specific property attribute
+ */
+export const formatSpecificPropertyResponse = (
+  message: string, 
+  properties: PropertyRecommendation[], 
+  askingAboutPrice: boolean,
+  askingAboutBedrooms: boolean,
+  askingAboutPool: boolean
+) => {
+  if (!properties || properties.length === 0) {
+    return "I don't have information about properties matching your criteria at the moment.";
+  }
+
+  // Use the first property for specific questions (usually means they're asking about a particular one)
+  const property = properties[0];
+  
+  if (askingAboutPrice) {
+    // Format price with currency
+    const price = typeof property.price === 'number' 
+      ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(property.price)
+      : property.price;
+    
+    return `${property.title || 'This property'} is priced at ${price}. Would you like to know more about it or schedule a viewing? 😊`;
+  }
+  
+  if (askingAboutBedrooms) {
+    return `${property.title || 'This property'} has ${property.bedroomCount || 'several'} bedrooms. Would you like to see it in person?`;
+  }
+  
+  if (askingAboutPool) {
+    if (property.hasPool) {
+      return `Yes, ${property.title || 'this property'} has a swimming pool. It's a beautiful feature of the property!`;
+    } else {
+      return `${property.title || 'This property'} doesn't have a swimming pool. Would you like me to find properties with pools instead?`;
+    }
+  }
+  
+  // If we get here, just show the property normally
+  return formatPropertyRecommendations(`Here's a property that might interest you:`, [property]);
 };
 
 /**
