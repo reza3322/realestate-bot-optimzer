@@ -1,3 +1,4 @@
+
 import { Message, PropertyRecommendation } from './types';
 
 /**
@@ -324,6 +325,9 @@ const handleClientChatbotResponse = async (
     return {
       response: "I'm sorry, I encountered an error while processing your request.",
       error: error instanceof Error ? error.message : String(error),
+      conversationId: conversationId || ('conv_error_' + Date.now()),
+      propertyRecommendations: [],
+      source: 'ai',
       leadInfo: {} // Add empty leadInfo
     };
   }
@@ -428,4 +432,3 @@ function extractLeadInfo(message: string, visitorInfo: any) {
   
   return extractedInfo;
 }
-
