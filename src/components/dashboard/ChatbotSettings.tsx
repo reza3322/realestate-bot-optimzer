@@ -366,6 +366,11 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
 
     setIsTesting(true);
     try {
+      const visitorInfo = {
+        visitorId: `test-visitor-${Date.now()}`,
+        name: "Test User"
+      };
+      
       const result = await testChatbotResponse(testMessage, userId, visitorInfo);
       
       if (result.error) {

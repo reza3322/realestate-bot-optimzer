@@ -219,7 +219,7 @@ const Chatbot = ({
       <ChatHeader 
         botName={botName}
         headerStyle={chatStyles.header}
-        fontStyle={chatStyles.font}
+        fontStyle={getFontClass()} // Updated to use the function that returns a string
         apiKeyStatus={useRealAPI ? "set" : "not-set"}
         botIconName={botIconName}
         customStyle={headerStyle}
