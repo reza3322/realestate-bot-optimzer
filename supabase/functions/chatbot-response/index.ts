@@ -30,12 +30,22 @@ serve(async (req) => {
   }
 
   try {
-    const { message, userId, visitorInfo, conversationId, previousMessages = [], propertyRecommendations = [] } = await req.json();
+    const { 
+      message, 
+      userId, 
+      visitorInfo, 
+      conversationId, 
+      previousMessages = [], 
+      propertyRecommendations = [],
+      trainingResults = {} 
+    } = await req.json();
     
     console.log(`🔄 Processing request from user ${userId}, message: ${message.substring(0, 50)}...`);
     console.log(`👤 Visitor info:`, JSON.stringify(visitorInfo));
     console.log(`🏠 Property recommendations received:`, propertyRecommendations.length);
     console.log(`💬 Previous messages count:`, previousMessages.length);
+    console.log(`🧠 Training data available:`, trainingResults?.qaMatches?.length || 0, 'QA matches,', 
+                trainingResults?.fileContent?.length || 0, 'file content matches');
 
     if (!message) {
       return new Response(
@@ -94,10 +104,10 @@ serve(async (req) => {
     // Prioritize property search when criteria are provided
     const shouldSearchProperties = isDirectPropertyRequest || propertyInfoProvided;
 
-    // Fetch properties from database if none were provided but user is likely asking for them
+    // If no properties provided and should search, try to fetch them directly 
     let finalPropertyRecommendations = [...propertyRecommendations];
     
-    if ((finalPropertyRecommendations.length === 0 && shouldSearchProperties) || isDirectPropertyRequest) {
+    if (finalPropertyRecommendations.length === 0 && shouldSearchProperties) {
       console.log("🔍 User appears to be asking about properties. Fetching from database...");
       const dbProperties = await fetchPropertiesFromDatabase(userId, message);
       
@@ -107,13 +117,22 @@ serve(async (req) => {
       }
     }
 
-    // Fetch crawled content from training files
-    const crawledContent = await fetchCrawledContent(userId, message);
-    console.log(`📚 Crawled content found: ${crawledContent.length > 0 ? 'Yes' : 'No'}`);
+    // Check if we can use training data for the response
+    const canUseTrainingData = trainingResults && 
+      ((trainingResults.qaMatches && trainingResults.qaMatches.length > 0) || 
+       (trainingResults.fileContent && trainingResults.fileContent.length > 0));
     
-    // Generate a response using OpenAI or fall back to hardcoded response
-    let response, isVerified = false;
-    if (openai) {
+    let response = '';
+    let isVerified = false;
+    
+    // If we have matching training data, prioritize using that
+    if (canUseTrainingData) {
+      console.log("🧠 Using training data to generate response");
+      response = generateTrainingDataResponse(message, trainingResults);
+      isVerified = true;
+    } 
+    // Otherwise, use OpenAI if available
+    else if (openai) {
       console.log("🤖 Using OpenAI to generate response");
       
       // Improve property context for OpenAI - more actionable now
@@ -127,7 +146,7 @@ serve(async (req) => {
         recentMessages, 
         propertyContext, 
         visitorInfo,
-        crawledContent
+        trainingResults?.fileContent || []
       );
       
       // Verify the response meets our quality standards
@@ -140,25 +159,26 @@ serve(async (req) => {
           recentMessages, 
           propertyContext, 
           visitorInfo,
-          crawledContent,
+          trainingResults?.fileContent || [],
           true // Include quality guidelines
         );
         isVerified = true; // Assume second attempt is good enough
-      }
-      
-      // CRITICAL FIX: Always check if we need to show property recommendations 
-      const showPropertyRecommendations = shouldSearchProperties || 
-        (finalPropertyRecommendations.length > 0 && message.toLowerCase().match(/property|house|villa|apartment|flat|condo|real estate|buy|rent|purchase/i));
-      
-      if (finalPropertyRecommendations.length > 0 && showPropertyRecommendations && 
-          !response.includes('🏡') && !response.includes('View Listing')) {
-        response = formatPropertyRecommendations(response, finalPropertyRecommendations);
       }
     } else {
       // Fallback to a scripted response if no OpenAI key is available
       console.log("⚠️ No OpenAI API key, using fallback response");
       response = generateFallbackResponse(message, finalPropertyRecommendations);
       isVerified = true;
+    }
+    
+    // CRITICAL FIX: Always check if we need to show property recommendations 
+    // Make sure properties are ALWAYS included when we have them available
+    const showPropertyRecommendations = shouldSearchProperties || 
+      (finalPropertyRecommendations.length > 0 && message.toLowerCase().match(/property|house|villa|apartment|flat|condo|real estate|buy|rent|purchase/i));
+    
+    if (finalPropertyRecommendations.length > 0 && showPropertyRecommendations && 
+        !response.includes('🏡') && !response.includes('View Listing')) {
+      response = formatPropertyRecommendations(response, finalPropertyRecommendations);
     }
 
     // Extract potential lead information
@@ -180,7 +200,7 @@ serve(async (req) => {
       conversationId: newConversationId || conversationId,
       leadInfo: extractedLeadInfo,
       propertyRecommendations: finalPropertyRecommendations.slice(0, MAX_PROPERTY_RECOMMENDATIONS),
-      source: crawledContent.length > 0 ? 'training' : 'ai'
+      source: canUseTrainingData ? 'training' : 'ai'
     };
 
     return new Response(
@@ -198,6 +218,31 @@ serve(async (req) => {
     );
   }
 });
+
+// Generate a response using uploaded training data
+function generateTrainingDataResponse(message, trainingResults) {
+  console.log("Generating response from training data");
+  
+  // First check if we have direct QA matches
+  if (trainingResults.qaMatches && trainingResults.qaMatches.length > 0) {
+    // Use the highest similarity match
+    const bestMatch = trainingResults.qaMatches[0];
+    console.log(`Using QA match with similarity ${bestMatch.similarity}`);
+    return bestMatch.answer;
+  }
+  
+  // Otherwise, use file content if available
+  if (trainingResults.fileContent && trainingResults.fileContent.length > 0) {
+    const bestFileMatch = trainingResults.fileContent[0];
+    console.log(`Using file content from ${bestFileMatch.source}`);
+    
+    // Create a response that references the source
+    return `Based on our information: ${bestFileMatch.text.substring(0, 300)}...`;
+  }
+  
+  // Should never get here but just in case
+  return "I found some information about that, but I'm having trouble formatting it. Let me try another approach.";
+}
 
 // Fetch properties directly from the database - improved to be more aggressive in finding matches
 async function fetchPropertiesFromDatabase(userId, query) {
@@ -226,7 +271,7 @@ async function fetchPropertiesFromDatabase(userId, query) {
     // Prepare query with just basic filters initially
     let propertyQuery = supabase
       .from('properties')
-      .select('id, title, description, price, bedrooms, bathrooms, city, state, status, url, living_area, plot_area, garage_area, terrace, has_pool')
+      .select('id, title, description, price, bedrooms, bathrooms, city, state, status, url, living_area, plot_area, garage_area, terrace, has_pool, type')
       .eq('user_id', userId)
       .eq('status', 'active')
       .limit(MAX_PROPERTY_RECOMMENDATIONS);
@@ -261,7 +306,7 @@ async function fetchPropertiesFromDatabase(userId, query) {
       // Try a broader search if no exact matches
       const { data: broadData, error: broadError } = await supabase
         .from('properties')
-        .select('id, title, description, price, bedrooms, bathrooms, city, state, status, url, living_area, plot_area, garage_area, terrace, has_pool')
+        .select('id, title, description, price, bedrooms, bathrooms, city, state, status, url, living_area, plot_area, garage_area, terrace, has_pool, type')
         .eq('user_id', userId)
         .eq('status', 'active')
         .limit(MAX_PROPERTY_RECOMMENDATIONS);
@@ -322,9 +367,13 @@ function formatPropertyData(property) {
     title: property.title || `${property.type || 'Property'} in ${property.city || 'Exclusive Location'}`,
     price: property.price,
     location: location,
+    bedrooms: property.bedrooms,
+    bathrooms: property.bathrooms,
+    has_pool: property.has_pool,
     features: features,
     highlight: highlight,
-    url: url
+    url: url,
+    type: property.type
   };
 }
 
@@ -348,49 +397,6 @@ function extractKeywords(query) {
   return keywords;
 }
 
-// Fetch crawled content from the database
-async function fetchCrawledContent(userId, query) {
-  try {
-    console.log(`🔍 Searching for crawled content related to: "${query.substring(0, 30)}..."`);
-    
-    // Search chatbot_training_files table for relevant content
-    const { data, error } = await supabase
-      .from('chatbot_training_files')
-      .select('id, extracted_text, source_file, category')
-      .eq('user_id', userId)
-      .eq('content_type', 'text/html')
-      .limit(3);
-    
-    if (error) {
-      console.error("Error fetching crawled content:", error);
-      return [];
-    }
-    
-    if (!data || data.length === 0) {
-      console.log("No crawled content found");
-      return [];
-    }
-    
-    console.log(`Found ${data.length} crawled content items`);
-    
-    // Process the crawled content to find the most relevant parts
-    const relevantContent = data.map(item => {
-      // Extract a relevant snippet from the text (up to 1500 characters)
-      const snippet = item.extracted_text.substring(0, 1500);
-      return {
-        source: item.source_file,
-        category: item.category,
-        content: snippet
-      };
-    });
-    
-    return relevantContent;
-  } catch (error) {
-    console.error("Error in fetchCrawledContent:", error);
-    return [];
-  }
-}
-
 // Generate a response using OpenAI with improved instructions for direct property responses
 async function generateAIResponse(message, previousMessages, propertyContext, visitorInfo, crawledContent = [], includeQualityGuidelines = false) {
   // Create system message with improved instructions for more direct property responses
@@ -404,6 +410,7 @@ CRITICAL GUIDELINES:
 5. When recommending properties, ALWAYS include the property URL.
 6. Only ask for contact details AFTER showing properties and getting interest.
 7. Remember previous parts of the conversation and don't repeat questions.
+8. NEVER make up information about properties - only use data that has been provided.
 
 ${propertyContext}
 
@@ -487,6 +494,16 @@ function formatPropertyRecommendations(response, propertyRecommendations) {
         property.features.slice(0, 3).join(', ') : 
         property.features.split(',').slice(0, 3).join(',');
       formattedProperties += `✅ ${featuresText}\n`;
+    } else {
+      // Add basic features directly
+      let basicFeatures = [];
+      if (property.bedrooms) basicFeatures.push(`${property.bedrooms} Bed`);
+      if (property.bathrooms) basicFeatures.push(`${property.bathrooms} Bath`);
+      if (property.has_pool) basicFeatures.push(`Pool`);
+      
+      if (basicFeatures.length > 0) {
+        formattedProperties += `✅ ${basicFeatures.join(', ')}\n`;
+      }
     }
     
     // URL - always include
@@ -500,7 +517,7 @@ function formatPropertyRecommendations(response, propertyRecommendations) {
   
   formattedProperties += "Would you like to see more options or schedule a viewing?";
   
-  // Always replace existing response with property listings at the front
+  // If the response already contains property information, replace it
   if (response.toLowerCase().includes("here are some properties") || 
       response.toLowerCase().includes("found the following") ||
       response.toLowerCase().includes("these properties")) {

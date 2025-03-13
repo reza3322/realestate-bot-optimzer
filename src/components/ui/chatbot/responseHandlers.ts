@@ -127,6 +127,14 @@ export const testChatbotResponse = async (
     
     console.log(`Sending ${formattedPreviousMessages.length} previous messages for context`);
     
+    // First check if we can find a relevant answer in the training data
+    const trainingResults = await searchTrainingData(message, userId);
+    const hasRelevantTrainingData = 
+      (trainingResults.qaMatches && trainingResults.qaMatches.length > 0) || 
+      (trainingResults.fileContent && trainingResults.fileContent.length > 0);
+    
+    console.log(`Found training data: ${hasRelevantTrainingData ? 'Yes' : 'No'}`);
+    
     // Call the Supabase Edge Function to get a response
     const { data, error } = await supabase.functions.invoke('chatbot-response', {
       body: {
@@ -137,7 +145,8 @@ export const testChatbotResponse = async (
         previousMessages: formattedPreviousMessages,
         // Pass the property recommendations we found directly to the chatbot
         propertyRecommendations,
-        shouldCaptureLeadInfo
+        shouldCaptureLeadInfo,
+        trainingResults // Pass any training data we found for context
       }
     });
 
@@ -147,6 +156,12 @@ export const testChatbotResponse = async (
         response: "Sorry, there was an error processing your request.",
         error: error.message
       };
+    }
+
+    // If we have property recommendations but they're not in the response, add them
+    if (propertyRecommendations.length > 0 && isPropertyQuery && 
+        (!data.response.includes('🏡') && !data.response.includes('View Listing'))) {
+      data.response = formatPropertyRecommendations(propertyRecommendations);
     }
 
     // If we have any new lead information, include it in the response

@@ -57,12 +57,15 @@ serve(async (req) => {
       }
     }
 
-    // Fetch file content
+    // Fetch file content - IMPROVED RELEVANCE SEARCH
     if (includeFiles) {
       const { data: filesData, error: filesError } = await supabaseClient
         .from('chatbot_training_files')
         .select('id, source_file, category, content_type, extracted_text')
         .eq('user_id', userId)
+        .textSearch('extracted_text', query.split(' ').filter(word => word.length > 3).join(' & '), {
+          config: 'english'
+        })
         .limit(maxResults);
       
       if (filesError) {
