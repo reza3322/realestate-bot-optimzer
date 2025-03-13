@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { cn } from '@/lib/utils';
-import BotIcon from './BotIcon';
+import { BotIcon } from './BotIcon';
 
 type ApiKeyStatus = 'not-set' | 'set' | 'error';
 
