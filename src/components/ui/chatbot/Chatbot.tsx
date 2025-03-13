@@ -1,3 +1,4 @@
+
 import { useState, useRef, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import ChatHeader from './ChatHeader';
@@ -169,6 +170,7 @@ const Chatbot = ({
           setResponseSource('ai');
         }
         
+        // Handle visitor info update from result
         if (result.leadInfo) {
           setVisitorInfo(prev => ({
             ...prev,
@@ -223,7 +225,7 @@ const Chatbot = ({
       <ChatHeader 
         botName={botName}
         headerStyle={chatStyles.header}
-        fontStyle={getFontClass()} // Updated to use the function that returns a string
+        fontStyle={getFontClass()} 
         apiKeyStatus={useRealAPI ? "set" : "not-set"}
         botIconName={botIconName}
         customStyle={headerStyle}

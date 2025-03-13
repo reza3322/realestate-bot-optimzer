@@ -1,4 +1,3 @@
-
 import { Message, PropertyRecommendation } from './types';
 
 /**
@@ -19,25 +18,29 @@ export const testChatbotResponse = async (
     // Get conversation history if available
     let conversationHistory = [];
     if (conversationId) {
-      const historyResponse = await fetch(
-        'https://ckgaqkbsnrvccctqxsqv.supabase.co/functions/v1/get-conversation-history',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            conversationId,
-            userId,
-            limit: 10
-          }),
+      try {
+        const historyResponse = await fetch(
+          'https://ckgaqkbsnrvccctqxsqv.supabase.co/functions/v1/get-conversation-history',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              conversationId,
+              userId,
+              limit: 10
+            }),
+          }
+        );
+        
+        if (historyResponse.ok) {
+          const historyData = await historyResponse.json();
+          conversationHistory = historyData.messages || [];
+          console.log('Conversation history retrieved:', conversationHistory.length, 'messages');
         }
-      );
-      
-      if (historyResponse.ok) {
-        const historyData = await historyResponse.json();
-        conversationHistory = historyData.messages || [];
-        console.log('Conversation history retrieved:', conversationHistory.length, 'messages');
+      } catch (error) {
+        console.error('Error fetching conversation history:', error);
       }
     }
 
@@ -88,7 +91,8 @@ const handleDemoChatbotResponse = async (
           Your purpose is to explain our services to potential customers.
           IMPORTANT: You should NEVER recommend any properties yourself. Instead, explain that our client chatbots recommend properties from real estate agencies' databases.
           Explain that RealHomeAI helps real estate agents qualify leads and recommend properties to their customers.
-          You can explain how the chatbot technology works, pricing, features, but do NOT pretend to be a real estate agent or try to sell properties.`
+          You can explain how the chatbot technology works, pricing, features, but do NOT pretend to be a real estate agent or try to sell properties.
+          NEVER invent or make up any details that are not provided in this instruction.`
         }),
       }
     );
@@ -104,13 +108,15 @@ const handleDemoChatbotResponse = async (
       response: result.response || "I apologize, but I couldn't generate a proper response at the moment.",
       conversationId: conversationId || ('conv_' + Math.random().toString(36).substring(2, 15)),
       propertyRecommendations: [],
-      source: 'ai'
+      source: 'ai',
+      leadInfo: {} // Add empty leadInfo
     };
   } catch (error) {
     console.error('Error in demo chatbot response:', error);
     return {
       response: "I'm sorry, I encountered an error while processing your request.",
-      error: error instanceof Error ? error.message : String(error)
+      error: error instanceof Error ? error.message : String(error),
+      leadInfo: {} // Add empty leadInfo
     };
   }
 };
@@ -142,7 +148,7 @@ const handleClientChatbotResponse = async (
           includeQA: true,
           includeFiles: true,
           includeProperties: true,
-          maxResults: 3,
+          maxResults: 5,
           previousMessages
         }),
       }
@@ -158,7 +164,7 @@ const handleClientChatbotResponse = async (
     // 2. Check if the message is about properties to search directly in the database
     const isPropertyQuery = message.toLowerCase().match(/buy|rent|house|apartment|villa|property|home|spain|marbella|location|bedroom|bathroom|pool/i);
     
-    // 3. Search for properties in the database directly if it's a property query
+    // 3. Search for properties in the database directly if it's a property query or if no training data was found
     let dbProperties = [];
     if (isPropertyQuery) {
       console.log('Property query detected, searching properties directly in database');
@@ -168,27 +174,33 @@ const handleClientChatbotResponse = async (
       const location = locationMatch ? locationMatch[1].trim() : null;
       
       // Search for properties in the database directly
-      const propertiesResponse = await fetch(
-        'https://ckgaqkbsnrvccctqxsqv.supabase.co/functions/v1/search-properties',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            userId,
-            searchParams: {
-              location: location,
-              keywords: message.split(' ').filter(word => word.length > 3)
-            }
-          }),
+      try {
+        const propertiesResponse = await fetch(
+          'https://ckgaqkbsnrvccctqxsqv.supabase.co/functions/v1/search-properties',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              userId,
+              searchParams: {
+                location: location,
+                keywords: message.split(' ').filter(word => word.length > 3)
+              }
+            }),
+          }
+        );
+        
+        if (propertiesResponse.ok) {
+          const propertiesData = await propertiesResponse.json();
+          dbProperties = propertiesData.properties || [];
+          console.log(`Found ${dbProperties.length} properties in database matching query`);
+        } else {
+          console.error(`Properties search failed: ${propertiesResponse.statusText}`);
         }
-      );
-      
-      if (propertiesResponse.ok) {
-        const propertiesData = await propertiesResponse.json();
-        dbProperties = propertiesData.properties || [];
-        console.log(`Found ${dbProperties.length} properties in database matching query`);
+      } catch (error) {
+        console.error('Error searching properties:', error);
       }
     }
 
@@ -228,6 +240,21 @@ const handleClientChatbotResponse = async (
       propertyRecommendations = dbProperties.length > 0 ? dbProperties : [];
       console.log('Using direct training data response');
     } else {
+      // Prepare proper message history for OpenAI by combining previous messages and conversation history
+      const storedPreviousMessages = conversationHistory.flatMap(entry => [
+        { role: 'user', content: entry.message },
+        { role: 'assistant', content: entry.response }
+      ]);
+      
+      // Combine stored history with current session messages for better context
+      const combinedHistory = [
+        ...storedPreviousMessages,
+        ...previousMessages.map(msg => ({
+          role: msg.role === 'bot' ? 'assistant' : 'user',
+          content: msg.content
+        }))
+      ];
+      
       // Otherwise, send message to the chatbot response function
       const chatbotResponse = await fetch(
         'https://ckgaqkbsnrvccctqxsqv.supabase.co/functions/v1/chatbot-response',
@@ -241,13 +268,13 @@ const handleClientChatbotResponse = async (
             userId,
             visitorInfo,
             conversationId,
-            previousMessages: previousMessages.length > 0 ? previousMessages : conversationHistory,
+            previousMessages: combinedHistory.length > 0 ? combinedHistory : [],
             trainingResults,
             propertyRecommendations: dbProperties,
             // Specific instructions for the client chatbot
             systemMessage: `You are an AI assistant for a real estate agency. 
-            ONLY recommend properties that are in the provided propertyRecommendations array.
-            NEVER invent property listings or details.
+            IMPORTANT: ONLY recommend properties that are in the provided propertyRecommendations array.
+            NEVER invent property listings or details. Do not make up any property information.
             If no properties are available matching the query, ask for the user's contact information (email/phone) to follow up when matching properties become available.
             When answering questions, prioritize information from the provided training data.
             Be conversational, helpful and professional. Your goal is to help visitors find properties and qualify them as leads.`
@@ -288,7 +315,8 @@ const handleClientChatbotResponse = async (
     console.error('Error in client chatbot response:', error);
     return {
       response: "I'm sorry, I encountered an error while processing your request.",
-      error: error instanceof Error ? error.message : String(error)
+      error: error instanceof Error ? error.message : String(error),
+      leadInfo: {} // Add empty leadInfo
     };
   }
 };
@@ -315,31 +343,31 @@ export const formatPropertyRecommendations = (response: string, properties: Prop
       
     // Create emoji icons based on property features
     const icons = [];
-    if (property.type === 'villa' || property.propertyType === 'villa') icons.push('🏠');
-    else if (property.type === 'apartment' || property.propertyType === 'apartment') icons.push('🏢');
+    if (property.propertyType === 'villa') icons.push('🏠');
+    else if (property.propertyType === 'apartment') icons.push('🏢');
     else icons.push('🏡');
     
-    if (property.hasPool || property.has_pool) icons.push('🏊');
+    if (property.hasPool) icons.push('🏊');
     
     // Add property entry
     propertySection += `${icons.join(' ')} **${property.title || 'Exclusive Property'} – ${price}**\n`;
     
     // Add location if available
-    if (property.location || property.city) {
-      propertySection += `📍 ${property.location || property.city}${property.state ? `, ${property.state}` : ''}\n`;
+    if (property.location) {
+      propertySection += `📍 ${property.location}\n`;
     }
     
     // Add basic details
-    if (property.bedroomCount || property.bedrooms || property.bathroomCount || property.bathrooms) {
+    if (property.bedroomCount || property.bathroomCount) {
       const details = [];
-      if (property.bedroomCount || property.bedrooms) details.push(`${property.bedroomCount || property.bedrooms} Bedrooms`);
-      if (property.bathroomCount || property.bathrooms) details.push(`${property.bathroomCount || property.bathrooms} Bathrooms`);
+      if (property.bedroomCount) details.push(`${property.bedroomCount} Bedrooms`);
+      if (property.bathroomCount) details.push(`${property.bathroomCount} Bathrooms`);
       propertySection += `✅ ${details.join(', ')}\n`;
     }
     
     // Ensure URLs are formatted for in-app navigation
     const propertyId = property.id || Math.random().toString(36).substring(2, 15);
-    const clickableUrl = `./property/${propertyId}`;
+    const clickableUrl = property.url ? property.url : `./property/${propertyId}`;
     
     propertySection += `🔗 [View Listing](${clickableUrl})\n\n`;
   });
