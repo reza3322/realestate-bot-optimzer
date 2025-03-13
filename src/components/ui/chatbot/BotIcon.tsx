@@ -13,6 +13,7 @@ import {
 interface BotIconProps {
   iconName: string;
   className?: string;
+  size?: string | number;
 }
 
 // Map of icon names to their components
@@ -25,9 +26,9 @@ const iconMap: Record<string, LucideIcon> = {
   'brain': Brain
 };
 
-export const BotIcon: FC<BotIconProps> = ({ iconName, className }) => {
+export const BotIcon: FC<BotIconProps> = ({ iconName, className, size }) => {
   // Get the icon component from the map, or use Bot as fallback
   const IconComponent = iconMap[iconName] || Bot;
   
-  return <IconComponent className={className} />;
+  return <IconComponent className={className} size={size} />;
 };
