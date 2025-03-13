@@ -1,4 +1,3 @@
-
 import { Message, PropertyRecommendation } from './types';
 
 /**
@@ -52,7 +51,7 @@ export const testChatbotResponse = async (
       return handleDemoChatbotResponse(message, conversationId, previousMessages);
     } else {
       // CLIENT CHATBOT (REAL ESTATE AGENCY) LOGIC
-      // This chatbot searches training data and properties database
+      // Always check both training data AND properties for EVERY question
       return handleClientChatbotResponse(message, userId, visitorInfo, conversationId, previousMessages, conversationHistory);
     }
   } catch (error) {
@@ -134,7 +133,7 @@ const handleDemoChatbotResponse = async (
 };
 
 /**
- * Handle client chatbot responses - uses training data and property database
+ * Handle client chatbot responses - ALWAYS uses training data and property database for EVERY query
  */
 const handleClientChatbotResponse = async (
   message: string,
@@ -145,7 +144,9 @@ const handleClientChatbotResponse = async (
   conversationHistory: any[] = []
 ) => {
   try {
-    // 1. First check training data matches
+    console.log("Processing client query. Checking BOTH training data AND properties for EVERY question");
+    
+    // 1. ALWAYS check training data for EVERY question
     const trainingResponse = await fetch(
       'https://ckgaqkbsnrvccctqxsqv.supabase.co/functions/v1/search-training-data',
       {
@@ -173,85 +174,87 @@ const handleClientChatbotResponse = async (
     const trainingResults = await trainingResponse.json();
     console.log('Training search results:', trainingResults);
 
-    // 2. Check if the message is about properties to search directly in the database
-    const isPropertyQuery = message.toLowerCase().match(/buy|rent|house|apartment|villa|property|home|spain|marbella|location|bedroom|bathroom|pool/i);
-    
-    // 3. Search for properties in the database - MODIFIED: ALWAYS search for properties when it's a property query
+    // 2. ALWAYS search for properties in the database for EVERY question
+    console.log('Searching properties in database for EVERY question');
     let dbProperties = [];
-    if (isPropertyQuery) {
-      console.log('Property query detected, searching properties directly in database');
-      
-      // Extract location if mentioned
-      const locationMatch = message.toLowerCase().match(/in\s+([a-zA-Z\s]+)/i);
-      const location = locationMatch ? locationMatch[1].trim() : null;
-      
-      // Search for properties in the database directly - ALWAYS search when property-related
-      try {
-        const propertiesResponse = await fetch(
-          'https://ckgaqkbsnrvccctqxsqv.supabase.co/functions/v1/search-properties',
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              userId,
-              searchParams: {
-                location: location,
-                keywords: message.split(' ').filter(word => word.length > 3)
-              }
-            }),
-          }
-        );
-        
-        if (propertiesResponse.ok) {
-          const propertiesData = await propertiesResponse.json();
-          dbProperties = propertiesData.properties || [];
-          console.log(`Found ${dbProperties.length} properties in database matching query`);
-        } else {
-          console.error(`Properties search failed: ${propertiesResponse.statusText}`);
+    
+    try {
+      const propertiesResponse = await fetch(
+        'https://ckgaqkbsnrvccctqxsqv.supabase.co/functions/v1/search-properties',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            userId,
+            searchParams: {
+              keywords: message.split(' ').filter(word => word.length > 3)
+            }
+          }),
         }
-      } catch (error) {
-        console.error('Error searching properties:', error);
+      );
+      
+      if (propertiesResponse.ok) {
+        const propertiesData = await propertiesResponse.json();
+        dbProperties = propertiesData.properties || [];
+        console.log(`Found ${dbProperties.length} properties in database matching query`);
+      } else {
+        console.error(`Properties search failed: ${propertiesResponse.statusText}`);
       }
+    } catch (error) {
+      console.error('Error searching properties:', error);
     }
 
-    // 4. Check if we have training data that answers the question directly
+    // 3. Process training data matches
     let useTrainingDataResponse = false;
     let trainingDataResponse = '';
     
-    // Non-property queries should prioritize training data
-    if (!isPropertyQuery && trainingResults.qaMatches && trainingResults.qaMatches.length > 0) {
+    // Check for good training data matches
+    if (trainingResults.qaMatches && trainingResults.qaMatches.length > 0) {
       const bestMatch = trainingResults.qaMatches[0];
-      if (bestMatch.similarity > 0.7) { // Higher threshold for better matches
-        console.log(`Using training data QA match with similarity ${bestMatch.similarity}`);
+      if (bestMatch.similarity > 0.6) { // Lower threshold to check more often
+        console.log(`Found good training data QA match with similarity ${bestMatch.similarity}`);
         trainingDataResponse = bestMatch.answer;
         useTrainingDataResponse = true;
       }
     }
     
-    // Next check for file content matches if no good QA match
-    if (!useTrainingDataResponse && !isPropertyQuery && trainingResults.fileContent && trainingResults.fileContent.length > 0) {
+    // Check for file content matches if no good QA match
+    if (!useTrainingDataResponse && trainingResults.fileContent && trainingResults.fileContent.length > 0) {
       const bestFileMatch = trainingResults.fileContent[0];
-      if (bestFileMatch.similarity > 0.7) { // Higher threshold for better matches
-        console.log(`Using training file content match with similarity ${bestFileMatch.similarity}`);
+      if (bestFileMatch.similarity > 0.6) { // Lower threshold to check more often
+        console.log(`Found good training file content match with similarity ${bestFileMatch.similarity}`);
         trainingDataResponse = `Based on our information: ${bestFileMatch.text.substring(0, 300)}...`;
         useTrainingDataResponse = true;
       }
     }
     
     let response = '';
-    let propertyRecommendations = [];
+    let propertyRecommendations = dbProperties.length > 0 ? dbProperties : [];
+    let responseSource = 'ai';
     
-    // 5. Decide on final response based on available data
+    // 4. Determine if we need specific property information
+    const isPropertySpecificQuery = message.toLowerCase().match(/price|cost|bedroom|bathroom|room|pool|garage|area|size|feature|location|address|amenities/i);
     
-    if (useTrainingDataResponse) {
-      // Use training data response if good match found
+    // 5. Prepare response based on available data
+    if (useTrainingDataResponse && dbProperties.length === 0) {
+      // Use training data response if good match found and no properties
       response = trainingDataResponse;
-      // Still include property recommendations if available
-      propertyRecommendations = dbProperties.length > 0 ? dbProperties : [];
-      console.log('Using direct training data response');
+      responseSource = 'training';
+      console.log('Using direct training data response (no properties found)');
+    } else if (dbProperties.length > 0 && isPropertySpecificQuery) {
+      // For specific property queries when properties were found, focus on property info
+      response = formatSpecificPropertyResponse(message, dbProperties, 
+        message.toLowerCase().includes('price') || message.toLowerCase().includes('cost'),
+        message.toLowerCase().includes('bedroom') || message.toLowerCase().includes('room'),
+        message.toLowerCase().includes('pool') || message.toLowerCase().includes('swimming'));
+      responseSource = 'properties';
+      console.log('Using specific property response for property-specific query');
     } else {
+      // For all other cases, combine data and use AI
+      console.log('Combining training data, properties, and using AI for response');
+      
       // Prepare proper message history for OpenAI by combining previous messages and conversation history
       const storedPreviousMessages = conversationHistory.flatMap(entry => [
         { role: 'user', content: entry.message },
@@ -283,7 +286,7 @@ const handleClientChatbotResponse = async (
             previousMessages: combinedHistory.length > 0 ? combinedHistory : [],
             trainingResults,
             propertyRecommendations: dbProperties,
-            // IMPROVED system message for more human-like responses
+            // Improved system message for more human-like responses
             systemMessage: `You are a helpful and human-like real estate assistant.
 
 Guidelines:
@@ -323,27 +326,15 @@ Example Interactions:
       
       response = result.response || "I apologize, but I couldn't generate a proper response at the moment.";
       propertyRecommendations = result.propertyRecommendations || dbProperties || [];
+      responseSource = 'ai';
     }
     
-    // 6. Format the response based on property availability and question specificity
-    if (isPropertyQuery) {
-      if (dbProperties.length > 0) {
-        // Determine if user is asking about specific property attributes
-        const askingAboutPrice = message.toLowerCase().includes('price') || message.toLowerCase().includes('cost') || message.toLowerCase().includes('how much');
-        const askingAboutBedrooms = message.toLowerCase().includes('bedroom') || message.toLowerCase().includes('how many room');
-        const askingAboutPool = message.toLowerCase().includes('pool') || message.toLowerCase().includes('swimming');
-        
-        if (askingAboutPrice || askingAboutBedrooms || askingAboutPool) {
-          // Format a response that focuses just on what was asked
-          response = formatSpecificPropertyResponse(message, dbProperties, askingAboutPrice, askingAboutBedrooms, askingAboutPool);
-        } else {
-          // If we have properties, ensure they are shown properly
-          response = formatPropertyRecommendations(response, dbProperties);
-        }
-      } else if (!response.toLowerCase().includes('contact') && !response.toLowerCase().includes('email') && !response.toLowerCase().includes('phone')) {
-        // If no properties found but it's a property query, ensure we ask for contact details
-        response += "\n\nI couldn't find any properties matching your criteria in our database right now. Would you like to leave your email or phone number so we can contact you when properties that match your requirements become available? 😊";
-      }
+    // 6. Format the response to include property recommendations if available
+    if (dbProperties.length > 0 && !isPropertySpecificQuery) {
+      response = formatPropertyRecommendations(response, dbProperties);
+    } else if (dbProperties.length === 0 && message.toLowerCase().match(/property|house|apartment|villa|home|buy|rent|real estate/i)) {
+      // If query was about properties but none found, ask for contact details
+      response += "\n\nI couldn't find any properties matching your criteria in our database right now. Would you like to leave your email or phone number so we can contact you when properties that match your requirements become available? 😊";
     }
 
     return {
@@ -351,7 +342,7 @@ Example Interactions:
       leadInfo: extractLeadInfo(message, visitorInfo || {}),
       conversationId: conversationId || ('conv_' + Math.random().toString(36).substring(2, 15)),
       propertyRecommendations: propertyRecommendations,
-      source: useTrainingDataResponse ? 'training' : 'ai'
+      source: responseSource
     };
   } catch (error) {
     console.error('Error in client chatbot response:', error);
@@ -361,7 +352,7 @@ Example Interactions:
       conversationId: conversationId || ('conv_error_' + Date.now()),
       propertyRecommendations: [],
       source: 'ai',
-      leadInfo: {} // Add empty leadInfo
+      leadInfo: {} 
     };
   }
 };

@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.0";
 
@@ -29,7 +28,7 @@ serve(async (req) => {
       previousMessages = [] 
     } = await req.json();
     
-    console.log(`Searching training data for user ${userId} with query: ${query}`);
+    console.log(`Searching training data AND properties for user ${userId} with query: ${query}`);
     console.log(`Conversation ID: ${conversationId || 'Not provided'}`);
     console.log(`Previous messages count: ${previousMessages.length}`);
 
@@ -101,7 +100,7 @@ serve(async (req) => {
     const queryContext = analyzeQueryContext(query, previousMessages);
     console.log('Query context analysis:', queryContext);
 
-    // Fetch Q&A matches - USING SEMANTIC SEARCH
+    // ALWAYS fetch Q&A matches for EVERY question - USING SEMANTIC SEARCH
     if (includeQA) {
       // Enhanced semantic search using the query context
       const enhancedQuery = queryContext.enhancedQuery || query;
@@ -117,26 +116,10 @@ serve(async (req) => {
       } else if (qaData && qaData.length > 0) {
         qaMatches = qaData.slice(0, maxResults);
         console.log(`Found ${qaMatches.length} QA matches`);
-        
-        // Enhance results with context from previous conversations
-        if (queryContext.isFollowUp && qaMatches.length === 0) {
-          console.log('This appears to be a follow-up question, trying broader search...');
-          // Try a broader search for follow-up questions
-          const { data: broadQAData } = await supabaseClient
-            .from('chatbot_training_data')
-            .select('*')
-            .eq('user_id', userId)
-            .limit(maxResults);
-            
-          if (broadQAData && broadQAData.length > 0) {
-            console.log(`Found ${broadQAData.length} QA matches with broader search`);
-            qaMatches = broadQAData;
-          }
-        }
       }
     }
 
-    // ENHANCED TRAINING FILE SEARCH - MORE AGGRESSIVE WITH SEMANTIC MATCHING
+    // ALWAYS fetch training file content for EVERY question
     if (includeFiles) {
       // Check if query seems to be about company info, policies, etc.
       const isGeneralQuery = query.toLowerCase().match(/about|company|agency|policy|contact|service|help|support/);
@@ -209,114 +192,90 @@ serve(async (req) => {
       }
     }
 
-    // GREATLY IMPROVED PROPERTY SEARCH - MORE INTELLIGENT AND FLEXIBLE
-    if (includeProperties && propertyListings.length === 0) {
-      // Enhanced property query detection - detect related terms and synonyms
-      const propertyTerms = [
-        'property', 'properties', 'house', 'home', 'apartment', 'villa', 'flat', 'condo', 
-        'real estate', 'buy', 'rent', 'sale', 'bedroom', 'bathroom', 'pool', 'listing', 'listings',
-        'place', 'space', 'residence', 'accommodation', 'building', 'address', 'location'
-      ];
+    // ALWAYS search properties for EVERY question
+    if (includeProperties) {
+      console.log("Searching properties for EVERY question, regardless of context");
       
-      // Simple semantic check if query is about properties
-      const isPropertyQuery = propertyTerms.some(term => query.toLowerCase().includes(term)) ||
-                              queryContext.isAboutProperties ||
-                              query.toLowerCase().match(/show|find|looking|search/i);
+      // Start with a basic query for active properties
+      let propertyQuery = supabaseClient
+        .from('properties')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('status', 'active');
       
-      // Check if they're asking about a previously mentioned property
-      const isAboutPreviousProperty = query.toLowerCase().match(/that|this|the property|more details|tell me more|featured/i) ||
-                                     queryContext.isFollowUpAboutProperty;
+      // Extract information from the query and context
+      const extractedInfo = extractPropertyCriteria(query, queryContext);
+      console.log("Extracted property search criteria:", extractedInfo);
       
-      if (isPropertyQuery || isAboutPreviousProperty || queryContext.hasSpatialReference) {
-        console.log("Query appears to be about properties, performing intelligent search...");
+      // Apply filters based on extracted information
+      if (extractedInfo.location) {
+        console.log(`Filtering by location: ${extractedInfo.location}`);
+        propertyQuery = propertyQuery.or(`city.ilike.%${extractedInfo.location}%,state.ilike.%${extractedInfo.location}%,description.ilike.%${extractedInfo.location}%`);
+      }
+      
+      if (extractedInfo.bedrooms) {
+        console.log(`Filtering by bedrooms: ${extractedInfo.bedrooms}`);
+        propertyQuery = propertyQuery.gte('bedrooms', extractedInfo.bedrooms);
+      }
+      
+      if (extractedInfo.propertyType) {
+        console.log(`Filtering by property type: ${extractedInfo.propertyType}`);
+        propertyQuery = propertyQuery.eq('type', extractedInfo.propertyType);
+      }
+      
+      if (extractedInfo.hasPool) {
+        console.log('Filtering for properties with pools');
+        propertyQuery = propertyQuery.eq('has_pool', true);
+      }
+      
+      // If looking at specific price ranges
+      if (extractedInfo.minPrice) {
+        console.log(`Filtering with minimum price: ${extractedInfo.minPrice}`);
+        propertyQuery = propertyQuery.gte('price', extractedInfo.minPrice);
+      }
+      
+      if (extractedInfo.maxPrice) {
+        console.log(`Filtering with maximum price: ${extractedInfo.maxPrice}`);
+        propertyQuery = propertyQuery.lte('price', extractedInfo.maxPrice);
+      }
+      
+      // Execute the query - ALWAYS search for properties
+      const { data: properties, error: propertiesError } = await propertyQuery
+        .order('featured', { ascending: false })
+        .limit(maxResults);
+      
+      if (propertiesError) {
+        console.error('Error fetching properties:', propertiesError);
+      } else if (properties && properties.length > 0) {
+        console.log(`Found ${properties.length} matching properties`);
+        propertyListings = properties.map(formatPropertyData);
+      } else {
+        // If no specific matches, just return some featured properties
+        console.log('No specific property matches, returning featured properties');
         
-        // Extract information from the query and context
-        const extractedInfo = extractPropertyCriteria(query, queryContext);
-        console.log("Extracted property search criteria:", extractedInfo);
-        
-        // Start with a basic query for active properties
-        let propertyQuery = supabaseClient
+        const { data: featuredProperties } = await supabaseClient
           .from('properties')
           .select('*')
           .eq('user_id', userId)
-          .eq('status', 'active');
-        
-        // Apply filters based on extracted information
-        if (extractedInfo.location) {
-          console.log(`Filtering by location: ${extractedInfo.location}`);
-          propertyQuery = propertyQuery.or(`city.ilike.%${extractedInfo.location}%,state.ilike.%${extractedInfo.location}%,description.ilike.%${extractedInfo.location}%`);
-        }
-        
-        if (extractedInfo.bedrooms) {
-          console.log(`Filtering by bedrooms: ${extractedInfo.bedrooms}`);
-          propertyQuery = propertyQuery.gte('bedrooms', extractedInfo.bedrooms);
-        }
-        
-        if (extractedInfo.propertyType) {
-          console.log(`Filtering by property type: ${extractedInfo.propertyType}`);
-          propertyQuery = propertyQuery.eq('type', extractedInfo.propertyType);
-        }
-        
-        if (extractedInfo.hasPool) {
-          console.log('Filtering for properties with pools');
-          propertyQuery = propertyQuery.eq('has_pool', true);
-        }
-        
-        // If looking at specific price ranges
-        if (extractedInfo.minPrice) {
-          console.log(`Filtering with minimum price: ${extractedInfo.minPrice}`);
-          propertyQuery = propertyQuery.gte('price', extractedInfo.minPrice);
-        }
-        
-        if (extractedInfo.maxPrice) {
-          console.log(`Filtering with maximum price: ${extractedInfo.maxPrice}`);
-          propertyQuery = propertyQuery.lte('price', extractedInfo.maxPrice);
-        }
-        
-        // Asking about a specific property ID
-        if (extractedInfo.propertyId) {
-          console.log(`Looking for specific property ID: ${extractedInfo.propertyId}`);
-          propertyQuery = propertyQuery.eq('id', extractedInfo.propertyId);
-        }
-        
-        // Execute the query
-        const { data: properties, error: propertiesError } = await propertyQuery
-          .order('featured', { ascending: false })
+          .eq('status', 'active')
+          .eq('featured', true)
           .limit(maxResults);
-        
-        if (propertiesError) {
-          console.error('Error fetching properties:', propertiesError);
-        } else if (properties && properties.length > 0) {
-          console.log(`Found ${properties.length} matching properties`);
-          propertyListings = properties.map(formatPropertyData);
-        } else {
-          // If no specific matches, just return some featured properties
-          console.log('No specific property matches, returning featured properties');
           
-          const { data: featuredProperties } = await supabaseClient
+        if (featuredProperties && featuredProperties.length > 0) {
+          console.log(`Found ${featuredProperties.length} featured properties`);
+          propertyListings = featuredProperties.map(formatPropertyData);
+        } else {
+          // Last resort - just get any properties
+          const { data: anyProperties } = await supabaseClient
             .from('properties')
             .select('*')
             .eq('user_id', userId)
             .eq('status', 'active')
-            .eq('featured', true)
             .limit(maxResults);
             
-          if (featuredProperties && featuredProperties.length > 0) {
-            console.log(`Found ${featuredProperties.length} featured properties`);
-            propertyListings = featuredProperties.map(formatPropertyData);
-          } else {
-            // Last resort - just get any properties
-            const { data: anyProperties } = await supabaseClient
-              .from('properties')
-              .select('*')
-              .eq('user_id', userId)
-              .eq('status', 'active')
-              .limit(maxResults);
-              
-            if (anyProperties && anyProperties.length > 0) {
-              console.log(`Found ${anyProperties.length} properties (any)}`);
-              propertyListings = anyProperties.map(formatPropertyData);
-            }
+          if (anyProperties && anyProperties.length > 0) {
+            console.log(`Found ${anyProperties.length} properties (any)}`);
+            propertyListings = anyProperties.map(formatPropertyData);
           }
         }
       }

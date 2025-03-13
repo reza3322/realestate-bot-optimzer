@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import ChatHeader from './ChatHeader';
@@ -146,6 +145,8 @@ const Chatbot = ({
         console.error('Chatbot error:', result.error);
         setError(`Error: ${result.error}`);
       } else {
+        // Always handle result properties safely with null checks
+        
         // Check if conversationId exists in the result before setting it
         if (result.conversationId && !conversationId) {
           console.log(`Setting conversation ID: ${result.conversationId}`);
@@ -166,7 +167,7 @@ const Chatbot = ({
           properties: newPropertyRecs
         }]);
         
-        // Fix: Set response source properly if it exists
+        // Set response source properly if it exists
         if (result.source) {
           setResponseSource(result.source as 'ai' | 'training');
         } else {
