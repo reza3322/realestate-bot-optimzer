@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import ChatHeader from './ChatHeader';
@@ -163,7 +162,12 @@ const Chatbot = ({
           properties: result.propertyRecommendations || [] 
         }]);
         
-        setResponseSource(result.source || null);
+        // Fix: Set response source properly
+        if (result.source) {
+          setResponseSource(result.source as 'ai' | 'training');
+        } else {
+          setResponseSource('ai');
+        }
         
         if (result.leadInfo) {
           setVisitorInfo(prev => ({
