@@ -146,31 +146,34 @@ const Chatbot = ({
         console.error('Chatbot error:', result.error);
         setError(`Error: ${result.error}`);
       } else {
+        // Check if conversationId exists in the result before setting it
         if (result.conversationId && !conversationId) {
           console.log(`Setting conversation ID: ${result.conversationId}`);
           setConversationId(result.conversationId);
         }
         
-        if (result.propertyRecommendations && result.propertyRecommendations.length > 0) {
-          console.log('Received property recommendations:', result.propertyRecommendations);
-          setPropertyRecommendations(result.propertyRecommendations);
+        // Check if propertyRecommendations exists in the result before using it
+        const newPropertyRecs = result.propertyRecommendations || [];
+        if (newPropertyRecs.length > 0) {
+          console.log('Received property recommendations:', newPropertyRecs);
+          setPropertyRecommendations(newPropertyRecs);
         }
         
         // Store the bot's response
         setMessages(prev => [...prev, { 
           role: 'bot', 
           content: result.response,
-          properties: result.propertyRecommendations || [] 
+          properties: newPropertyRecs
         }]);
         
-        // Fix: Set response source properly
+        // Fix: Set response source properly if it exists
         if (result.source) {
           setResponseSource(result.source as 'ai' | 'training');
         } else {
           setResponseSource('ai');
         }
         
-        // Handle visitor info update from result
+        // Handle visitor info update from result if leadInfo exists
         if (result.leadInfo) {
           setVisitorInfo(prev => ({
             ...prev,

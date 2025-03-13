@@ -56,9 +56,14 @@ export const testChatbotResponse = async (
     }
   } catch (error) {
     console.error('Error in chatbot response:', error);
+    // Return a standardized error response with all expected properties
     return {
       response: "I'm sorry, I encountered an error while processing your request.",
-      error: error instanceof Error ? error.message : String(error)
+      error: error instanceof Error ? error.message : String(error),
+      conversationId: conversationId,
+      propertyRecommendations: [],
+      source: 'ai',
+      leadInfo: {}
     };
   }
 };
@@ -116,6 +121,9 @@ const handleDemoChatbotResponse = async (
     return {
       response: "I'm sorry, I encountered an error while processing your request.",
       error: error instanceof Error ? error.message : String(error),
+      conversationId: conversationId,
+      propertyRecommendations: [],
+      source: 'ai',
       leadInfo: {} // Add empty leadInfo
     };
   }
@@ -420,3 +428,4 @@ function extractLeadInfo(message: string, visitorInfo: any) {
   
   return extractedInfo;
 }
+
