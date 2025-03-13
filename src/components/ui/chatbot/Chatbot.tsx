@@ -13,27 +13,32 @@ const DEFAULT_TRANSLATIONS = {
   en: {
     welcomeMessage: "Hi there! I'm your RealHomeAI assistant. How can I help you today?",
     placeholderText: "Type your message...",
-    errorMessage: "Sorry, there was an error processing your request."
+    errorMessage: "Sorry, there was an error processing your request.",
+    noPropertiesMessage: "I couldn't find any properties matching your criteria right now. Would you like to leave your contact details so we can notify you when something suitable becomes available?"
   },
   es: {
     welcomeMessage: "¡Hola! Soy tu asistente RealHomeAI. ¿Cómo puedo ayudarte hoy?",
     placeholderText: "Escribe tu mensaje...",
-    errorMessage: "Lo siento, hubo un error al procesar tu solicitud."
+    errorMessage: "Lo siento, hubo un error al procesar tu solicitud.",
+    noPropertiesMessage: "No pude encontrar propiedades que coincidan con tus criterios en este momento. ¿Te gustaría dejar tus datos de contacto para que podamos notificarte cuando haya algo disponible?"
   },
   fr: {
     welcomeMessage: "Bonjour! Je suis votre assistant RealHomeAI. Comment puis-je vous aider aujourd'hui?",
     placeholderText: "Tapez votre message...",
-    errorMessage: "Désolé, une erreur s'est produite lors du traitement de votre demande."
+    errorMessage: "Désolé, une erreur s'est produite lors du traitement de votre demande.",
+    noPropertiesMessage: "Je n'ai pas trouvé de propriétés correspondant à vos critères pour le moment. Souhaitez-vous laisser vos coordonnées afin que nous puissions vous informer lorsque quelque chose de convenable sera disponible?"
   },
   de: {
     welcomeMessage: "Hallo! Ich bin Ihr RealHomeAI-Assistent. Wie kann ich Ihnen heute helfen?",
     placeholderText: "Geben Sie Ihre Nachricht ein...",
-    errorMessage: "Entschuldigung, bei der Verarbeitung Ihrer Anfrage ist ein Fehler aufgetreten."
+    errorMessage: "Entschuldigung, bei der Verarbeitung Ihrer Anfrage ist ein Fehler aufgetreten.",
+    noPropertiesMessage: "Ich konnte keine Immobilien finden, die Ihren Kriterien entsprechen. Möchten Sie Ihre Kontaktdaten hinterlassen, damit wir Sie benachrichtigen können, wenn etwas Passendes verfügbar wird?"
   },
   pt: {
     welcomeMessage: "Olá! Sou seu assistente RealHomeAI. Como posso ajudá-lo hoje?",
     placeholderText: "Digite sua mensagem...",
-    errorMessage: "Desculpe, ocorreu um erro ao processar sua solicitação."
+    errorMessage: "Desculpe, ocorreu um erro ao processar sua solicitação.",
+    noPropertiesMessage: "Não consegui encontrar imóveis que correspondam aos seus critérios no momento. Gostaria de deixar seus dados de contato para que possamos notificá-lo quando algo adequado estiver disponível?"
   }
 };
 
@@ -90,6 +95,7 @@ const Chatbot = ({
   const [conversationId, setConversationId] = useState<string | undefined>(undefined);
   const [visitorInfo, setVisitorInfo] = useState<VisitorInfo>({});
   const [propertyRecommendations, setPropertyRecommendations] = useState<PropertyRecommendation[]>([]);
+  const [askingForContact, setAskingForContact] = useState(false);
 
   const chatStyles: ChatTheme = getChatStyles(theme, variation, primaryColor) as ChatTheme;
   
@@ -129,6 +135,39 @@ const Chatbot = ({
     console.log(`Conversation ID: ${conversationId || 'New conversation'}`);
     
     try {
+      // Check if we're collecting contact info as a follow-up
+      if (askingForContact) {
+        // Process contact information
+        const emailRegex = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/;
+        const phoneRegex = /(\+\d{1,3})?[-.\s]?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/;
+        
+        const email = message.match(emailRegex)?.[0];
+        const phone = message.match(phoneRegex)?.[0];
+        const name = message.replace(emailRegex, '').replace(phoneRegex, '').trim();
+        
+        // Update visitor info with any contact details provided
+        const updatedInfo = {
+          ...visitorInfo,
+          email: email || visitorInfo.email,
+          phone: phone || visitorInfo.phone,
+          name: name || visitorInfo.name
+        };
+        
+        setVisitorInfo(updatedInfo);
+        setAskingForContact(false);
+        
+        // Send a thank you response
+        const thankYouMessage = `Thank you for providing your contact information. We'll notify you when properties matching your criteria become available.`;
+        
+        setMessages(prev => [...prev, { 
+          role: 'bot', 
+          content: thankYouMessage
+        }]);
+        
+        setIsTyping(false);
+        return;
+      }
+      
       // Get all previous messages except the initial welcome
       const previousMsgs = messages.filter(msg => 
         !(msg.role === 'bot' && msg.content === defaultWelcomeMessage) 
@@ -151,15 +190,29 @@ const Chatbot = ({
           setConversationId(result.conversationId);
         }
         
+        let botResponse = result.response;
+        let shouldAskForContact = false;
+        
+        // Check if we received property recommendations
         if (result.propertyRecommendations && result.propertyRecommendations.length > 0) {
           console.log('Received property recommendations:', result.propertyRecommendations);
           setPropertyRecommendations(result.propertyRecommendations);
+        } else {
+          // Check if the message seems to be asking about properties but none were found
+          const isPropertyQuery = message.toLowerCase().match(/property|house|apartment|home|real estate|buy|rent|bedroom|price/);
+          
+          if (isPropertyQuery) {
+            // No properties found but user was asking about properties
+            shouldAskForContact = true;
+            botResponse = translations.noPropertiesMessage || DEFAULT_TRANSLATIONS.en.noPropertiesMessage;
+            setAskingForContact(true);
+          }
         }
         
         // Store the bot's response
         setMessages(prev => [...prev, { 
           role: 'bot', 
-          content: result.response,
+          content: botResponse,
           properties: result.propertyRecommendations || [] 
         }]);
         
@@ -219,7 +272,7 @@ const Chatbot = ({
       <ChatHeader 
         botName={botName}
         headerStyle={chatStyles.header}
-        fontStyle={getFontClass()} // Updated to use the function that returns a string
+        fontStyle={getFontClass()} 
         apiKeyStatus={useRealAPI ? "set" : "not-set"}
         botIconName={botIconName}
         customStyle={headerStyle}
@@ -278,7 +331,11 @@ const Chatbot = ({
       <ChatInput 
         inputContainerStyle={chatStyles.inputContainer}
         onSendMessage={handleSendMessage}
-        placeholderText={defaultPlaceholderText}
+        placeholderText={
+          askingForContact 
+            ? "Please provide your name, email or phone number..." 
+            : defaultPlaceholderText
+        }
         buttonStyle={sendButtonStyle}
         visitorInfo={visitorInfo}
       />
