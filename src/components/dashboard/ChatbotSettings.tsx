@@ -103,7 +103,7 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
     const initializeChatbot = async () => {
       setLoading(true);
       try {
-        const result = await createChatbotSettingsTable(userId, "");
+        const result = await createChatbotSettingsTable(userId);
         console.log("Chatbot initialization result:", result);
         
         if (result.data?.settings) {
@@ -216,7 +216,7 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
       
       setLoading(true);
       try {
-        await createChatbotSettingsTable(userId, "");
+        await createChatbotSettingsTable(userId);
         
         console.log(`Fetching settings for user ID: ${userId}`);
         const { data, error } = await supabase
@@ -366,13 +366,13 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
 
     setIsTesting(true);
     try {
-      const { response, error } = await testChatbotResponse(testMessage, userId);
+      const result = await testChatbotResponse(testMessage, userId, visitorInfo);
       
-      if (error) {
-        throw new Error(error);
+      if (result.error) {
+        throw new Error(result.error);
       }
 
-      setTestResponse(response);
+      setTestResponse(result.response);
       toast.success("Test message processed successfully");
     } catch (error) {
       console.error("Error testing chatbot:", error);
@@ -588,7 +588,7 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
                       <Label htmlFor="language">Language</Label>
                       <Select 
                         value={settings.language || 'en'} 
-                        onValueChange={(value) => setSettings({...settings, language: value})}
+                        onValueChange={(value) => setSettings({...settings, language: value as LanguageCode})}
                       >
                         <SelectTrigger id="language">
                           <SelectValue placeholder="Select language" />

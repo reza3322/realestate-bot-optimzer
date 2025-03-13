@@ -7,7 +7,7 @@ import { Message, PropertyRecommendation } from './types';
 export const testChatbotResponse = async (
   message: string,
   userId: string,
-  visitorInfo: any,
+  visitorInfo?: any,
   conversationId?: string,
   previousMessages: Message[] = []
 ) => {
