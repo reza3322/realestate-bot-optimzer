@@ -894,6 +894,7 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
                           borderRadius: settings.buttonStyle === 'pill' ? '9999px' : 
                                         settings.buttonStyle === 'rounded' ? '0.375rem' : '0'
                         }}
+                        userId={userId}
                       />
                     </div>
                   </CardContent>

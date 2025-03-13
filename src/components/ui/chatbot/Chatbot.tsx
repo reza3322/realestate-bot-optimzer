@@ -43,11 +43,12 @@ interface ChatbotProps {
   placeholderText?: string;
   maxHeight?: string;
   onSendMessage?: (message: string) => void;
-  userId: string;
+  userId?: string; // Changed from required to optional
   primaryColor?: string;
   language?: LanguageCode;
   buttonStyle?: React.CSSProperties;
   fontSize?: number;
+  botIconName?: string; // Added to support botIconName prop
 }
 
 const Chatbot = ({
@@ -60,11 +61,12 @@ const Chatbot = ({
   placeholderText,
   maxHeight = "400px",
   onSendMessage,
-  userId,
+  userId = 'demo-user', // Provide a default value for userId
   primaryColor,
   language = 'en',
   buttonStyle,
-  fontSize = 16
+  fontSize = 16,
+  botIconName = 'bot' // Add default value for botIconName
 }: ChatbotProps) => {
   const translations = DEFAULT_TRANSLATIONS[language] || DEFAULT_TRANSLATIONS.en;
   
@@ -218,7 +220,7 @@ const Chatbot = ({
         botName={botName}
         headerStyle={chatStyles.header}
         fontStyle={getFontClass()} 
-        botIconName="bot"
+        botIconName={botIconName}
         customStyle={headerStyle}
       />
       
@@ -241,7 +243,7 @@ const Chatbot = ({
               header: chatStyles.header,
               inputContainer: chatStyles.inputContainer
             }}
-            botIconName="bot"
+            botIconName={botIconName}
             customBotIconStyle={botIconStyle}
             customUserBubbleStyle={userBubbleStyle}
             conversationId={conversationId}
@@ -252,7 +254,7 @@ const Chatbot = ({
           <TypingIndicator 
             botIconStyle={chatStyles.botIcon}
             botBubbleStyle={chatStyles.botBubble}
-            botIconName="bot"
+            botIconName={botIconName}
             customBotIconStyle={botIconStyle}
           />
         )}
