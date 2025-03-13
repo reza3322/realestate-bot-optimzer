@@ -1,23 +1,26 @@
 
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.36.0";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.0";
+import { Configuration, OpenAIApi } from "https://esm.sh/openai@3.3.0";
+
+// Constants
+const OPENAI_MODEL = "gpt-4o-mini";
+const MAX_TRAINING_CONTEXT_LENGTH = 8000;
+
+// Initialize Supabase client
+const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
+const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+// Initialize OpenAI
+const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
+const openai = openAIApiKey ? new OpenAIApi(new Configuration({ apiKey: openAIApiKey })) : null;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
-
-// Initialize OpenAI API key
-const openAiApiKey = Deno.env.get('OPENAI_API_KEY');
-if (!openAiApiKey) {
-  console.error("OPENAI_API_KEY is not set");
-}
-
-// Initialize Supabase client
-const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
-const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
-const supabase = createClient(supabaseUrl, supabaseKey);
 
 serve(async (req) => {
   // Handle CORS preflight requests
@@ -29,258 +32,160 @@ serve(async (req) => {
     const { 
       message, 
       userId, 
-      visitorInfo, 
+      visitorInfo = {}, 
       conversationId, 
-      searchResults,
-      previousMessages = []
+      previousMessages = [],
+      trainingResults = {},
+      propertyRecommendations = []
     } = await req.json();
     
-    console.log(`Processing chatbot message for user ${userId}: ${message}`);
+    console.log(`Processing request for user ${userId}`);
+    console.log(`Query: "${message}"`);
+    console.log(`Training data: ${JSON.stringify({
+      qaCount: trainingResults.qaMatches?.length || 0,
+      fileCount: trainingResults.fileContent?.length || 0
+    })}`);
     
-    if (!message || !userId) {
+    if (!message) {
       return new Response(
-        JSON.stringify({ 
-          error: 'Message and user ID are required' 
-        }),
+        JSON.stringify({ error: "Message is required" }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Generate a conversation ID if not provided
-    const chatConversationId = conversationId || `conv_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    // Format training content for the AI prompt
+    let trainingContext = "";
+    
+    // Add Q&A pairs from training data
+    if (trainingResults.qaMatches && trainingResults.qaMatches.length > 0) {
+      trainingContext += "Here are some knowledge base Q&A pairs that may be relevant to the user's question:\n\n";
+      
+      trainingResults.qaMatches.forEach((match, index) => {
+        trainingContext += `Q: ${match.question}\nA: ${match.answer}\n\n`;
+      });
+    }
+    
+    // Add content from uploaded files
+    if (trainingResults.fileContent && trainingResults.fileContent.length > 0) {
+      trainingContext += "Here is relevant information from our knowledge base:\n\n";
+      
+      trainingResults.fileContent.forEach((content, index) => {
+        trainingContext += `Source: ${content.source || 'Uploaded file'}\n`;
+        trainingContext += `Content: ${content.text.substring(0, 1000)}\n\n`;
+      });
+    }
+    
+    // Truncate if too long
+    if (trainingContext.length > MAX_TRAINING_CONTEXT_LENGTH) {
+      trainingContext = trainingContext.substring(0, MAX_TRAINING_CONTEXT_LENGTH) + "...";
+    }
+    
+    // Create property information if we have recommendations
+    const propertyInfo = propertyRecommendations.length > 0 
+      ? `I have ${propertyRecommendations.length} property listings that match the user's criteria. I should mention these properties only if relevant to their query.`
+      : "I don't have any specific property listings matching the user's criteria in my database.";
+    
+    // Previous messages for context
+    const formattedPreviousMessages = previousMessages.map(msg => ({
+      role: msg.role === 'bot' ? 'assistant' : 'user',
+      content: msg.content
+    }));
+    
+    // Create appropriate system message
+    const systemMessage = `You are a friendly and professional real estate assistant representing a real estate agency.
 
-    // Extract properties and training data from search results
-    const propertyListings = searchResults?.property_listings || [];
-    const qaMatches = searchResults?.qa_matches || [];
-    const fileContent = searchResults?.file_content || [];
-    const conversationContext = searchResults?.conversation_context || [];
-    
-    // Detect language from input text
-    const detectedLang = detectLanguage(message);
-    console.log(`Detected language: ${detectedLang}`);
-    
-    // Create the system message for OpenAI
-    let systemMessage = createSystemPrompt(detectedLang, propertyListings, qaMatches, fileContent);
-    
-    // Build the message array for OpenAI
+${propertyInfo}
+
+${trainingContext ? "IMPORTANT - Use the following knowledge base information to answer the user's questions when relevant:" : ""}
+
+${trainingContext}
+
+Guidelines:
+- Always be helpful, friendly, and professional.
+- If the knowledge base information is relevant to the query, prioritize using it.
+- If the user asks about something not covered in the knowledge base or about properties, politely acknowledge the limits of your information and offer to help in other ways.
+- Avoid making up information that's not in the provided knowledge base.
+- Keep responses concise (3-5 sentences) and engaging.
+- If the user asks about contact options, encourage them to share their email or phone.`;
+
+    // Create messages array for OpenAI
     const messages = [
       { role: "system", content: systemMessage }
     ];
     
-    // Add conversation history if available
-    if (conversationContext.length > 0) {
-      console.log(`Adding ${conversationContext.length} previous conversation exchanges`);
-      
-      // Add previous exchanges (oldest first)
-      for (const exchange of conversationContext) {
-        messages.push({ role: "user", content: exchange.message });
-        messages.push({ role: "assistant", content: exchange.response });
-      }
+    // Add previous messages for context
+    if (formattedPreviousMessages.length > 0) {
+      messages.push(...formattedPreviousMessages);
     }
     
-    // Add previous messages from current session
-    if (previousMessages.length > 0) {
-      console.log(`Adding ${previousMessages.length} messages from current session`);
-      for (const msg of previousMessages) {
-        if (msg.role === 'user') {
-          messages.push({ role: "user", content: msg.content });
-        } else if (msg.role === 'bot') {
-          messages.push({ role: "assistant", content: msg.content });
-        }
-      }
-    }
-    
-    // Add the current message
+    // Add current message
     messages.push({ role: "user", content: message });
     
-    console.log(`Sending ${messages.length} messages to OpenAI`);
-    
-    // Call OpenAI API
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${openAiApiKey}`
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: messages,
-        temperature: 0.7,
-        max_tokens: 800
-      })
+    // Call OpenAI API with our enhanced prompt
+    const completion = await openai.createChatCompletion({
+      model: OPENAI_MODEL,
+      messages,
+      temperature: 0.7,
+      max_tokens: 500
     });
     
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("OpenAI API error:", errorText);
-      throw new Error(`OpenAI API error: ${response.status} ${errorText}`);
-    }
+    const response = completion.data.choices[0].message.content;
     
-    const data = await response.json();
-    console.log("OpenAI response received");
+    // Extract potential lead information from user's message
+    const extractedLeadInfo = extractLeadInfo(message, visitorInfo);
     
-    // Extract the AI response
-    const aiResponse = data.choices[0].message.content;
-    
-    // Extract lead information from the message
-    const leadInfo = extractLeadInfo(message, visitorInfo);
-    
-    // Save conversation to database
-    try {
-      await supabase
-        .from('chatbot_conversations')
-        .insert({
-          conversation_id: chatConversationId,
-          visitor_id: visitorInfo?.visitorId || null,
-          user_id: userId,
-          message: message,
-          response: aiResponse
-        });
-      console.log("✅ Conversation saved to database");
-    } catch (dbError) {
-      console.error("Error saving conversation:", dbError);
-    }
-    
+    // Return the response with source information
     return new Response(
       JSON.stringify({
-        response: aiResponse,
-        source: 'ai',
-        leadInfo: leadInfo,
-        conversationId: chatConversationId
+        response,
+        leadInfo: extractedLeadInfo,
+        conversationId,
+        source: trainingContext ? 'training' : 'ai'
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
-    console.error("Error in chatbot function:", error);
+    console.error("Error processing request:", error);
+    
     return new Response(
       JSON.stringify({ 
-        error: error instanceof Error ? error.message : String(error),
-        response: "I'm sorry, I encountered an error processing your request. Please try again in a moment."
+        error: error.message,
+        response: "Sorry, I encountered an error while processing your request. Please try again." 
       }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });
 
-/**
- * Creates the system prompt for OpenAI based on available data
- */
-function createSystemPrompt(language: string, properties: any[], qaMatches: any[], fileContent: any[]) {
-  // Base system prompt that focuses on using only user data
-  let systemPrompt = '';
+// Extract potential lead information from the message and visitor info
+function extractLeadInfo(message, visitorInfo) {
+  const extractedInfo = { ...visitorInfo };
+  const lowerMessage = message.toLowerCase();
   
-  // Set language-specific base prompt
-  switch (language) {
-    case 'es':
-      systemPrompt = `Eres un asistente inmobiliario profesional, amigable y conversacional que SOLO responde basándose en los datos proporcionados por el usuario, nunca inventando información.`;
-      break;
-    case 'fr':
-      systemPrompt = `Vous êtes un assistant immobilier professionnel, amical et conversationnel qui répond UNIQUEMENT en fonction des données fournies par l'utilisateur, sans jamais inventer d'informations.`;
-      break;
-    case 'de':
-      systemPrompt = `Sie sind ein professioneller, freundlicher und kommunikativer Immobilienassistent, der NUR auf der Grundlage der vom Benutzer bereitgestellten Daten antwortet und niemals Informationen erfindet.`;
-      break;
-    default:
-      systemPrompt = `You are a professional, friendly, and conversational real estate assistant who ONLY responds based on the user-provided data, never inventing information.`;
-      break;
+  // Extract email
+  const emailMatch = message.match(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/);
+  if (emailMatch && !extractedInfo.email) {
+    extractedInfo.email = emailMatch[0];
   }
   
-  // Add guidelines
-  systemPrompt += `\n\nGuidelines:
-- ONLY use the data provided to you - never make up information about properties
-- Respond directly to the user's query without unnecessary information
-- If asked about a specific property detail (like price or bedrooms), focus just on that detail
-- Keep responses short (3-5 lines max) unless detailed information is requested
-- If no matching properties are found, suggest the user contact the agency directly
-- Sound natural and human-like in your responses`;
-  
-  // Add properties if available
-  if (properties && properties.length > 0) {
-    systemPrompt += `\n\nAvailable properties (ONLY talk about these - DO NOT make up any others):\n`;
-    
-    properties.forEach((property, index) => {
-      systemPrompt += `Property ${index + 1}: ${JSON.stringify(property)}\n`;
-    });
-  } else {
-    systemPrompt += `\n\nNo specific properties found in the database. Do not invent property listings.`;
+  // Extract phone number (various formats)
+  const phoneMatches = message.match(/(?:\+\d{1,3}[ -]?)?\(?\d{3}\)?[ -]?\d{3}[ -]?\d{4}/g) || 
+                     message.match(/(?:\+\d{1,3}[ -]?)?\d{10,}/g);
+  if (phoneMatches && !extractedInfo.phone) {
+    extractedInfo.phone = phoneMatches[0];
   }
   
-  // Add Q&A matches if available
-  if (qaMatches && qaMatches.length > 0) {
-    systemPrompt += `\n\nAgency's training data (use this information when asked general questions):\n`;
-    
-    qaMatches.forEach((qa, index) => {
-      systemPrompt += `Q: ${qa.question}\nA: ${qa.answer}\n\n`;
-    });
-  }
-  
-  // Add file content if available
-  if (fileContent && fileContent.length > 0) {
-    systemPrompt += `\n\nAdditional agency information (use this for general inquiries):\n`;
-    
-    fileContent.forEach((file, index) => {
-      systemPrompt += `From "${file.source}": ${file.text.substring(0, 500)}${file.text.length > 500 ? '...' : ''}\n\n`;
-    });
-  }
-  
-  return systemPrompt;
-}
-
-/**
- * Detects language from input text
- */
-function detectLanguage(text: string): string {
-  const languagePatterns = {
-    es: /[áéíóúüñ¿¡]/i,
-    fr: /[àâçéèêëîïôùûüÿœæ]/i,
-    de: /[äöüßÄÖÜ]/i,
-  };
-
-  for (const [lang, pattern] of Object.entries(languagePatterns)) {
-    if (pattern.test(text)) {
-      return lang;
-    }
-  }
-
-  return 'en'; // Default to English
-}
-
-/**
- * Extracts potential lead information from the message
- */
-function extractLeadInfo(message: string, existingInfo: any = {}) {
-  const leadInfo: Record<string, string> = { ...existingInfo };
-  
-  // Email extraction
-  const emailRegex = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g;
-  const emailMatches = message.match(emailRegex);
-  if (emailMatches && !leadInfo.email) {
-    leadInfo.email = emailMatches[0];
-  }
-  
-  // Phone extraction
-  const phoneRegex = /(?:\+\d{1,3}[\s-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/g;
-  const phoneMatches = message.match(phoneRegex);
-  if (phoneMatches && !leadInfo.phone) {
-    leadInfo.phone = phoneMatches[0];
-  }
-  
-  // Name extraction (simple approach)
-  if (message.includes('my name is') && !leadInfo.name) {
-    const nameMatch = message.match(/my name is\s+([A-Za-z]+(\s+[A-Za-z]+)?)/i);
-    if (nameMatch && nameMatch[1]) {
-      const fullName = nameMatch[1].trim();
-      const nameParts = fullName.split(' ');
-      
-      if (!leadInfo.firstName && nameParts.length > 0) {
-        leadInfo.firstName = nameParts[0];
-      }
-      
-      if (!leadInfo.lastName && nameParts.length > 1) {
-        leadInfo.lastName = nameParts.slice(1).join(' ');
-      }
+  // Extract name (simple approach)
+  const nameMatch = message.match(/(?:my name is|I am|I'm) ([A-Za-z]+(?: [A-Za-z]+)?)/i);
+  if (nameMatch && !extractedInfo.firstName) {
+    const fullName = nameMatch[1].split(' ');
+    if (fullName.length > 1) {
+      extractedInfo.firstName = fullName[0];
+      extractedInfo.lastName = fullName.slice(1).join(' ');
+    } else {
+      extractedInfo.firstName = fullName[0];
     }
   }
   
-  return leadInfo;
+  return extractedInfo;
 }

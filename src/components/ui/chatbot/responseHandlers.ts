@@ -14,7 +14,7 @@ export const testChatbotResponse = async (
   console.log(`Processing chatbot response for user: ${userId}`);
   
   try {
-    // Always call the search-training-data endpoint to find relevant content
+    // First, fetch training data from user's uploaded files
     const searchResponse = await fetch('https://ckgaqkbsnrvccctqxsqv.supabase.co/functions/v1/search-training-data', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -23,7 +23,7 @@ export const testChatbotResponse = async (
         userId: userId,
         conversationId: conversationId,
         includeQA: true,
-        includeFiles: true,
+        includeFiles: true,  // Make sure file content is included
         includeProperties: true,
         previousMessages: previousMessages
       })
@@ -36,10 +36,16 @@ export const testChatbotResponse = async (
     const searchResults = await searchResponse.json();
     console.log('Search results:', searchResults);
 
+    // Extract training data matches
+    const trainingResults = {
+      qaMatches: searchResults.qa_matches || [],
+      fileContent: searchResults.file_content || []
+    };
+
     // Extract property recommendations
     const propertyRecommendations: PropertyRecommendation[] = searchResults.property_listings || [];
     
-    // Send the message, search results, and property info to the OpenAI API 
+    // Send the message, search results, and training data to the OpenAI API 
     const aiResponse = await fetch('https://ckgaqkbsnrvccctqxsqv.supabase.co/functions/v1/ai-chatbot', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -48,8 +54,9 @@ export const testChatbotResponse = async (
         userId: userId,
         visitorInfo: visitorInfo,
         conversationId: conversationId,
-        searchResults: searchResults,
-        previousMessages: previousMessages
+        previousMessages: previousMessages,
+        trainingResults: trainingResults,  // Pass training results to the AI
+        propertyRecommendations: propertyRecommendations
       })
     });
 
@@ -60,10 +67,16 @@ export const testChatbotResponse = async (
     const aiData = await aiResponse.json();
     console.log('AI response:', aiData);
 
-    // Return the AI response with property recommendations
+    // Determine response source based on if training data was used
+    const responseSource = 
+      (trainingResults.qaMatches.length > 0 || trainingResults.fileContent.length > 0) 
+        ? 'training' 
+        : 'ai';
+
+    // Return the AI response with property recommendations and source
     return {
       response: aiData.response,
-      source: aiData.source,
+      source: aiData.source || responseSource,
       leadInfo: aiData.leadInfo,
       conversationId: aiData.conversationId || conversationId,
       propertyRecommendations: propertyRecommendations
