@@ -65,6 +65,41 @@ export const testChatbotResponse = async (
       }
     }
 
+    // Check if the message is about locations or properties
+    const isPropertyQuery = message.toLowerCase().match(/buy|rent|house|apartment|villa|property|spain|marbella/i);
+    
+    // If the user is asking about properties, first try to search directly in the database
+    let dbProperties = [];
+    if (isPropertyQuery) {
+      console.log('Property query detected, searching properties directly in database');
+      const locationMatch = message.toLowerCase().match(/in\s+([a-zA-Z\s]+)/i);
+      const location = locationMatch ? locationMatch[1].trim() : null;
+      
+      // Search for properties in the database directly
+      const propertiesResponse = await fetch(
+        'https://ckgaqkbsnrvccctqxsqv.supabase.co/functions/v1/search-properties',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            userId,
+            searchParams: {
+              location: location,
+              keywords: message.split(' ').filter(word => word.length > 3)
+            }
+          }),
+        }
+      );
+      
+      if (propertiesResponse.ok) {
+        const propertiesData = await propertiesResponse.json();
+        dbProperties = propertiesData.properties || [];
+        console.log(`Found ${dbProperties.length} properties in database matching query`);
+      }
+    }
+
     // Send message to the chatbot response function along with training results
     const chatbotResponse = await fetch(
       'https://ckgaqkbsnrvccctqxsqv.supabase.co/functions/v1/chatbot-response',
@@ -80,7 +115,7 @@ export const testChatbotResponse = async (
           conversationId,
           previousMessages: previousMessages.length > 0 ? previousMessages : conversationHistory,
           trainingResults,
-          propertyRecommendations: trainingResults.property_listings || []
+          propertyRecommendations: dbProperties.length > 0 ? dbProperties : (trainingResults.property_listings || [])
         }),
       }
     );
