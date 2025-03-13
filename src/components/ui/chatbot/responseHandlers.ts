@@ -1,3 +1,4 @@
+
 import { Message, PropertyRecommendation } from './types';
 
 /**
@@ -26,7 +27,8 @@ export const testChatbotResponse = async (
           includeQA: true,
           includeFiles: true,
           includeProperties: true,
-          maxResults: 3
+          maxResults: 3,
+          previousMessages // Pass previous messages for better context
         }),
       }
     );
@@ -37,6 +39,31 @@ export const testChatbotResponse = async (
 
     const trainingResults = await trainingResponse.json();
     console.log('Training search results:', trainingResults);
+
+    // Get conversation history
+    let conversationHistory = [];
+    if (conversationId) {
+      const historyResponse = await fetch(
+        'https://ckgaqkbsnrvccctqxsqv.supabase.co/functions/v1/get-conversation-history',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            conversationId,
+            userId,
+            limit: 10
+          }),
+        }
+      );
+      
+      if (historyResponse.ok) {
+        const historyData = await historyResponse.json();
+        conversationHistory = historyData.messages || [];
+        console.log('Conversation history retrieved:', conversationHistory.length, 'messages');
+      }
+    }
 
     // Send message to the chatbot response function along with training results
     const chatbotResponse = await fetch(
@@ -51,7 +78,7 @@ export const testChatbotResponse = async (
           userId,
           visitorInfo,
           conversationId,
-          previousMessages,
+          previousMessages: previousMessages.length > 0 ? previousMessages : conversationHistory,
           trainingResults,
           propertyRecommendations: trainingResults.property_listings || []
         }),
@@ -103,11 +130,11 @@ export const formatPropertyRecommendations = (response: string, properties: Prop
       
     // Create emoji icons based on property features
     const icons = [];
-    if (property.type === 'villa') icons.push('🏠');
-    else if (property.type === 'apartment') icons.push('🏢');
+    if (property.propertyType === 'villa') icons.push('🏠');
+    else if (property.propertyType === 'apartment') icons.push('🏢');
     else icons.push('🏡');
     
-    if (property.has_pool) icons.push('🏊');
+    if (property.hasPool) icons.push('🏊');
     
     // Add property entry
     propertySection += `${icons.join(' ')} **${property.title || 'Exclusive Property'} – ${price}**\n`;
@@ -118,15 +145,14 @@ export const formatPropertyRecommendations = (response: string, properties: Prop
     }
     
     // Add basic details
-    if (property.bedrooms || property.bathrooms) {
+    if (property.bedroomCount || property.bathroomCount) {
       const details = [];
-      if (property.bedrooms) details.push(`${property.bedrooms} Bedrooms`);
-      if (property.bathrooms) details.push(`${property.bathrooms} Bathrooms`);
+      if (property.bedroomCount) details.push(`${property.bedroomCount} Bedrooms`);
+      if (property.bathroomCount) details.push(`${property.bathroomCount} Bathrooms`);
       propertySection += `✅ ${details.join(', ')}\n`;
     }
     
-    // Ensure URLs are correctly formatted for markdown and properly escaped
-    // Use relative URLs to prevent them from opening outside the chat window
+    // Ensure URLs are formatted for in-app navigation
     const clickableUrl = property.url 
       ? `./property/${property.id}`  // Use relative URL that stays in the app
       : `./property/${property.id}`; // Fallback to a generated URL

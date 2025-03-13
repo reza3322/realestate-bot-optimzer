@@ -103,7 +103,7 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
     const initializeChatbot = async () => {
       setLoading(true);
       try {
-        const result = await createChatbotSettingsTable(userId);
+        const result = await createChatbotSettingsTable(userId, "");
         console.log("Chatbot initialization result:", result);
         
         if (result.data?.settings) {
@@ -216,7 +216,7 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
       
       setLoading(true);
       try {
-        await createChatbotSettingsTable();
+        await createChatbotSettingsTable(userId, "");
         
         console.log(`Fetching settings for user ID: ${userId}`);
         const { data, error } = await supabase
