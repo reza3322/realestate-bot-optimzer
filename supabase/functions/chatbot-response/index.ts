@@ -104,7 +104,8 @@ serve(async (req) => {
     // Prioritize property search when criteria are provided
     const shouldSearchProperties = isDirectPropertyRequest || propertyInfoProvided;
 
-    // If no properties provided and should search, try to fetch them directly 
+    // Always use the provided property recommendations or search for properties
+    // NEVER create fictional properties
     let finalPropertyRecommendations = [...propertyRecommendations];
     
     if (finalPropertyRecommendations.length === 0 && shouldSearchProperties) {
@@ -131,35 +132,40 @@ serve(async (req) => {
       response = generateTrainingDataResponse(message, trainingResults);
       isVerified = true;
     } 
-    // Otherwise, use OpenAI if available
+    // Otherwise, use OpenAI if available with strict instructions not to make up properties
     else if (openai) {
-      console.log("🤖 Using OpenAI to generate response");
+      console.log("🤖 Using OpenAI to generate response with strict property guidelines");
       
-      // Improve property context for OpenAI - more actionable now
+      // Check if we need to ask for contact information (no properties found)
+      const shouldAskForContact = finalPropertyRecommendations.length === 0 && shouldSearchProperties;
+      
+      // Update system prompt to emphasize: ONLY use properties from database & ask for contact when no properties
       const propertyContext = finalPropertyRecommendations.length > 0 
-        ? `You have found ${finalPropertyRecommendations.length} properties that match the user's criteria. DO show these properties when the user asks about real estate.` 
-        : "You don't have any specific property listings that match the user's query right now.";
+        ? `You have found ${finalPropertyRecommendations.length} properties in the database that match the user's criteria. ONLY show these properties when the user asks about real estate.` 
+        : "You don't have any specific property listings that match the user's query in our database. DO NOT make up or invent properties. Instead, ask for their contact details (email/phone) so we can notify them when matching properties become available.";
       
-      // Generate response with the improved directive to show properties
+      // Generate response with improved restrictions
       response = await generateAIResponse(
         message, 
         recentMessages, 
         propertyContext, 
         visitorInfo,
-        trainingResults?.fileContent || []
+        trainingResults?.fileContent || [],
+        shouldAskForContact
       );
       
-      // Verify the response meets our quality standards
+      // Verify the response meets quality standards
       isVerified = await verifyResponse(message, response, finalPropertyRecommendations);
       
       if (!isVerified) {
-        console.log("❌ Response verification failed, regenerating...");
+        console.log("❌ Response verification failed, regenerating with stricter guidelines...");
         response = await generateAIResponse(
           message, 
           recentMessages, 
           propertyContext, 
           visitorInfo,
           trainingResults?.fileContent || [],
+          shouldAskForContact,
           true // Include quality guidelines
         );
         isVerified = true; // Assume second attempt is good enough
@@ -171,14 +177,18 @@ serve(async (req) => {
       isVerified = true;
     }
     
-    // CRITICAL FIX: Always check if we need to show property recommendations 
-    // Make sure properties are ALWAYS included when we have them available
+    // CRITICAL FIX: Always show property recommendations when we have them
+    // Never show property recommendations that don't exist in the database
     const showPropertyRecommendations = shouldSearchProperties || 
       (finalPropertyRecommendations.length > 0 && message.toLowerCase().match(/property|house|villa|apartment|flat|condo|real estate|buy|rent|purchase/i));
     
     if (finalPropertyRecommendations.length > 0 && showPropertyRecommendations && 
         !response.includes('🏡') && !response.includes('View Listing')) {
       response = formatPropertyRecommendations(response, finalPropertyRecommendations);
+    } else if (finalPropertyRecommendations.length === 0 && shouldSearchProperties && 
+              !response.toLowerCase().includes('email') && !response.toLowerCase().includes('contact')) {
+      // If no properties but user is asking for them, ensure we ask for contact details
+      response = addContactRequestToResponse(response);
     }
 
     // Extract potential lead information
@@ -333,7 +343,7 @@ async function fetchPropertiesFromDatabase(userId, query) {
 // Format property data to match the expected format
 function formatPropertyData(property) {
   // Create URL if not provided
-  const url = property.url || `https://youragency.com/listing/${property.id.substring(0, 6)}`;
+  const url = property.url || `./property/${property.id}`;
   
   // Extract features
   const features = [];
@@ -367,13 +377,13 @@ function formatPropertyData(property) {
     title: property.title || `${property.type || 'Property'} in ${property.city || 'Exclusive Location'}`,
     price: property.price,
     location: location,
-    bedrooms: property.bedrooms,
-    bathrooms: property.bathrooms,
-    has_pool: property.has_pool,
+    bedroomCount: property.bedrooms,
+    bathroomCount: property.bathrooms,
+    hasPool: property.has_pool,
+    propertyType: property.type,
     features: features,
     highlight: highlight,
-    url: url,
-    type: property.type
+    url: url
   };
 }
 
@@ -397,31 +407,39 @@ function extractKeywords(query) {
   return keywords;
 }
 
-// Generate a response using OpenAI with improved instructions for direct property responses
-async function generateAIResponse(message, previousMessages, propertyContext, visitorInfo, crawledContent = [], includeQualityGuidelines = false) {
-  // Create system message with improved instructions for more direct property responses
-  let systemContent = `You are a friendly and conversational real estate assistant. Your PRIMARY GOAL is to recommend properties when users ask for them.
+// Add contact request to response if no properties found
+function addContactRequestToResponse(response) {
+  if (response.toLowerCase().includes('email') || response.toLowerCase().includes('contact')) {
+    return response; // Already has contact request
+  }
+  
+  return `${response}\n\nI couldn't find any properties matching your criteria in our database right now. Would you like to leave your email or phone number so we can contact you when properties that match your requirements become available?`;
+}
+
+// Generate a response using OpenAI with improved instructions for ONLY using database properties
+async function generateAIResponse(message, previousMessages, propertyContext, visitorInfo, crawledContent = [], shouldAskForContact = false, includeQualityGuidelines = false) {
+  // Create system message with improved instructions to NEVER invent properties
+  let systemContent = `You are a friendly and conversational real estate assistant. Your PRIMARY GOAL is to recommend properties that ACTUALLY EXIST in the database when users ask for them.
 
 CRITICAL GUIDELINES:
-1. SHOW PROPERTIES IMMEDIATELY when a user asks about real estate. Don't ask unnecessary questions if you already have property info.
-2. Keep responses EXTREMELY BRIEF (2-3 lines) - users prefer direct answers over explanations.
-3. Always include PROPERTY LISTINGS with details when they're available and relevant.
+1. ONLY show properties from the database - NEVER make up or invent property details that don't exist.
+2. If NO properties match a user's search, DO NOT make up properties. Instead, ask for their contact details (email/phone).
+3. Keep responses BRIEF (2-3 lines) - users prefer direct answers over explanations.
 4. Don't ask questions the user has already answered (like location, bedrooms, etc).
-5. When recommending properties, ALWAYS include the property URL.
-6. Only ask for contact details AFTER showing properties and getting interest.
+5. When recommending properties, ALWAYS use the property URL provided.
+6. Only ask for contact details AFTER showing properties OR when no properties match their search.
 7. Remember previous parts of the conversation and don't repeat questions.
-8. NEVER make up information about properties - only use data that has been provided.
 
 ${propertyContext}
 
-VERY IMPORTANT: When a user asks about real estate, ALWAYS show them properties.`;
+${shouldAskForContact ? 'IMPORTANT: Since we have no matching properties, ask the user for their contact information (email/phone) so we can notify them when suitable properties become available.' : ''}`;
 
   // Add crawled content if available
   if (crawledContent && crawledContent.length > 0) {
-    systemContent += `\n\nHere is some additional information about our real estate agency and properties (only reference if directly relevant):\n\n`;
+    systemContent += `\n\nHere is some additional information about our real estate agency (only reference if directly relevant):\n\n`;
     
     crawledContent.forEach((item, index) => {
-      systemContent += `Source: ${item.source}\nCategory: ${item.category}\nContent: ${item.content.substring(0, 300)}...\n\n`;
+      systemContent += `Source: ${item.source}\nCategory: ${item.category}\nContent: ${item.text.substring(0, 300)}...\n\n`;
     });
   }
 
@@ -459,248 +477,172 @@ VERY IMPORTANT: When a user asks about real estate, ALWAYS show them properties.
   return completion.data.choices[0].message.content;
 }
 
-// More improved property recommendations format
+// Improved property recommendations format
 function formatPropertyRecommendations(response, propertyRecommendations) {
   if (!propertyRecommendations || propertyRecommendations.length === 0) {
     return response;
   }
+
+  // Limit to maximum of 3 properties
+  const displayProperties = propertyRecommendations.slice(0, 3);
   
-  // Only show top properties
-  const limitedRecommendations = propertyRecommendations.slice(0, MAX_PROPERTY_RECOMMENDATIONS);
+  // Create a property showcase section
+  let propertySection = "\n\nHere are some properties you might like:\n\n";
   
-  // Create a concise format
-  let formattedProperties = "\n\nHere are some properties you might like:\n\n";
-  
-  limitedRecommendations.forEach((property) => {
-    // Format the price
+  displayProperties.forEach((property, index) => {
+    // Format price with currency
     const price = typeof property.price === 'number' 
-      ? new Intl.NumberFormat('en-EU', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(property.price)
+      ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(property.price)
       : property.price;
-    
-    // Get the property title
-    const title = property.title || `${property.type || 'Property'} in ${property.city || 'Exclusive Location'}`;
-    
-    // Create a more concise listing
-    formattedProperties += `🏡 **${title} – ${price}**\n`;
-    
-    // Location (if available)
-    if (property.location) {
-      formattedProperties += `📍 ${property.location}\n`;
-    }
-    
-    // Only show key features (limit to most important)
-    if (property.features && property.features.length > 0) {
-      const featuresText = Array.isArray(property.features) ? 
-        property.features.slice(0, 3).join(', ') : 
-        property.features.split(',').slice(0, 3).join(',');
-      formattedProperties += `✅ ${featuresText}\n`;
-    } else {
-      // Add basic features directly
-      let basicFeatures = [];
-      if (property.bedrooms) basicFeatures.push(`${property.bedrooms} Bed`);
-      if (property.bathrooms) basicFeatures.push(`${property.bathrooms} Bath`);
-      if (property.has_pool) basicFeatures.push(`Pool`);
       
-      if (basicFeatures.length > 0) {
-        formattedProperties += `✅ ${basicFeatures.join(', ')}\n`;
-      }
+    // Create emoji icons based on property features
+    const icons = [];
+    if (property.propertyType === 'villa') icons.push('🏠');
+    else if (property.propertyType === 'apartment') icons.push('🏢');
+    else icons.push('🏡');
+    
+    if (property.hasPool) icons.push('🏊');
+    
+    // Add property entry
+    propertySection += `${icons.join(' ')} **${property.title || 'Exclusive Property'} – ${price}**\n`;
+    
+    // Add location if available
+    if (property.location) {
+      propertySection += `📍 ${property.location}\n`;
     }
     
-    // URL - always include
-    if (property.url) {
-      formattedProperties += `🔗 [View Listing](${property.url})\n\n`;
-    } else {
-      const listingId = property.id ? property.id.substring(0, 6) : Math.floor(Math.random() * 100000);
-      formattedProperties += `🔗 [View Listing](https://youragency.com/listing/${listingId})\n\n`;
+    // Add basic details
+    if (property.bedroomCount || property.bathroomCount) {
+      const details = [];
+      if (property.bedroomCount) details.push(`${property.bedroomCount} Bedrooms`);
+      if (property.bathroomCount) details.push(`${property.bathroomCount} Bathrooms`);
+      propertySection += `✅ ${details.join(', ')}\n`;
     }
+    
+    // Ensure URLs are formatted for in-app navigation
+    const clickableUrl = property.url 
+      ? property.url  // Use provided URL (already relative URL that stays in the app)
+      : `./property/${property.id}`; // Fallback to a generated URL
+    
+    propertySection += `🔗 [View Listing](${clickableUrl})\n\n`;
   });
   
-  formattedProperties += "Would you like to see more options or schedule a viewing?";
-  
-  // If the response already contains property information, replace it
-  if (response.toLowerCase().includes("here are some properties") || 
-      response.toLowerCase().includes("found the following") ||
-      response.toLowerCase().includes("these properties")) {
-    // Response already trying to show properties - replace that part
-    return response.split(/(?:here are|i found|check out|these are).*properties/i)[0] + formattedProperties;
+  propertySection += "Would you like more information about any of these properties?";
+
+  // If the original response already has property listings, replace them
+  if (response.toLowerCase().includes('property') && 
+      (response.toLowerCase().includes('listing') || response.includes('🏡'))) {
+    // Get the first sentence of the original response
+    const firstSentence = response.split(/[.!?]/)[0] + '.';
+    return firstSentence + propertySection;
   } else {
-    // Keep response brief and put properties first
-    const briefResponse = response.split('.')[0] + '. ';
-    return briefResponse + formattedProperties;
+    // Otherwise add the property section to the response
+    return response + propertySection;
   }
 }
 
-// Verify the quality of the response with emphasis on property listing inclusion
-async function verifyResponse(userQuestion, generatedResponse, propertyRecommendations) {
-  try {
-    // Skip verification if no OpenAI API key
-    if (!openai) return true;
-    
-    // Check if this is a property request and if the response includes property info
-    const isPropertyRequest = userQuestion.toLowerCase().match(/property|house|villa|apartment|rent|buy|real estate/i);
-    const hasPropertyResponse = generatedResponse.includes('🏡') || 
-                               generatedResponse.includes('property') || 
-                               generatedResponse.toLowerCase().includes('listing');
-    
-    // If user asked for properties but response doesn't include them, reject automatically
-    if (isPropertyRequest && propertyRecommendations.length > 0 && !hasPropertyResponse) {
-      console.log("❌ Automatic rejection: User asked for properties but response doesn't include them");
-      return false;
-    }
-    
-    // Create verification prompt with emphasis on conciseness and property inclusion
-    const prompt = `You are an AI assistant verifying chatbot responses for a real estate agency.
-
-- The user asked: "${userQuestion}"
-- The chatbot wants to reply: "${generatedResponse}"
-
-✅ Give "APPROVED" if the response is:
-- Concise (3-5 lines max)
-- Direct and to the point
-- Includes property information when the user is asking about real estate
-- Free from unnecessary questions when the user has been specific
-
-❌ Give "REJECTED" if the response:
-- Is too long or verbose
-- Asks questions the user has already answered
-- Ignores the user's request for property information
-- Sounds too robotic or formal
-- Fails to include property details when they should be included
-
-Only respond with "APPROVED" or "REJECTED".`;
-
-    // Call OpenAI for verification
-    const verification = await openai.createChatCompletion({
-      model: OPENAI_MODEL,
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0.1,
-      max_tokens: 10
-    });
-    
-    const result = verification.data.choices[0].message.content.trim();
-    console.log(`🔍 Response verification result: ${result}`);
-    
-    return result === "APPROVED";
-  } catch (error) {
-    console.error("❌ Error verifying response:", error);
-    // If verification fails, assume the response is good enough
-    return true;
-  }
-}
-
-// More direct and property-focused fallback responses
-function generateFallbackResponse(message, propertyRecommendations) {
+// Extract potential lead information from the message and visitor info
+function extractLeadInfo(message, visitorInfo) {
+  const extractedInfo = { ...visitorInfo };
   const lowerMessage = message.toLowerCase();
   
-  // Check for property inquiry - now much more direct
-  if (lowerMessage.includes('property') || 
-      lowerMessage.includes('house') || 
-      lowerMessage.includes('villa') || 
-      lowerMessage.includes('apartment')) {
-    
-    if (propertyRecommendations.length > 0) {
-      // Direct property response
-      let response = "Here are some properties that might interest you:\n\n";
-      
-      propertyRecommendations.slice(0, MAX_PROPERTY_RECOMMENDATIONS).forEach((property) => {
-        const price = formatPrice(property.price);
-        response += `🏡 **${property.title || 'Luxury Property'} - ${price}**\n`;
-        if (property.location) response += `📍 ${property.location}\n`;
-        if (property.features) response += `✅ ${Array.isArray(property.features) ? 
-          property.features.join(', ') : property.features}\n`;
-        response += `🔗 [View Listing](${property.url || 'https://youragency.com/properties'})\n\n`;
-      });
-      
-      return response + "Would you like to schedule a viewing?";
+  // Extract email
+  const emailMatch = message.match(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/);
+  if (emailMatch && !extractedInfo.email) {
+    extractedInfo.email = emailMatch[0];
+  }
+  
+  // Extract phone number (various formats)
+  const phoneMatches = message.match(/(?:\+\d{1,3}[ -]?)?\(?\d{3}\)?[ -]?\d{3}[ -]?\d{4}/g) || 
+                     message.match(/(?:\+\d{1,3}[ -]?)?\d{10,}/g);
+  if (phoneMatches && !extractedInfo.phone) {
+    extractedInfo.phone = phoneMatches[0];
+  }
+  
+  // Extract name (simple approach)
+  const nameMatch = message.match(/(?:my name is|I am|I'm) ([A-Za-z]+(?: [A-Za-z]+)?)/i);
+  if (nameMatch && !extractedInfo.firstName) {
+    const fullName = nameMatch[1].split(' ');
+    if (fullName.length > 1) {
+      extractedInfo.firstName = fullName[0];
+      extractedInfo.lastName = fullName.slice(1).join(' ');
     } else {
-      return "I'd be happy to help you find a property! What area are you interested in and what's your budget?";
+      extractedInfo.firstName = fullName[0];
     }
   }
   
-  // Greeting - more conversational
-  if (lowerMessage.includes('hello') || 
-      lowerMessage.includes('hi') || 
-      lowerMessage.includes('hey')) {
-    return "Hello! 👋 How can I help with your property search today?";
-  }
-  
-  // Default response - shorter and with a question
-  return "Thanks for reaching out! I'm your personal real estate assistant. Are you looking to buy, sell, or rent a property?";
+  return extractedInfo;
 }
 
-// Extract potential lead information from the message
-function extractLeadInfo(message, currentVisitorInfo) {
-  const emailRegex = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g;
-  const phoneRegex = /(\+?[0-9]{1,4}[\s.-]?)?(\()?[0-9]{3}(\))?[\s.-]?[0-9]{3}[\s.-]?[0-9]{4}\b/g;
-  const nameRegex = /(?:my name is|i am|i'm) ([A-Za-z]+)(?: [A-Za-z]+)?/i;
+// Verify the response doesn't invent properties and follows our guidelines
+async function verifyResponse(message, response, propertyRecommendations) {
+  // Check if the response mentions properties when we don't have any
+  const noProperties = propertyRecommendations.length === 0;
+  const responseMentionsSpecificProperties = response.match(/\d+ bedroom|\d+ bathroom|swimming pool|terrace|villa in|apartment in|penthouse in|(\$|€)[0-9,.]+/gi);
   
-  const leadInfo = { ...currentVisitorInfo };
-  
-  // Extract email
-  const emailMatch = message.match(emailRegex);
-  if (emailMatch && !leadInfo.email) {
-    leadInfo.email = emailMatch[0];
+  if (noProperties && responseMentionsSpecificProperties) {
+    console.log("❌ Response verification failed: Mentions specific properties when none exist in database");
+    return false;
   }
   
-  // Extract phone
-  const phoneMatch = message.match(phoneRegex);
-  if (phoneMatch && !leadInfo.phone) {
-    leadInfo.phone = phoneMatch[0];
+  // Check if it asks for contact when no properties available
+  const asksForContact = response.toLowerCase().includes('email') || 
+                       response.toLowerCase().includes('phone') || 
+                       response.toLowerCase().includes('contact');
+  
+  if (noProperties && message.toLowerCase().includes('property') && !asksForContact) {
+    console.log("❌ Response verification failed: Doesn't ask for contact when no properties found");
+    return false;
   }
   
-  // Extract name
-  const nameMatch = message.match(nameRegex);
-  if (nameMatch && !leadInfo.name) {
-    leadInfo.name = nameMatch[1];
-  }
-  
-  return leadInfo;
+  // All good!
+  return true;
 }
 
-// Save the conversation to the database
+// Generate a simple fallback response if OpenAI is not available
+function generateFallbackResponse(message, propertyRecommendations) {
+  // If we have properties, show them
+  if (propertyRecommendations && propertyRecommendations.length > 0) {
+    return "Thank you for your interest in our properties. I've found some listings that might match what you're looking for.";
+  }
+  
+  // Check if the query seems to be about properties
+  if (message.toLowerCase().match(/house|property|apartment|villa|flat|condo|real estate|buy|rent|purchase/i)) {
+    return "I couldn't find any properties matching your criteria in our database right now. Would you like to leave your email or phone number so we can contact you when properties that match your requirements become available?";
+  }
+  
+  // Generic fallback
+  return "Thank you for your message. How can I assist you with your real estate needs today?";
+}
+
+// Save the conversation to the database (with fix for visitor_info)
 async function saveConversation(userId, message, response, visitorId, conversationId) {
   try {
+    // Generate a new conversation ID if needed
+    if (!conversationId) {
+      conversationId = 'conv_' + Math.random().toString(36).substring(2, 15);
+    }
+    
+    // Insert the conversation into the database - FIXED: removed visitor_info column
     const { data, error } = await supabase
       .from('chatbot_conversations')
       .insert({
         user_id: userId,
-        message,
-        response,
+        conversation_id: conversationId,
         visitor_id: visitorId,
-        conversation_id: conversationId || `conv-${Date.now()}`
-      })
-      .select('conversation_id');
+        message: message,
+        response: response
+      });
     
     if (error) {
-      console.error("❌ Error saving conversation:", error);
-      return conversationId;
+      console.error('❌ Error saving conversation:', error);
+    } else {
+      console.log('✅ Conversation saved successfully');
     }
     
-    return data && data.length > 0 ? data[0].conversation_id : conversationId;
-  } catch (error) {
-    console.error("❌ Error in saveConversation:", error);
     return conversationId;
-  }
-}
-
-// Helper function to format price
-function formatPrice(price) {
-  if (!price) return 'Price on request';
-  
-  try {
-    if (typeof price === 'string') {
-      if (price.includes('€') || price.includes('$') || price.includes('£')) {
-        return price;
-      }
-      price = parseFloat(price.replace(/[^\d.-]/g, ''));
-    }
-    
-    return new Intl.NumberFormat('en-US', { 
-      style: 'currency', 
-      currency: 'EUR', 
-      maximumFractionDigits: 0 
-    }).format(price);
-  } catch (e) {
-    return `€${price}`;
+  } catch (error) {
+    console.error('❌ Exception saving conversation:', error);
+    return conversationId;
   }
 }
