@@ -1,3 +1,4 @@
+
 import { useState, useRef, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import ChatHeader from './ChatHeader';
@@ -5,34 +6,29 @@ import ChatMessage from './ChatMessage';
 import ChatInput from './ChatInput';
 import TypingIndicator from './TypingIndicator';
 import { getChatStyles } from './chatStyles';
-import { Message, ChatTheme, LanguageCode, ChatStylesType, VisitorInfo, PropertyRecommendation } from './types';
-import { testChatbotResponse, formatPropertyRecommendations } from './responseHandlers';
+import { Message, ChatTheme, LanguageCode, VisitorInfo, PropertyRecommendation } from './types';
+import { testChatbotResponse } from './responseHandlers';
 
 const DEFAULT_TRANSLATIONS = {
   en: {
-    welcomeMessage: "Hi there! I'm your RealHomeAI assistant. How can I help you today?",
+    welcomeMessage: "Hi there! I'm your real estate assistant. How can I help you today?",
     placeholderText: "Type your message...",
     errorMessage: "Sorry, there was an error processing your request."
   },
   es: {
-    welcomeMessage: "¡Hola! Soy tu asistente RealHomeAI. ¿Cómo puedo ayudarte hoy?",
+    welcomeMessage: "¡Hola! Soy tu asistente inmobiliario. ¿Cómo puedo ayudarte hoy?",
     placeholderText: "Escribe tu mensaje...",
     errorMessage: "Lo siento, hubo un error al procesar tu solicitud."
   },
   fr: {
-    welcomeMessage: "Bonjour! Je suis votre assistant RealHomeAI. Comment puis-je vous aider aujourd'hui?",
+    welcomeMessage: "Bonjour! Je suis votre assistant immobilier. Comment puis-je vous aider aujourd'hui?",
     placeholderText: "Tapez votre message...",
     errorMessage: "Désolé, une erreur s'est produite lors du traitement de votre demande."
   },
   de: {
-    welcomeMessage: "Hallo! Ich bin Ihr RealHomeAI-Assistent. Wie kann ich Ihnen heute helfen?",
+    welcomeMessage: "Hallo! Ich bin Ihr Immobilienassistent. Wie kann ich Ihnen heute helfen?",
     placeholderText: "Geben Sie Ihre Nachricht ein...",
     errorMessage: "Entschuldigung, bei der Verarbeitung Ihrer Anfrage ist ein Fehler aufgetreten."
-  },
-  pt: {
-    welcomeMessage: "Olá! Sou seu assistente RealHomeAI. Como posso ajudá-lo hoje?",
-    placeholderText: "Digite sua mensagem...",
-    errorMessage: "Desculpe, ocorreu um erro ao processar sua solicitação."
   }
 };
 
@@ -47,9 +43,7 @@ interface ChatbotProps {
   placeholderText?: string;
   maxHeight?: string;
   onSendMessage?: (message: string) => void;
-  userId?: string;
-  useRealAPI?: boolean;
-  botIconName?: string;
+  userId: string;
   primaryColor?: string;
   language?: LanguageCode;
   buttonStyle?: React.CSSProperties;
@@ -61,14 +55,12 @@ const Chatbot = ({
   theme = 'default',
   variation = 'default',
   fontStyle = 'default',
-  botName = "RealHomeAI Assistant",
+  botName = "Real Estate Assistant",
   welcomeMessage,
   placeholderText,
   maxHeight = "400px",
   onSendMessage,
-  userId = 'demo-user',
-  useRealAPI = false,
-  botIconName = 'bot',
+  userId,
   primaryColor,
   language = 'en',
   buttonStyle,
@@ -76,7 +68,7 @@ const Chatbot = ({
 }: ChatbotProps) => {
   const translations = DEFAULT_TRANSLATIONS[language] || DEFAULT_TRANSLATIONS.en;
   
-  const defaultWelcomeMessage = welcomeMessage || translations.welcomeMessage.replace("RealHomeAI", botName);
+  const defaultWelcomeMessage = welcomeMessage || translations.welcomeMessage;
   const defaultPlaceholderText = placeholderText || translations.placeholderText;
   
   const [messages, setMessages] = useState<Message[]>([
@@ -123,9 +115,7 @@ const Chatbot = ({
     setError(null);
     setResponseSource(null);
     
-    const isLandingPageMode = userId === 'demo-user';
-    console.log(`Chatbot mode: ${isLandingPageMode ? 'Landing Page Demo' : 'User Chatbot'}`);
-    console.log(`Conversation ID: ${conversationId || 'New conversation'}`);
+    console.log(`Sending message. User ID: ${userId}, Conversation ID: ${conversationId || 'New conversation'}`);
     
     try {
       // Get all previous messages except the initial welcome
@@ -145,15 +135,13 @@ const Chatbot = ({
         console.error('Chatbot error:', result.error);
         setError(`Error: ${result.error}`);
       } else {
-        // Always handle result properties safely with null checks
-        
-        // Check if conversationId exists in the result before setting it
+        // Handle conversation ID
         if (result.conversationId && !conversationId) {
           console.log(`Setting conversation ID: ${result.conversationId}`);
           setConversationId(result.conversationId);
         }
         
-        // Check if propertyRecommendations exists in the result before using it
+        // Handle property recommendations
         const newPropertyRecs = result.propertyRecommendations || [];
         if (newPropertyRecs.length > 0) {
           console.log('Received property recommendations:', newPropertyRecs);
@@ -167,14 +155,14 @@ const Chatbot = ({
           properties: newPropertyRecs
         }]);
         
-        // Set response source properly if it exists
+        // Set response source
         if (result.source) {
           setResponseSource(result.source as 'ai' | 'training');
         } else {
           setResponseSource('ai');
         }
         
-        // Handle visitor info update from result if leadInfo exists
+        // Handle visitor info update
         if (result.leadInfo) {
           setVisitorInfo(prev => ({
             ...prev,
@@ -230,8 +218,7 @@ const Chatbot = ({
         botName={botName}
         headerStyle={chatStyles.header}
         fontStyle={getFontClass()} 
-        apiKeyStatus={useRealAPI ? "set" : "not-set"}
-        botIconName={botIconName}
+        botIconName="bot"
         customStyle={headerStyle}
       />
       
@@ -254,7 +241,7 @@ const Chatbot = ({
               header: chatStyles.header,
               inputContainer: chatStyles.inputContainer
             }}
-            botIconName={botIconName}
+            botIconName="bot"
             customBotIconStyle={botIconStyle}
             customUserBubbleStyle={userBubbleStyle}
             conversationId={conversationId}
@@ -265,7 +252,7 @@ const Chatbot = ({
           <TypingIndicator 
             botIconStyle={chatStyles.botIcon}
             botBubbleStyle={chatStyles.botBubble}
-            botIconName={botIconName}
+            botIconName="bot"
             customBotIconStyle={botIconStyle}
           />
         )}

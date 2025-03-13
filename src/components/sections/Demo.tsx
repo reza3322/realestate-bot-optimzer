@@ -313,7 +313,7 @@ const Demo = () => {
             </div>
           </div>
           
-          {/* Chat preview - replaced with static UI mockup */}
+          {/* Static chat preview mockup */}
           <div className="md:col-span-3 bg-white dark:bg-gray-800 rounded-xl shadow-xl p-4">
             <div className="h-full flex flex-col">
               <div className="p-3 bg-blue-500 text-white rounded-t-lg">
