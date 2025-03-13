@@ -21,6 +21,7 @@ serve(async (req) => {
     const { 
       query, 
       userId, 
+      conversationId,
       includeQA = true, 
       includeFiles = true, 
       includeProperties = true,
@@ -28,6 +29,7 @@ serve(async (req) => {
     } = await req.json();
     
     console.log(`Searching training data for user ${userId} with query: ${query}`);
+    console.log(`Conversation ID: ${conversationId || 'Not provided'}`);
 
     if (!query || !userId) {
       return new Response(
@@ -40,6 +42,35 @@ serve(async (req) => {
     let qaMatches = [];
     let fileContent = [];
     let propertyListings = [];
+    let conversationContext = [];
+
+    // Fetch conversation history if conversationId is provided
+    if (conversationId) {
+      console.log(`Fetching conversation history for: ${conversationId}`);
+      const { data: historyData, error: historyError } = await supabaseClient
+        .from('chatbot_conversations')
+        .select('message, response, created_at')
+        .eq('conversation_id', conversationId)
+        .order('created_at', { ascending: true })
+        .limit(10); // Get the last 10 exchanges
+      
+      if (historyError) {
+        console.error('Error fetching conversation history:', historyError);
+      } else if (historyData && historyData.length > 0) {
+        conversationContext = historyData;
+        console.log(`Found ${conversationContext.length} previous conversation exchanges`);
+        
+        // Extract property mentions from previous responses
+        const prevPropertyIds = new Set();
+        historyData.forEach(exchange => {
+          const urlMatches = exchange.response.match(/\[View Listing\]\(([^)]+)\)/g);
+          if (urlMatches) {
+            // Track mentioned property URLs to ensure we reference them in future responses
+            console.log('Found property mentions in conversation history');
+          }
+        });
+      }
+    }
 
     // Fetch Q&A matches
     if (includeQA) {
@@ -96,8 +127,16 @@ serve(async (req) => {
                                 query.toLowerCase().includes('show me') ||
                                 query.toLowerCase().includes('do you have');
       
+      // Check if they're asking about a previously mentioned property
+      const askingAboutPrevious = query.toLowerCase().includes('that property') || 
+                                 query.toLowerCase().includes('this property') ||
+                                 query.toLowerCase().includes('the property') ||
+                                 query.toLowerCase().includes('more details') ||
+                                 query.toLowerCase().includes('tell me more');
+      
       const isPropertyQuery = emptyOrGeneralQuery || 
-                              propertyTerms.some(term => query.toLowerCase().includes(term));
+                              propertyTerms.some(term => query.toLowerCase().includes(term)) ||
+                              askingAboutPrevious;
       
       if (isPropertyQuery) {
         console.log("Query appears to be about properties, searching database...");
@@ -157,6 +196,29 @@ serve(async (req) => {
           }
         }
         
+        // If they're asking about previous property, check conversation context
+        if (askingAboutPrevious && conversationContext.length > 0) {
+          console.log("User appears to be asking about previously mentioned properties");
+          
+          // Look through previous responses for property IDs
+          const mentionedProperties = new Set();
+          for (const exchange of conversationContext) {
+            // Extract property IDs from previous responses using regex
+            const idMatches = exchange.response.match(/property\/([a-f0-9-]+)/g);
+            if (idMatches) {
+              idMatches.forEach(match => {
+                const id = match.replace('property/', '');
+                mentionedProperties.add(id);
+              });
+            }
+          }
+          
+          if (mentionedProperties.size > 0) {
+            console.log(`Found ${mentionedProperties.size} previously mentioned properties`);
+            propertyQuery = propertyQuery.in('id', Array.from(mentionedProperties));
+          }
+        }
+        
         // Execute query with limit and order by featured properties first
         const { data: propertiesData, error: propertiesError } = await propertyQuery
           .order('featured', { ascending: false })
@@ -177,7 +239,7 @@ serve(async (req) => {
             city: property.city,
             state: property.state,
             status: property.status,
-            url: property.url || `https://youragency.com/listing/${property.id.substring(0, 6)}`,
+            url: property.url || `https://youragency.com/property/${property.id}`,
             has_pool: property.has_pool,
             type: property.type,
             // Create location field for easier formatting
@@ -206,7 +268,7 @@ serve(async (req) => {
               city: property.city,
               state: property.state,
               status: property.status,
-              url: property.url || `https://youragency.com/listing/${property.id.substring(0, 6)}`,
+              url: property.url || `https://youragency.com/property/${property.id}`,
               has_pool: property.has_pool,
               type: property.type,
               location: property.city ? (property.state ? `${property.city}, ${property.state}` : property.city) : 'Exclusive Location'
@@ -225,7 +287,8 @@ serve(async (req) => {
       JSON.stringify({
         qa_matches: qaMatches,
         file_content: fileContent,
-        property_listings: propertyListings
+        property_listings: propertyListings,
+        conversation_context: conversationContext
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

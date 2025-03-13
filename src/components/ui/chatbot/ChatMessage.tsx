@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { User } from 'lucide-react';
 import { BotIcon } from './BotIcon';
@@ -13,6 +12,7 @@ export interface ChatMessageProps {
   botIconName?: string;
   customBotIconStyle?: React.CSSProperties;
   customUserBubbleStyle?: React.CSSProperties;
+  conversationId?: string;
 }
 
 const ChatMessage = ({ 
@@ -21,7 +21,8 @@ const ChatMessage = ({
   styles,
   botIconName = 'bot',
   customBotIconStyle,
-  customUserBubbleStyle
+  customUserBubbleStyle,
+  conversationId
 }: ChatMessageProps) => {
   const [visible, setVisible] = useState(false);
   
@@ -33,6 +34,27 @@ const ChatMessage = ({
     
     return () => clearTimeout(timer);
   }, []);
+
+  // Fix URL handling to keep links within the chat window
+  const fixUrls = (content: string): string => {
+    // Replace external URLs in markdown links with internal routes
+    // This keeps property URLs within the application
+    let fixedContent = content;
+    
+    // First fix markdown links
+    fixedContent = fixedContent.replace(
+      /\[([^\]]+)\]\(https?:\/\/[^)]+\/property\/([a-zA-Z0-9-]+)\)/g, 
+      '[$1](./property/$2)'
+    );
+    
+    // Also fix any other property URLs
+    fixedContent = fixedContent.replace(
+      /https?:\/\/[^)\s]+\/property\/([a-zA-Z0-9-]+)/g, 
+      './property/$1'
+    );
+    
+    return fixedContent;
+  };
   
   return (
     <div
@@ -62,14 +84,31 @@ const ChatMessage = ({
         ) : (
           <ReactMarkdown
             components={{
-              a: ({ node, ...props }) => (
-                <a 
-                  {...props} 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="text-blue-500 underline hover:text-blue-700 transition-colors" 
-                />
-              ),
+              a: ({ node, ...props }) => {
+                // Handle links to ensure they stay within the application
+                const href = props.href || '';
+                const isPropertyLink = href.includes('property/');
+                
+                return (
+                  <a 
+                    {...props} 
+                    href={href}
+                    target={isPropertyLink ? "_self" : "_blank"} 
+                    rel="noopener noreferrer"
+                    className="text-blue-500 underline hover:text-blue-700 transition-colors" 
+                    // Use data attributes to store property info for context
+                    data-conversation-id={isPropertyLink ? conversationId : undefined}
+                    onClick={(e) => {
+                      if (isPropertyLink) {
+                        // Prevent default and handle within the app
+                        e.preventDefault();
+                        console.log(`Clicked property link: ${href}`);
+                        // You could handle this with a router or state management
+                      }
+                    }}
+                  />
+                );
+              },
               p: ({ node, ...props }) => (
                 <p {...props} className="mb-3" />
               ),
@@ -96,7 +135,7 @@ const ChatMessage = ({
               )
             }}
           >
-            {message.content}
+            {fixUrls(message.content)}
           </ReactMarkdown>
         )}
       </div>

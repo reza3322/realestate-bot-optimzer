@@ -1,399 +1,149 @@
-
-import { supabase } from "@/lib/supabase";
-import { ChatbotResponse, Message, PropertySearchParams } from "./types";
-
-export const searchTrainingData = async (
-  query: string,
-  userId: string,
-  options: {
-    includeQA?: boolean;
-    includeFiles?: boolean;
-    includeProperties?: boolean;
-    maxResults?: number;
-  } = {}
-) => {
-  const { includeQA = true, includeFiles = true, includeProperties = true, maxResults = 5 } = options;
-  
-  try {
-    const { data, error } = await supabase.functions.invoke('search-training-data', {
-      body: { 
-        query,
-        userId,
-        includeQA,
-        includeFiles,
-        includeProperties,
-        maxResults
-      }
-    });
-
-    if (error) {
-      console.error("Error searching training data:", error);
-      throw error;
-    }
-
-    const { qa_matches: qaMatches, file_content: fileContent, property_listings: propertyListings } = data || {};
-    
-    return {
-      qaMatches: qaMatches || [],
-      fileContent: fileContent || [],
-      propertyListings: Array.isArray(propertyListings) ? propertyListings : []
-    };
-  } catch (error) {
-    console.error("Error searching training data:", error);
-    return {
-      qaMatches: [],
-      fileContent: [],
-      propertyListings: []
-    };
-  }
-};
+import { Message, PropertyRecommendation } from './types';
 
 /**
- * Search for properties based on specific criteria
- */
-export const searchProperties = async (
-  userId: string,
-  params: PropertySearchParams
-): Promise<any[]> => {
-  try {
-    console.log(`Searching properties with params:`, params);
-    
-    const { data, error } = await supabase.functions.invoke('search-properties', {
-      body: { 
-        userId,
-        searchParams: params
-      }
-    });
-
-    if (error) {
-      console.error("Error searching properties:", error);
-      return [];
-    }
-
-    console.log(`Found ${data?.properties?.length || 0} properties in database`);
-    return data?.properties || [];
-  } catch (error) {
-    console.error("Error searching properties:", error);
-    return [];
-  }
-};
-
-/**
- * Test the chatbot response functionality
+ * Simulate a chatbot response for demo/testing purposes.
  */
 export const testChatbotResponse = async (
-  message: string, 
+  message: string,
   userId: string,
-  visitorInfo: any = {},
+  visitorInfo: any,
   conversationId?: string,
   previousMessages: Message[] = []
-): Promise<ChatbotResponse> => {
+) => {
   try {
-    // First, explicitly search for property recommendations
-    let propertyRecommendations = [];
-    let leadInfo = visitorInfo;
-    let shouldCaptureLeadInfo = false;
-    
-    // Check if the message seems to be asking about properties - IMPROVED DETECTION
-    const isPropertyQuery = message.toLowerCase().match(/propert(y|ies)|house|apartment|villa|home|buy|rent|sale|listing|show me|find|looking for/i);
-    const isPotentialLeadInfo = message.toLowerCase().match(/name|email|phone|call|contact|reach|interested/i);
-    
-    if (isPropertyQuery) {
-      console.log("Message appears to be about real estate, searching for properties");
-      shouldCaptureLeadInfo = true;
-      
-      // Extract search parameters from the message
-      const searchParams = extractPropertySearchParams(message);
-      
-      // Search for properties in the user's database - PRIORITIZE PROPERTY SEARCH
-      propertyRecommendations = await searchProperties(userId, searchParams);
-      console.log(`Found ${propertyRecommendations.length} property recommendations`);
-    }
-    
-    // Extract potential lead information from the message
-    if (isPotentialLeadInfo || isPropertyQuery) {
-      const extractedInfo = extractLeadInformation(message, leadInfo);
-      if (extractedInfo) {
-        leadInfo = { ...leadInfo, ...extractedInfo };
-        console.log("Extracted lead information:", extractedInfo);
+    // Call the Supabase Edge Function that searches for training data matches
+    const trainingResponse = await fetch(
+      'https://ckgaqkbsnrvccctqxsqv.supabase.co/functions/v1/search-training-data',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          query: message,
+          userId,
+          conversationId,
+          includeQA: true,
+          includeFiles: true,
+          includeProperties: true,
+          maxResults: 3
+        }),
       }
+    );
+
+    if (!trainingResponse.ok) {
+      throw new Error(`Training data search failed: ${trainingResponse.statusText}`);
     }
-    
-    // Format previous messages for API
-    const formattedPreviousMessages = previousMessages.map(msg => ({
-      role: msg.role === 'bot' ? 'assistant' : 'user',
-      content: msg.content
-    }));
-    
-    console.log(`Sending ${formattedPreviousMessages.length} previous messages for context`);
-    
-    // First check if we can find a relevant answer in the training data
-    const trainingResults = await searchTrainingData(message, userId);
-    const hasRelevantTrainingData = 
-      (trainingResults.qaMatches && trainingResults.qaMatches.length > 0) || 
-      (trainingResults.fileContent && trainingResults.fileContent.length > 0);
-    
-    console.log(`Found training data: ${hasRelevantTrainingData ? 'Yes' : 'No'}`);
-    
-    // Call the Supabase Edge Function to get a response
-    const { data, error } = await supabase.functions.invoke('chatbot-response', {
-      body: {
-        message,
-        userId,
-        visitorInfo: leadInfo,
-        conversationId,
-        previousMessages: formattedPreviousMessages,
-        // Pass the property recommendations we found directly to the chatbot
-        propertyRecommendations,
-        shouldCaptureLeadInfo,
-        trainingResults // Pass any training data we found for context
+
+    const trainingResults = await trainingResponse.json();
+    console.log('Training search results:', trainingResults);
+
+    // Send message to the chatbot response function along with training results
+    const chatbotResponse = await fetch(
+      'https://ckgaqkbsnrvccctqxsqv.supabase.co/functions/v1/chatbot-response',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message,
+          userId,
+          visitorInfo,
+          conversationId,
+          previousMessages,
+          trainingResults,
+          propertyRecommendations: trainingResults.property_listings || []
+        }),
       }
-    });
+    );
 
-    if (error) {
-      console.error("Error getting chatbot response:", error);
-      return { 
-        response: "Sorry, there was an error processing your request.",
-        error: error.message
-      };
+    if (!chatbotResponse.ok) {
+      throw new Error(`Chatbot response failed: ${chatbotResponse.statusText}`);
     }
 
-    // If we have property recommendations but they're not in the response, add them
-    if (propertyRecommendations.length > 0 && isPropertyQuery && 
-        (!data.response.includes('🏡') && !data.response.includes('View Listing'))) {
-      data.response = formatPropertyRecommendations(propertyRecommendations);
-    }
+    const result = await chatbotResponse.json();
+    console.log('Chatbot response result:', result);
 
-    // If we have any new lead information, include it in the response
-    if (leadInfo && Object.keys(leadInfo).length > 0) {
-      return {
-        ...data,
-        leadInfo
-      };
-    }
-
-    return data || { response: "No response from the server" };
+    return {
+      response: result.response || "I apologize, but I couldn't generate a proper response at the moment.",
+      leadInfo: result.leadInfo,
+      conversationId: result.conversationId,
+      propertyRecommendations: result.propertyRecommendations || [],
+      source: result.source
+    };
   } catch (error) {
-    console.error("Exception getting chatbot response:", error);
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
-    return { 
-      response: "Sorry, there was an unexpected error.",
-      error: errorMessage
+    console.error('Error in chatbot response:', error);
+    return {
+      response: "I'm sorry, I encountered an error while processing your request.",
+      error: error instanceof Error ? error.message : String(error)
     };
   }
 };
 
 /**
- * Extract property search parameters from a message - ENHANCED TO CATCH MORE CRITERIA
+ * Format property recommendations for display in the chatbot.
  */
-export const extractPropertySearchParams = (message: string): PropertySearchParams => {
-  const lowerMessage = message.toLowerCase();
-  
-  // Default search parameters
-  const params: PropertySearchParams = {
-    maxResults: 3
-  };
-  
-  // Extract location - MORE PATTERNS
-  const locationMatches = [
-    { regex: /in\s+([a-zA-Z\s]+?)(?:,|\s|$|\?|\.)/i, group: 1 },
-    { regex: /(?:at|near|close to|around)\s+([a-zA-Z\s]+?)(?:,|\s|$|\?|\.)/i, group: 1 },
-    { regex: /(?:marbella|ibiza|malaga|madrid|barcelona|valencia|seville|granada|golden mile|puerto banus)/gi, group: 0 },
-    { regex: /(?:property|house|apartment|villa) in ([a-zA-Z\s]+?)(?:,|\s|$|\?|\.)/i, group: 1 }
-  ];
-  
-  for (const match of locationMatches) {
-    const locationMatch = lowerMessage.match(match.regex);
-    if (locationMatch) {
-      params.location = locationMatch[match.group];
-      break;
-    }
+export const formatPropertyRecommendations = (response: string, properties: PropertyRecommendation[]) => {
+  if (!properties || properties.length === 0) {
+    return response;
   }
-  
-  // Extract property type - MORE VARIATIONS
-  const typeRegex = /(villa|apartment|penthouse|house|condo|flat|studio|property)/gi;
-  const typeMatch = lowerMessage.match(typeRegex);
-  if (typeMatch) {
-    params.type = typeMatch[0].toLowerCase();
-  }
-  
-  // Extract price range - MORE FLEXIBLE
-  const minPriceRegex = /(?:from|min|above|over|more than|starting at|at least)\s*(?:€|euro|eur|£|\$|usd|dollar)?[ ]?(\d+[,.]\d+|\d+)[ ]?(?:€|euro|eur|£|\$|usd|dollar|k|m)?/i;
-  const minPriceMatch = lowerMessage.match(minPriceRegex);
-  if (minPriceMatch) {
-    let minPrice = minPriceMatch[1].replace(',', '');
-    if (lowerMessage.includes('k')) {
-      minPrice = String(parseFloat(minPrice) * 1000);
-    } else if (lowerMessage.includes('m')) {
-      minPrice = String(parseFloat(minPrice) * 1000000);
-    }
-    params.minPrice = parseFloat(minPrice);
-  }
-  
-  const maxPriceRegex = /(?:up to|max|under|below|less than|no more than|maximum)\s*(?:€|euro|eur|£|\$|usd|dollar)?[ ]?(\d+[,.]\d+|\d+)[ ]?(?:€|euro|eur|£|\$|usd|dollar|k|m)?/i;
-  const maxPriceMatch = lowerMessage.match(maxPriceRegex);
-  if (maxPriceMatch) {
-    let maxPrice = maxPriceMatch[1].replace(',', '');
-    if (lowerMessage.includes('k')) {
-      maxPrice = String(parseFloat(maxPrice) * 1000);
-    } else if (lowerMessage.includes('m')) {
-      maxPrice = String(parseFloat(maxPrice) * 1000000);
-    }
-    params.maxPrice = parseFloat(maxPrice);
-  }
-  
-  // Extract bedrooms - MORE VARIATIONS
-  const bedroomsRegex = /(\d+)\s*(?:bed|bedroom|br)/i;
-  const bedroomsMatch = lowerMessage.match(bedroomsRegex);
-  if (bedroomsMatch) {
-    params.bedrooms = parseInt(bedroomsMatch[1]);
-  }
-  
-  // Extract pool preference
-  if (lowerMessage.includes('pool') || lowerMessage.includes('swimming')) {
-    params.hasPool = true;
-  }
-  
-  // Extract style preferences
-  const styleKeywords = {
-    'modern': ['modern', 'contemporary', 'minimalist', 'sleek'],
-    'classic': ['classic', 'traditional', 'mediterranean', 'rustic', 'spanish'],
-    'luxury': ['luxury', 'high-end', 'premium', 'exclusive']
-  };
-  
-  for (const [style, keywords] of Object.entries(styleKeywords)) {
-    if (keywords.some(keyword => lowerMessage.includes(keyword))) {
-      params.style = style;
-      break;
-    }
-  }
-  
-  // Add keywords from message
-  params.keywords = [];
-  
-  // Extract feature keywords
-  const featureKeywords = ['sea view', 'garden', 'terrace', 'balcony', 'garage', 'parking', 'furnished'];
-  featureKeywords.forEach(keyword => {
-    if (lowerMessage.includes(keyword)) {
-      params.keywords.push(keyword);
-    }
-  });
-  
-  console.log("Extracted property search parameters:", params);
-  return params;
-};
 
-/**
- * Extract lead information from a message - IMPROVED TO CATCH MORE INFO
- */
-export const extractLeadInformation = (message: string, existingInfo: any = {}): any => {
-  const leadInfo: any = {};
+  // Limit to maximum of 3 properties
+  const displayProperties = properties.slice(0, 3);
   
-  // Extract email - IMPROVED PATTERN
-  const emailRegex = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g;
-  const emailMatch = message.match(emailRegex);
-  if (emailMatch && !existingInfo.email) {
-    leadInfo.email = emailMatch[0];
-  }
+  // Create a property showcase section
+  let propertySection = "\n\nHere are some properties you might like:\n\n";
   
-  // Extract phone number - MORE VARIATIONS
-  const phoneRegex = /(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}|\d{3}[-.\s]?\d{3}[-.\s]?\d{4}|\+\d{10,12}/g;
-  const phoneMatch = message.match(phoneRegex);
-  if (phoneMatch && !existingInfo.phone) {
-    leadInfo.phone = phoneMatch[0];
-  }
-  
-  // Extract names - MORE VARIATIONS
-  const nameRegex = /(?:my name is|I am|I'm|this is) ([A-Z][a-z]+(?: [A-Z][a-z]+)?)/i;
-  const nameMatch = message.match(nameRegex);
-  if (nameMatch && !existingInfo.firstName) {
-    const fullName = nameMatch[1].split(' ');
-    if (fullName.length >= 2) {
-      leadInfo.firstName = fullName[0];
-      leadInfo.lastName = fullName.slice(1).join(' ');
-    } else {
-      leadInfo.firstName = fullName[0];
-    }
-  }
-  
-  // Extract budget - MORE VARIATIONS
-  const budgetRegex = /(?:budget|afford|looking|spend|price range|range|willing to pay).*?(?:€|euro|eur|£|\$|usd|dollars?)?[ ]?(\d+[,.]\d+|\d+)[ ]?(?:k|m|million|thousand|€|euro|eur|£|\$|usd|dollars?)/i;
-  const budgetMatch = message.match(budgetRegex);
-  if (budgetMatch && !existingInfo.budget) {
-    let budget = budgetMatch[1].replace(',', '');
-    const budgetText = budgetMatch[0].toLowerCase();
-    
-    if (budgetText.includes('k') || budgetText.includes('thousand')) {
-      budget = String(parseFloat(budget) * 1000);
-    } else if (budgetText.includes('m') || budgetText.includes('million')) {
-      budget = String(parseFloat(budget) * 1000000);
-    }
-    
-    leadInfo.budget = budget;
-  }
-  
-  // Extract property interest if mentioned
-  const propertyTypeRegex = /(villa|apartment|penthouse|house|condo|flat|studio)/i;
-  const propertyMatch = message.match(propertyTypeRegex);
-  if (propertyMatch && !existingInfo.propertyInterest) {
-    leadInfo.propertyInterest = propertyMatch[0];
-  }
-  
-  return Object.keys(leadInfo).length > 0 ? leadInfo : null;
-};
-
-/**
- * Format property recommendations into a structured, markdown-friendly format
- */
-export const formatPropertyRecommendations = (recommendations: any[], maxResults = 3) => {
-  if (!recommendations || recommendations.length === 0) return "";
-  
-  // Limit to max number of results (now 3)
-  const limitedRecommendations = recommendations.slice(0, maxResults);
-  
-  let formattedResponse = "Here are **" + limitedRecommendations.length + " properties** that match what you're looking for:\n\n";
-  
-  limitedRecommendations.forEach((property, index) => {
-    // Format price
+  displayProperties.forEach((property, index) => {
+    // Format price with currency
     const price = typeof property.price === 'number' 
-      ? new Intl.NumberFormat('en-EU', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(property.price)
+      ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(property.price)
       : property.price;
+      
+    // Create emoji icons based on property features
+    const icons = [];
+    if (property.type === 'villa') icons.push('🏠');
+    else if (property.type === 'apartment') icons.push('🏢');
+    else icons.push('🏡');
     
-    // Get the property title or create one
-    const title = property.title || `${property.type || 'Property'} in ${property.city || 'Exclusive Location'}`;
+    if (property.has_pool) icons.push('🏊');
     
-    // Create property listing with the exact requested format
-    formattedResponse += `🏡 **${title} – ${price}**\n`;
-    formattedResponse += `📍 **${property.location || (property.city && property.state ? `${property.city}, ${property.state}` : 'Exclusive Location')}**\n`;
+    // Add property entry
+    propertySection += `${icons.join(' ')} **${property.title || 'Exclusive Property'} – ${price}**\n`;
     
-    // Build features list - limited to 3 max features
-    let features = [];
-    if (property.bedrooms) features.push(`${property.bedrooms} Bed`);
-    if (property.bathrooms) features.push(`${property.bathrooms} Bath`);
-    if (property.has_pool) features.push(`Pool`);
-    
-    // Add features as a single line with commas
-    if (features.length > 0) {
-      formattedResponse += `✅ ${features.join(', ')}\n`;
-    } else if (property.features && property.features.length > 0) {
-      // Limit features to first 3
-      const limitedFeatures = Array.isArray(property.features) ? 
-        property.features.slice(0, 3).join(', ') : 
-        property.features.split(',').slice(0, 3).join(',');
-      formattedResponse += `✅ ${limitedFeatures}\n`;
+    // Add location if available
+    if (property.location) {
+      propertySection += `📍 ${property.location}\n`;
     }
     
-    // URL - ALWAYS INCLUDE
-    if (property.url) {
-      formattedResponse += `🔗 [View Listing](${property.url})\n\n`;
-    } else {
-      // Use property ID if available, otherwise use a placeholder
-      const listingId = property.id ? property.id.substring(0, 6) : (10000 + index);
-      formattedResponse += `🔗 [View Listing](https://youragency.com/listing/${listingId})\n\n`;
+    // Add basic details
+    if (property.bedrooms || property.bathrooms) {
+      const details = [];
+      if (property.bedrooms) details.push(`${property.bedrooms} Bedrooms`);
+      if (property.bathrooms) details.push(`${property.bathrooms} Bathrooms`);
+      propertySection += `✅ ${details.join(', ')}\n`;
     }
+    
+    // Ensure URLs are correctly formatted for markdown and properly escaped
+    // Use relative URLs to prevent them from opening outside the chat window
+    const clickableUrl = property.url 
+      ? `./property/${property.id}`  // Use relative URL that stays in the app
+      : `./property/${property.id}`; // Fallback to a generated URL
+    
+    propertySection += `🔗 [View Listing](${clickableUrl})\n\n`;
   });
   
-  formattedResponse += "Would you like to see more options or schedule a viewing?";
-  
-  return formattedResponse;
+  propertySection += "Would you like more information about any of these properties?";
+
+  // If the original response already has property listings, replace them
+  if (response.toLowerCase().includes('property') && 
+      (response.toLowerCase().includes('listing') || response.includes('🏡'))) {
+    // Get the first sentence of the original response
+    const firstSentence = response.split(/[.!?]/)[0] + '.';
+    return firstSentence + propertySection;
+  } else {
+    // Otherwise add the property section to the response
+    return response + propertySection;
+  }
 };

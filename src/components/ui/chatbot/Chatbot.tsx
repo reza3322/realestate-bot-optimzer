@@ -1,3 +1,4 @@
+
 import { useState, useRef, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import ChatHeader from './ChatHeader';
@@ -128,6 +129,7 @@ const Chatbot = ({
     console.log(`Conversation ID: ${conversationId || 'New conversation'}`);
     
     try {
+      // Get all previous messages except the initial welcome
       const previousMsgs = messages.filter(msg => 
         !(msg.role === 'bot' && msg.content === defaultWelcomeMessage) 
       );
@@ -150,10 +152,17 @@ const Chatbot = ({
         }
         
         if (result.propertyRecommendations && result.propertyRecommendations.length > 0) {
+          console.log('Received property recommendations:', result.propertyRecommendations);
           setPropertyRecommendations(result.propertyRecommendations);
         }
         
-        setMessages(prev => [...prev, { role: 'bot', content: result.response }]);
+        // Store the bot's response
+        setMessages(prev => [...prev, { 
+          role: 'bot', 
+          content: result.response,
+          properties: result.propertyRecommendations || [] 
+        }]);
+        
         setResponseSource(result.source || null);
         
         if (result.leadInfo) {
@@ -238,6 +247,7 @@ const Chatbot = ({
             botIconName={botIconName}
             customBotIconStyle={botIconStyle}
             customUserBubbleStyle={userBubbleStyle}
+            conversationId={conversationId}
           />
         ))}
         
