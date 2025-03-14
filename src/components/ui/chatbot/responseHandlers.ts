@@ -1,3 +1,4 @@
+
 import { Message, PropertyRecommendation, VisitorInfo, ChatbotResponse } from './types';
 
 /**
@@ -12,7 +13,7 @@ export const testChatbotResponse = async (
 ): Promise<ChatbotResponse> => {
   console.log(`Processing chatbot response for user: ${userId}`);
   console.log(`Current message: "${message}"`);
-  console.log(`Previous messages: ${previousMessages.length}`);
+  console.log(`Previous messages count: ${previousMessages.length}`);
   
   try {
     // Step 1: First, analyze the intent using OpenAI to determine search strategy
@@ -31,7 +32,10 @@ export const testChatbotResponse = async (
       lowerMessage.includes('your location') ||
       lowerMessage.includes('your address') ||
       lowerMessage.includes('contact information') ||
-      lowerMessage.includes('how can i contact');
+      lowerMessage.includes('how can i contact') || 
+      lowerMessage.includes('tell me about your') ||
+      lowerMessage.includes('what is your') ||
+      lowerMessage.includes('where are you');
     
     // If it's an obvious agency question, set intent directly
     let intentData;
@@ -144,9 +148,9 @@ export const testChatbotResponse = async (
     // Check if we found good training matches
     // LOWERED threshold to capture more potential matches
     const hasGoodTrainingMatches = (trainingResults.qaMatches.length > 0 && 
-                                    trainingResults.qaMatches[0].similarity > 0.2) || 
+                                    trainingResults.qaMatches[0].similarity > 0.15) || 
                                    (trainingResults.fileContent.length > 0 && 
-                                    trainingResults.fileContent[0].similarity > 0.2);
+                                    trainingResults.fileContent[0].similarity > 0.15);
     
     // For agency questions, force using training data even with lower similarities
     const forceTrainingDataForAgency = isAgencyOrFaqIntent && 

@@ -40,9 +40,38 @@ serve(async (req) => {
     
     console.log(`AI chatbot processing - User ID: ${userId}, Intent: ${intentClassification}`);
     console.log(`Is agency question: ${isAgencyQuestion}, Response source: ${responseSource}`);
+    console.log(`Previous messages count: ${previousMessages.length}`);
     
     if (isAgencyQuestion) {
       console.log('🏢 AGENCY QUESTION DETECTED IN AI FUNCTION');
+      
+      // Debug log training context for agency questions
+      if (trainingContext) {
+        console.log('🏢 TRAINING CONTEXT FOR AGENCY QUESTION:');
+        console.log(trainingContext.substring(0, 500) + '...');
+      } else {
+        console.log('⚠️ NO TRAINING CONTEXT PROVIDED FOR AGENCY QUESTION!');
+      }
+      
+      // Debug log training results for agency questions
+      if (trainingResults.qaMatches && trainingResults.qaMatches.length > 0) {
+        console.log(`🏢 QA MATCHES: ${trainingResults.qaMatches.length}`);
+        trainingResults.qaMatches.forEach((match, i) => {
+          console.log(`QA Match ${i+1}: Q: ${match.question?.substring(0, 100)}`);
+          console.log(`A: ${match.answer?.substring(0, 100)}`);
+        });
+      } else {
+        console.log('⚠️ NO QA MATCHES FOR AGENCY QUESTION!');
+      }
+      
+      if (trainingResults.fileContent && trainingResults.fileContent.length > 0) {
+        console.log(`🏢 FILE CONTENT MATCHES: ${trainingResults.fileContent.length}`);
+        trainingResults.fileContent.forEach((content, i) => {
+          console.log(`File Content ${i+1}: ${content.text?.substring(0, 100)}`);
+        });
+      } else {
+        console.log('⚠️ NO FILE CONTENT MATCHES FOR AGENCY QUESTION!');
+      }
     }
     
     // Format previous messages for OpenAI
@@ -72,7 +101,8 @@ serve(async (req) => {
 - Always be accurate and specific.
 - If you don't know something, say so rather than making up information.
 - Keep responses concise and easy to understand.
-- Be friendly and conversational in tone.`;
+- Be friendly and conversational in tone.
+- ALWAYS refer to previous messages in the conversation when relevant.`;
       
       // Include training context if available
       if (trainingContext) {
@@ -101,18 +131,22 @@ serve(async (req) => {
     
     // Add conversation history for context
     if (formattedPreviousMessages.length > 0) {
+      console.log(`Adding ${formattedPreviousMessages.length} previous messages to conversation context`);
       messages.push(...formattedPreviousMessages);
     }
     
     // Add the current user message
     messages.push({ role: 'user', content: message });
     
-    // Call OpenAI API
+    // Call OpenAI API with increased temperature for more dynamic responses
+    // and increased max_tokens to allow for fuller responses
     const chatCompletion = await openai.createChatCompletion({
-      model: 'gpt-4o-mini',
+      model: 'gpt-4o-mini', // Using the most recent model
       messages: messages,
-      temperature: 0.7,
-      max_tokens: 500
+      temperature: 0.75, // Slightly increased for more natural responses
+      max_tokens: 600,    // Increased to allow for more detailed responses
+      presence_penalty: 0.2, // Slight penalty to avoid repetition
+      frequency_penalty: 0.2 // Slight penalty to encourage diversity
     });
     
     // Get the response
@@ -129,7 +163,7 @@ serve(async (req) => {
     
     // Log the final response
     console.log(`Response (from ${finalResponseSource}):`);
-    console.log(aiResponse.substring(0, 100) + '...');
+    console.log(aiResponse.substring(0, 200) + '...');
     
     return new Response(
       JSON.stringify({

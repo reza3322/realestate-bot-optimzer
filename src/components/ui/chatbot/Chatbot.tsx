@@ -67,10 +67,14 @@ const Chatbot = ({
 
   const chatStyles = getChatStyles(theme, variation, primaryColor);
   
+  // Generate a stable conversation key for this user
+  const conversationStorageKey = `chatConversation_${userId}`;
+  const conversationIdStorageKey = `chatConversationId_${userId}`;
+  
   // Restore conversation from localStorage on initial load
   useEffect(() => {
-    const savedConversation = localStorage.getItem(`chatConversation_${userId}`);
-    const savedConversationId = localStorage.getItem(`chatConversationId_${userId}`);
+    const savedConversation = localStorage.getItem(conversationStorageKey);
+    const savedConversationId = localStorage.getItem(conversationIdStorageKey);
     
     if (savedConversation) {
       try {
@@ -89,14 +93,16 @@ const Chatbot = ({
       setConversationId(savedConversationId);
       console.log(`Restored conversation ID: ${savedConversationId}`);
     }
-  }, [userId]);
+  }, [userId, conversationStorageKey, conversationIdStorageKey]);
   
+  // Update welcome message if it changes
   useEffect(() => {
     if (messages.length === 1 && messages[0].role === 'bot') {
       setMessages([{ role: 'bot', content: defaultWelcomeMessage }]);
     }
-  }, [defaultWelcomeMessage]);
+  }, [defaultWelcomeMessage, messages]);
 
+  // Scroll to the bottom when messages change
   useEffect(() => {
     if (messagesEndRef.current) {
       const chatContainer = messagesEndRef.current.parentElement;
@@ -106,6 +112,7 @@ const Chatbot = ({
     }
   }, [messages]);
 
+  // Generate a visitor ID if one doesn't exist
   useEffect(() => {
     if (!visitorInfo.visitorId) {
       setVisitorInfo(prev => ({
@@ -113,34 +120,42 @@ const Chatbot = ({
         visitorId: 'visitor-' + Date.now()
       }));
     }
-  }, []);
+  }, [visitorInfo.visitorId]);
   
   // Save conversation to localStorage whenever it changes
   useEffect(() => {
     // Don't save if it's just the welcome message
     if (messages.length > 1) {
-      localStorage.setItem(`chatConversation_${userId}`, JSON.stringify(messages));
+      localStorage.setItem(conversationStorageKey, JSON.stringify(messages));
       console.log(`Saved conversation with ${messages.length} messages`);
     }
     
     if (conversationId) {
-      localStorage.setItem(`chatConversationId_${userId}`, conversationId);
+      localStorage.setItem(conversationIdStorageKey, conversationId);
+      console.log(`Saved conversation ID: ${conversationId}`);
     }
-  }, [messages, conversationId, userId]);
+  }, [messages, conversationId, conversationStorageKey, conversationIdStorageKey]);
 
   const handleSendMessage = async (message: string) => {
-    setMessages(prev => [...prev, { role: 'user', content: message }]);
+    // Add user message to the UI immediately
+    const newMessages = [...messages, { role: 'user', content: message }];
+    setMessages(newMessages);
+    
+    // Execute callback
     onSendMessage?.(message);
+    
+    // Show typing indicator and clear error state
     setIsTyping(true);
     setError(null);
     setResponseSource(null);
     
+    // Log conversation details
     console.log(`Sending message. User ID: ${userId}, Conversation ID: ${conversationId || 'New conversation'}`);
-    console.log(`Previous messages being sent: ${messages.length}`);
+    console.log(`Previous messages being sent: ${newMessages.length - 1}`); // -1 for the current message
     
     try {
       // Get all previous messages except the initial welcome
-      const previousMsgs = messages.filter(msg => 
+      const previousMsgs = newMessages.filter(msg => 
         !(msg.role === 'bot' && msg.content === defaultWelcomeMessage) 
       );
       
@@ -158,12 +173,13 @@ const Chatbot = ({
         console.log('WITH CONVERSATION HISTORY:', JSON.stringify(previousMsgs, null, 2));
       }
       
+      // Call the API
       const result = await testChatbotResponse(
         message, 
         userId, 
         visitorInfo, 
         conversationId,
-        previousMsgs
+        previousMsgs.slice(0, -1) // Don't include the message we just sent
       ) as ChatbotResponse;
       
       if (result.error) {
