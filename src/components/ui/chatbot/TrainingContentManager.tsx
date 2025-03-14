@@ -41,7 +41,7 @@ const TrainingContentManager = ({ userId, onContentUpdate }: TrainingContentProp
     try {
       // Fetch uploaded files
       const { data: files, error: filesError } = await supabase
-        .from("chatbot_training_files")
+        .from("chatbot_training_files_uploads")
         .select("*")
         .eq("user_id", userId)
         .order("created_at", { ascending: false });
@@ -51,7 +51,7 @@ const TrainingContentManager = ({ userId, onContentUpdate }: TrainingContentProp
       
       // Fetch Q&A content
       const { data: qa, error: qaError } = await supabase
-        .from("chatbot_training_data")
+        .from("chatbot_training_files")
         .select("*")
         .eq("user_id", userId)
         .eq("content_type", "qa_pair")
@@ -62,7 +62,7 @@ const TrainingContentManager = ({ userId, onContentUpdate }: TrainingContentProp
       
       // Fetch crawled content
       const { data: crawled, error: crawledError } = await supabase
-        .from("chatbot_training_data")
+        .from("chatbot_training_files")
         .select("*")
         .eq("user_id", userId)
         .eq("content_type", "web_crawl")
@@ -84,9 +84,9 @@ const TrainingContentManager = ({ userId, onContentUpdate }: TrainingContentProp
     try {
       let tableName;
       if (type === 'file') {
-        tableName = 'chatbot_training_files';
+        tableName = 'chatbot_training_files_uploads';
       } else {
-        tableName = 'chatbot_training_data';
+        tableName = 'chatbot_training_files';
       }
       
       const { error } = await supabase
@@ -127,7 +127,7 @@ const TrainingContentManager = ({ userId, onContentUpdate }: TrainingContentProp
   const saveFileEdit = async (id: string) => {
     try {
       const { error } = await supabase
-        .from("chatbot_training_files")
+        .from("chatbot_training_files_uploads")
         .update({ extracted_text: editedText })
         .eq("id", id);
       
@@ -155,7 +155,7 @@ const TrainingContentManager = ({ userId, onContentUpdate }: TrainingContentProp
         : { answer: editedText };
       
       const { error } = await supabase
-        .from("chatbot_training_data")
+        .from("chatbot_training_files")
         .update(updateData)
         .eq("id", id);
       
@@ -186,7 +186,7 @@ const TrainingContentManager = ({ userId, onContentUpdate }: TrainingContentProp
     
     try {
       const { data, error } = await supabase
-        .from("chatbot_training_data")
+        .from("chatbot_training_files")
         .insert({
           user_id: userId,
           question: newQuestion,

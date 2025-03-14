@@ -68,7 +68,7 @@ serve(async (req) => {
     if (includeFiles) {
       // First, try fuzzy text search for best matches
       const { data: fileData, error: fileError } = await supabase
-        .from('chatbot_training_files')
+        .from('chatbot_training_files_uploads')
         .select('id, source_file, extracted_text, category, priority')
         .eq('user_id', userId)
         .textSearch('extracted_text', query.split(' ').join(' & '), {
@@ -97,7 +97,7 @@ serve(async (req) => {
         if (keywords.length > 0) {
           const keywordQueries = keywords.map(keyword => {
             return supabase
-              .from('chatbot_training_files')
+              .from('chatbot_training_files_uploads')
               .select('id, source_file, extracted_text, category, priority')
               .eq('user_id', userId)
               .ilike('extracted_text', `%${keyword}%`)

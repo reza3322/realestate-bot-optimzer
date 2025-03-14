@@ -1,4 +1,3 @@
-
 -- Function to search training data with similarity matching
 CREATE OR REPLACE FUNCTION search_training_data(user_id_param UUID, query_text TEXT)
 RETURNS TABLE (
@@ -19,7 +18,7 @@ BEGIN
     td.priority,
     similarity(td.question, query_text) AS similarity
   FROM 
-    chatbot_training_data td
+    chatbot_training_files td
   WHERE 
     td.user_id = user_id_param
   ORDER BY 
@@ -51,7 +50,7 @@ BEGIN
       td.priority,
       similarity(td.question, query_text) AS similarity
     FROM 
-      chatbot_training_data td
+      chatbot_training_files td
     WHERE 
       td.user_id = user_id_param
   )
@@ -66,7 +65,7 @@ BEGIN
       tf.priority,
       similarity(tf.extracted_text, query_text) AS similarity
     FROM 
-      chatbot_training_files tf
+      chatbot_training_files_uploads tf
     WHERE 
       tf.user_id = user_id_param
   )
