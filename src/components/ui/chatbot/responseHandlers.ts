@@ -1,4 +1,4 @@
-import { Message, PropertyRecommendation, VisitorInfo } from './types';
+import { Message, PropertyRecommendation, VisitorInfo, ChatbotResponse } from './types';
 
 /**
  * Handles the chatbot response for the user's message
@@ -9,7 +9,7 @@ export const testChatbotResponse = async (
   visitorInfo: VisitorInfo,
   conversationId?: string,
   previousMessages: Message[] = []
-) => {
+): Promise<ChatbotResponse> => {
   console.log(`Processing chatbot response for user: ${userId}`);
   
   try {

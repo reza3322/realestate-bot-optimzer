@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import ChatHeader from './ChatHeader';
@@ -6,7 +5,7 @@ import ChatMessage from './ChatMessage';
 import ChatInput from './ChatInput';
 import TypingIndicator from './TypingIndicator';
 import { getChatStyles } from './chatStyles';
-import { Message, ChatTheme, LanguageCode, VisitorInfo, PropertyRecommendation } from './types';
+import { Message, ChatTheme, LanguageCode, VisitorInfo, PropertyRecommendation, ChatbotProps, ChatbotResponse } from './types';
 import { testChatbotResponse } from './responseHandlers';
 
 const DEFAULT_TRANSLATIONS = {
@@ -32,25 +31,6 @@ const DEFAULT_TRANSLATIONS = {
   }
 };
 
-interface ChatbotProps {
-  apiKey?: string;
-  className?: string;
-  theme?: 'default' | 'modern' | 'minimal';
-  variation?: 'default' | 'blue' | 'green' | 'purple';
-  fontStyle?: 'default' | 'serif' | 'mono';
-  botName?: string;
-  welcomeMessage?: string;
-  placeholderText?: string;
-  maxHeight?: string;
-  onSendMessage?: (message: string) => void;
-  userId?: string; // Changed from required to optional
-  primaryColor?: string;
-  language?: LanguageCode;
-  buttonStyle?: React.CSSProperties;
-  fontSize?: number;
-  botIconName?: string; // Added to support botIconName prop
-}
-
 const Chatbot = ({
   className,
   theme = 'default',
@@ -61,12 +41,12 @@ const Chatbot = ({
   placeholderText,
   maxHeight = "400px",
   onSendMessage,
-  userId = 'demo-user', // Provide a default value for userId
+  userId = 'demo-user',
   primaryColor,
   language = 'en',
   buttonStyle,
   fontSize = 16,
-  botIconName = 'bot' // Add default value for botIconName
+  botIconName = 'bot'
 }: ChatbotProps) => {
   const translations = DEFAULT_TRANSLATIONS[language] || DEFAULT_TRANSLATIONS.en;
   
@@ -84,7 +64,7 @@ const Chatbot = ({
   const [visitorInfo, setVisitorInfo] = useState<VisitorInfo>({});
   const [propertyRecommendations, setPropertyRecommendations] = useState<PropertyRecommendation[]>([]);
 
-  const chatStyles: ChatTheme = getChatStyles(theme, variation, primaryColor) as ChatTheme;
+  const chatStyles = getChatStyles(theme, variation, primaryColor);
   
   useEffect(() => {
     if (messages.length === 1 && messages[0].role === 'bot') {
@@ -131,7 +111,7 @@ const Chatbot = ({
         visitorInfo, 
         conversationId,
         previousMsgs
-      );
+      ) as ChatbotResponse;
       
       if (result.error) {
         console.error('Chatbot error:', result.error);

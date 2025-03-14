@@ -1,202 +1,70 @@
 
-const defaultStyles = {
-  container: "relative w-full max-w-md rounded-md border border-border bg-card text-card-foreground shadow-sm",
-  header: "flex items-center justify-between py-2 px-4 border-b border-border",
-  title: "text-sm font-semibold",
-  closeButton: "h-6 w-6 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-secondary",
-  messages: "flex flex-col gap-3 p-4",
-  userBubble: "col-start-1 rounded-md bg-secondary text-card p-2 w-fit max-w-[80%]",
-  botBubble: "col-start-1 rounded-md bg-muted text-card-foreground p-2 w-fit max-w-[80%]",
-  userIcon: "col-start-2 row-start-1 h-6 w-6",
-  botIcon: "col-start-1 row-start-1 h-6 w-6",
-  inputArea: "py-2 px-4 border-t border-border",
-  input: "flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
-  button: "inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=open]:bg-secondary h-10 px-4 ml-2",
-};
+import { cn } from '@/lib/utils';
+import { ChatTheme } from './types';
 
-const darkStyles = {
-  container: "relative w-full max-w-md rounded-md border border-neutral-800 bg-neutral-950 text-white shadow-sm",
-  header: "flex items-center justify-between py-2 px-4 border-b border-neutral-800",
-  title: "text-sm font-semibold",
-  closeButton: "h-6 w-6 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-secondary",
-  messages: "flex flex-col gap-3 p-4",
-  userBubble: "col-start-1 rounded-md bg-neutral-700 text-white p-2 w-fit max-w-[80%]",
-  botBubble: "col-start-1 rounded-md bg-neutral-800 text-white p-2 w-fit max-w-[80%]",
-  userIcon: "col-start-2 row-start-1 h-6 w-6",
-  botIcon: "col-start-1 row-start-1 h-6 w-6",
-  inputArea: "py-2 px-4 border-t border-neutral-800",
-  input: "flex-1 rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-neutral-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 text-white",
-  button: "inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=open]:bg-secondary h-10 px-4 ml-2 text-white",
-};
-
-const modernStyles = {
-  container: "relative w-full max-w-md rounded-xl border border-border bg-card text-card-foreground shadow-md overflow-hidden",
-  header: "flex items-center justify-center py-4 bg-primary text-primary-foreground",
-  title: "text-lg font-semibold",
-  closeButton: "absolute top-2 right-2 h-7 w-7 rounded-full opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-secondary",
-  messages: "flex flex-col gap-4 p-5",
-  userBubble: "rounded-xl bg-primary/10 text-card p-3 w-fit max-w-[80%] col-start-1",
-  botBubble: "rounded-xl bg-secondary/10 text-card-foreground p-3 w-fit max-w-[80%] col-start-1",
-  userIcon: "col-start-2 row-start-1 h-8 w-8 rounded-full",
-  botIcon: "col-start-1 row-start-1 h-8 w-8 rounded-full",
-  inputArea: "py-4 px-5 border-t border-border bg-secondary/5",
-  input: "flex-1 rounded-xl border border-input bg-background px-4 py-3 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
-  button: "inline-flex items-center justify-center rounded-xl text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=open]:bg-secondary h-11 px-5 ml-3",
-};
-
-const minimalStyles = {
-  container: "relative w-full max-w-md rounded-md bg-transparent text-card-foreground",
-  header: "flex items-center justify-between py-2 px-3",
-  title: "text-sm font-medium",
-  closeButton: "h-5 w-5 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-secondary",
-  messages: "flex flex-col gap-2 p-3",
-  userBubble: "col-start-1 rounded-md bg-accent text-accent-foreground p-2 w-fit max-w-[80%]",
-  botBubble: "col-start-1 rounded-md bg-muted text-card-foreground p-2 w-fit max-w-[80%]",
-  userIcon: "col-start-2 row-start-1 h-5 w-5",
-  botIcon: "col-start-1 row-start-1 h-5 w-5",
-  inputArea: "py-2 px-3",
-  input: "flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
-  button: "inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=open]:bg-secondary h-9 px-3 ml-2",
-};
-
-// Additional styles to be added to the global CSS
-const globalChatStyles = `
-.chatbot-message {
-  line-height: 1.5;
-}
-
-.chatbot-message p {
-  margin-bottom: 0.75rem;
-}
-
-.chatbot-message a {
-  color: #3b82f6;
-  text-decoration: underline;
-  font-weight: 500;
-  transition: color 0.2s;
-}
-
-.chatbot-message a:hover {
-  color: #2563eb;
-}
-
-/* Emoji spacing */
-.chatbot-message p:has(img.emoji) {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-/* Property listing styling */
-.chatbot-message p:has(strong:first-child) {
-  margin-top: 0.5rem;
-  margin-bottom: 0.25rem;
-}
-`;
-
-/**
- * Gets the appropriate chat styles based on theme and variation
- */
-const getChatStyles = (theme: 'default' | 'modern' | 'minimal' = 'default', variation: 'default' | 'blue' | 'green' | 'purple' = 'default', customColor?: string) => {
-  // Base styles based on theme
-  let baseStyles;
-  switch (theme) {
-    case 'modern':
-      baseStyles = { ...modernStyles };
-      break;
-    case 'minimal':
-      baseStyles = { ...minimalStyles };
-      break;
-    default:
-      baseStyles = { ...defaultStyles };
-  }
-
-  // Create header object that matches the ChatTheme interface
-  const headerObject = {
-    container: baseStyles.header,
-    font: ""
+// Get pre-defined chat styles based on theme and variation
+export const getChatStyles = (
+  theme: string = 'default',
+  variation: string = 'default',
+  customColor?: string
+): ChatTheme => {
+  // Base styles that will be applied regardless of theme
+  const baseStyles = {
+    container: 'bg-background border rounded-lg',
+    font: 'text-foreground',
+    botBubble: 'bg-muted text-muted-foreground rounded-lg p-3 max-w-[80%]',
+    userBubble: 'bg-primary/10 text-primary-foreground rounded-lg p-3 max-w-[80%] ml-auto',
+    botIcon: 'flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-foreground',
+    userIcon: 'flex items-center justify-center w-8 h-8 rounded-full bg-muted text-muted-foreground',
+    header: 'bg-primary text-primary-foreground p-3 rounded-t-lg flex items-center',
+    inputContainer: 'border-t p-3 bg-background'
   };
 
-  // Apply color variations
-  let themeStyles;
-  if (customColor) {
-    themeStyles = {
-      customColor,
-      font: "",
-      container: baseStyles.container,
-      header: headerObject,
-      botBubble: baseStyles.botBubble,
-      userBubble: baseStyles.userBubble,
-      botIcon: baseStyles.botIcon,
-      userIcon: baseStyles.userIcon,
-      inputContainer: baseStyles.inputArea,
-    };
-  } else {
-    // Apply predefined color variations
-    switch (variation) {
-      case 'blue':
-        themeStyles = {
-          customColor: '#3b82f6', // blue-500
-          font: "",
-          container: baseStyles.container,
-          header: headerObject,
-          botBubble: baseStyles.botBubble,
-          userBubble: baseStyles.userBubble,
-          botIcon: baseStyles.botIcon,
-          userIcon: baseStyles.userIcon,
-          inputContainer: baseStyles.inputArea,
-        };
-        break;
-      case 'green':
-        themeStyles = {
-          customColor: '#10b981', // emerald-500
-          font: "",
-          container: baseStyles.container,
-          header: headerObject,
-          botBubble: baseStyles.botBubble,
-          userBubble: baseStyles.userBubble,
-          botIcon: baseStyles.botIcon,
-          userIcon: baseStyles.userIcon,
-          inputContainer: baseStyles.inputArea,
-        };
-        break;
-      case 'purple':
-        themeStyles = {
-          customColor: '#8b5cf6', // violet-500
-          font: "",
-          container: baseStyles.container,
-          header: headerObject,
-          botBubble: baseStyles.botBubble,
-          userBubble: baseStyles.userBubble,
-          botIcon: baseStyles.botIcon,
-          userIcon: baseStyles.userIcon,
-          inputContainer: baseStyles.inputArea,
-        };
-        break;
-      default:
-        themeStyles = {
-          customColor: undefined,
-          font: "",
-          container: baseStyles.container,
-          header: headerObject,
-          botBubble: baseStyles.botBubble,
-          userBubble: baseStyles.userBubble,
-          botIcon: baseStyles.botIcon,
-          userIcon: baseStyles.userIcon,
-          inputContainer: baseStyles.inputArea,
-        };
+  // Theme-specific styles
+  const themeStyles: Record<string, Partial<ChatTheme>> = {
+    default: {
+      // Default theme already covered by baseStyles
+    },
+    modern: {
+      botBubble: 'bg-muted text-muted-foreground rounded-xl p-4 max-w-[80%] shadow-sm',
+      userBubble: 'bg-primary/10 text-primary-foreground rounded-xl p-4 max-w-[80%] ml-auto shadow-sm',
+      botIcon: 'flex items-center justify-center w-10 h-10 rounded-full bg-primary text-primary-foreground shadow-sm',
+      userIcon: 'flex items-center justify-center w-10 h-10 rounded-full bg-muted text-muted-foreground shadow-sm',
+      header: 'bg-primary text-primary-foreground p-4 rounded-t-lg flex items-center shadow-sm',
+      container: 'bg-background border rounded-xl shadow-md',
+    },
+    minimal: {
+      botBubble: 'bg-background text-foreground border rounded-lg p-3 max-w-[80%]',
+      userBubble: 'bg-primary text-primary-foreground rounded-lg p-3 max-w-[80%] ml-auto',
+      botIcon: 'flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-foreground',
+      userIcon: 'flex items-center justify-center w-8 h-8 rounded-full bg-background text-foreground border',
+      header: 'bg-background text-foreground border-b p-3 rounded-t-lg flex items-center',
     }
+  };
+
+  // Variation-specific color overrides
+  const variationColors: Record<string, { primary: string }> = {
+    default: { primary: 'hsl(var(--primary))' },
+    blue: { primary: '#3b82f6' },
+    green: { primary: '#10b981' },
+    purple: { primary: '#8b5cf6' }
+  };
+
+  // Get the theme-specific styles or default to empty object
+  const selectedThemeStyles = themeStyles[theme] || {};
+
+  // Merge base styles with theme-specific styles
+  const mergedStyles = { ...baseStyles, ...selectedThemeStyles };
+
+  // Apply variation color if custom color is not provided
+  if (!customColor && variation !== 'default') {
+    mergedStyles.customColor = variationColors[variation]?.primary;
+  } else if (customColor) {
+    mergedStyles.customColor = customColor;
   }
 
-  return themeStyles;
+  return mergedStyles as ChatTheme;
 };
 
-// Export the styles
-export { 
-  defaultStyles, 
-  darkStyles, 
-  modernStyles, 
-  minimalStyles, 
-  globalChatStyles,
-  getChatStyles
-};
+// Adding generateChatStyles as an alias to maintain compatibility
+export const generateChatStyles = getChatStyles;

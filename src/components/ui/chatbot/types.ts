@@ -1,55 +1,80 @@
 
-export interface PropertyRecommendation {
-  id: string;
-  title: string;
-  price: number;
-  location: string;
-  bedroomCount?: number;
-  bathroomCount?: number;
-  hasPool?: boolean;
-  propertyType?: string;
-  features?: string[];
-  highlight?: string;
-  url: string;
-}
-
+// Chat message types
 export interface Message {
-  role: 'user' | 'bot' | 'assistant';
+  role: 'user' | 'bot';
   content: string;
   properties?: PropertyRecommendation[];
 }
 
-export type LanguageCode = 'en' | 'es' | 'fr' | 'de' | 'pt';
+export interface ChatStylesType {
+  botBubble: string;
+  userBubble: string;
+  botIcon: string;
+  userIcon: string;
+  font: string;
+  container: string;
+  header: string;
+  inputContainer: string;
+}
 
-// Add the missing types
+export interface ChatTheme extends ChatStylesType {
+  customColor?: string;
+}
+
+// Chatbot settings types
+export type LanguageCode = 'en' | 'es' | 'fr' | 'de';
+export type ChatThemeType = 'default' | 'modern' | 'minimal';
+export type ChatVariation = 'default' | 'blue' | 'green' | 'purple';
+export type FontStyle = 'default' | 'serif' | 'mono';
+
+// Visitor information type
 export interface VisitorInfo {
   visitorId?: string;
   name?: string;
   email?: string;
   phone?: string;
+  interests?: string[];
+  location?: string;
   [key: string]: any;
 }
 
-export interface ChatStylesType {
-  container?: string;
-  header?: string;
-  botBubble?: string;
-  userBubble?: string;
-  botIcon?: string;
-  userIcon?: string;
-  inputContainer?: string;
-  font?: string;
-  customColor?: string;
+// Property recommendation type
+export interface PropertyRecommendation {
+  id: string;
+  title: string;
+  price: string;
+  location?: string;
+  features?: string[];
+  url: string;
+  image?: string;
 }
 
-export type ChatTheme = {
-  container: string;
-  header: string;
-  botBubble: string;
-  userBubble: string;
-  botIcon: string;
-  userIcon: string;
-  inputContainer: string;
-  font: string;
-  customColor?: string;
-};
+// Chatbot response type
+export interface ChatbotResponse {
+  response: string;
+  error?: string;
+  source?: 'ai' | 'training';
+  leadInfo?: any;
+  conversationId?: string;
+  propertyRecommendations?: PropertyRecommendation[];
+}
+
+// Chatbot props interface
+export interface ChatbotProps {
+  apiKey?: string;
+  className?: string;
+  theme?: 'default' | 'modern' | 'minimal';
+  variation?: 'default' | 'blue' | 'green' | 'purple';
+  fontStyle?: 'default' | 'serif' | 'mono';
+  botName?: string;
+  welcomeMessage?: string;
+  placeholderText?: string;
+  maxHeight?: string;
+  onSendMessage?: (message: string) => void;
+  userId?: string;
+  primaryColor?: string;
+  language?: LanguageCode;
+  buttonStyle?: React.CSSProperties;
+  fontSize?: number;
+  botIconName?: string;
+}
