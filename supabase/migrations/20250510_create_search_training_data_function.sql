@@ -19,13 +19,61 @@ BEGIN
     td.priority,
     similarity(td.question, query_text) AS similarity
   FROM 
-    chatbot_training_data td
+    chatbot_training_files td
   WHERE 
     td.user_id = user_id_param
   ORDER BY 
     similarity DESC,
     priority DESC
   LIMIT 5;
+END;
+$$;
+
+-- Enhanced function to search both training data and files together with relevance ranking
+CREATE OR REPLACE FUNCTION search_all_training_content(user_id_param UUID, query_text TEXT)
+RETURNS TABLE (
+  content_id UUID,
+  content_type TEXT,
+  content TEXT,
+  category TEXT,
+  priority INTEGER,
+  similarity FLOAT
+) LANGUAGE plpgsql AS $$
+BEGIN
+  RETURN QUERY
+  (
+    -- Get results from training data (Q&A pairs)
+    SELECT 
+      td.id AS content_id,
+      'qa' AS content_type,
+      td.answer AS content,
+      td.category,
+      td.priority,
+      similarity(td.question, query_text) AS similarity
+    FROM 
+      chatbot_training_files td
+    WHERE 
+      td.user_id = user_id_param
+  )
+  UNION ALL
+  (
+    -- Get results from training files
+    SELECT 
+      tf.id AS content_id,
+      'file' AS content_type,
+      tf.extracted_text AS content,
+      tf.category,
+      tf.priority,
+      similarity(tf.extracted_text, query_text) AS similarity
+    FROM 
+      chatbot_training_files_uploads tf
+    WHERE 
+      tf.user_id = user_id_param
+  )
+  ORDER BY 
+    similarity DESC,
+    priority DESC
+  LIMIT 10;
 END;
 $$;
 
@@ -41,6 +89,12 @@ RETURNS TABLE (
   city TEXT,
   state TEXT,
   status TEXT,
+  url TEXT,
+  living_area NUMERIC,
+  plot_area NUMERIC,
+  garage_area NUMERIC,
+  terrace NUMERIC, 
+  has_pool BOOLEAN,
   relevance FLOAT
 ) LANGUAGE plpgsql AS $$
 BEGIN
@@ -55,6 +109,12 @@ BEGIN
     p.city,
     p.state,
     p.status,
+    p.url,
+    p.living_area,
+    p.plot_area,
+    p.garage_area,
+    p.terrace,
+    p.has_pool,
     -- Calculate relevance using various factors
     (
       similarity(p.title, query_text) * 2.0 +

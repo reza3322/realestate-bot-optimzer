@@ -1,74 +1,62 @@
 
-import { useState } from 'react';
+import { useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { supabase } from '@/lib/supabase';
-import { toast } from 'sonner';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { toast } from "sonner";
+import { supabase } from "@/lib/supabase";
+import { Plus, Loader2, Save } from "lucide-react";
+import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
 
 interface QACreatorProps {
   userId: string;
-  onSubmitSuccess?: () => void;
+  onCreateComplete?: (success: boolean) => void;
 }
 
-const QACreator = ({ userId, onSubmitSuccess }: QACreatorProps) => {
-  const [question, setQuestion] = useState('');
-  const [answer, setAnswer] = useState('');
-  const [category, setCategory] = useState('General');
-  const [priority, setPriority] = useState('3');
-  const [isSubmitting, setIsSubmitting] = useState(false);
+const QACreator = ({ userId, onCreateComplete }: QACreatorProps) => {
+  const [question, setQuestion] = useState<string>("");
+  const [answer, setAnswer] = useState<string>("");
+  const [category, setCategory] = useState<string>("General");
+  const [priority, setPriority] = useState<number>(5);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
+  const handleSubmit = async () => {
     if (!question.trim() || !answer.trim()) {
-      toast.error('Please provide both a question and an answer');
+      toast.error("Please enter both a question and an answer");
       return;
     }
-    
+
     setIsSubmitting(true);
-    
+
     try {
-      // Save Q&A pair to the chatbot_training_files table
       const { error } = await supabase
-        .from('chatbot_training_files')
-        .insert([
-          {
-            user_id: userId,
-            question: question.trim(),
-            answer: answer.trim(),
-            category: category,
-            priority: parseInt(priority),
-            content_type: 'qa_pair',
-            source_file: 'Manual Entry',
-            extracted_text: `${question.trim()}\n\n${answer.trim()}`
-          }
-        ]);
+        .from("chatbot_training_files")
+        .insert({
+          user_id: userId,
+          question: question,
+          answer: answer,
+          source_file: "Q&A Pair",
+          extracted_text: answer, // Also store in extracted_text for compatibility
+          category: category,
+          priority: priority,
+          content_type: "qa_pair"
+        });
+
+      if (error) throw error;
       
-      if (error) {
-        console.error('Error saving Q&A:', error);
-        toast.error('Failed to save Q&A pair');
-        return;
-      }
+      toast.success("Q&A pair created successfully!");
+      setQuestion("");
+      setAnswer("");
+      setCategory("General");
+      setPriority(5);
       
-      toast.success('Q&A pair saved successfully');
-      
-      // Reset form
-      setQuestion('');
-      setAnswer('');
-      setCategory('General');
-      setPriority('3');
-      
-      // Notify parent component if callback provided
-      if (onSubmitSuccess) {
-        onSubmitSuccess();
-      }
-    } catch (error) {
-      console.error('Exception saving Q&A:', error);
-      toast.error('An unexpected error occurred');
+      if (onCreateComplete) onCreateComplete(true);
+    } catch (error: any) {
+      console.error("Error creating Q&A pair:", error);
+      toast.error(`Failed to create Q&A pair: ${error.message || "Unknown error"}`);
+      if (onCreateComplete) onCreateComplete(false);
     } finally {
       setIsSubmitting(false);
     }
@@ -77,78 +65,87 @@ const QACreator = ({ userId, onSubmitSuccess }: QACreatorProps) => {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Add Q&A Pair</CardTitle>
+        <CardTitle className="text-lg">Create Q&A Pair</CardTitle>
         <CardDescription>
-          Create a question and answer pair to train your chatbot with specific knowledge
+          Add question and answer pairs to directly train your chatbot
         </CardDescription>
       </CardHeader>
-      <form onSubmit={handleSubmit}>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="question">Question</Label>
-            <Input
-              id="question"
-              placeholder="Enter a question your users might ask"
-              value={question}
-              onChange={(e) => setQuestion(e.target.value)}
-              required
-            />
+
+      <CardContent className="space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="question">Question</Label>
+          <Textarea 
+            id="question" 
+            placeholder="Enter a question your users might ask" 
+            value={question}
+            onChange={(e) => setQuestion(e.target.value)}
+            className="min-h-[80px]"
+          />
+        </div>
+        
+        <div className="space-y-2">
+          <Label htmlFor="answer">Answer</Label>
+          <Textarea 
+            id="answer" 
+            placeholder="Enter the answer to the question" 
+            value={answer}
+            onChange={(e) => setAnswer(e.target.value)}
+            className="min-h-[150px]"
+          />
+        </div>
+        
+        <div className="space-y-2">
+          <Label htmlFor="category">Category</Label>
+          <Input 
+            id="category" 
+            placeholder="e.g., General, Services, Pricing" 
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+          />
+        </div>
+        
+        <div className="space-y-2">
+          <div className="flex justify-between">
+            <Label>Priority Level ({priority})</Label>
+            <span className="text-xs text-muted-foreground">Higher values = higher priority</span>
           </div>
-          
-          <div className="space-y-2">
-            <Label htmlFor="answer">Answer</Label>
-            <Textarea
-              id="answer"
-              placeholder="Provide the answer to this question"
-              value={answer}
-              onChange={(e) => setAnswer(e.target.value)}
-              rows={4}
-              required
-            />
-          </div>
-          
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="category">Category</Label>
-              <Select value={category} onValueChange={setCategory}>
-                <SelectTrigger id="category">
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="General">General</SelectItem>
-                  <SelectItem value="Properties">Properties</SelectItem>
-                  <SelectItem value="Services">Services</SelectItem>
-                  <SelectItem value="Location">Location</SelectItem>
-                  <SelectItem value="Process">Process</SelectItem>
-                  <SelectItem value="Pricing">Pricing</SelectItem>
-                  <SelectItem value="FAQ">FAQ</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="priority">Priority</Label>
-              <Select value={priority} onValueChange={setPriority}>
-                <SelectTrigger id="priority">
-                  <SelectValue placeholder="Select priority" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="1">Low (1)</SelectItem>
-                  <SelectItem value="2">Medium-Low (2)</SelectItem>
-                  <SelectItem value="3">Medium (3)</SelectItem>
-                  <SelectItem value="4">Medium-High (4)</SelectItem>
-                  <SelectItem value="5">High (5)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </CardContent>
-        <CardFooter>
-          <Button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? 'Saving...' : 'Save Q&A Pair'}
-          </Button>
-        </CardFooter>
-      </form>
+          <Slider 
+            value={[priority]} 
+            min={1} 
+            max={10} 
+            step={1} 
+            onValueChange={([v]) => setPriority(v)} 
+            disabled={isSubmitting}
+          />
+        </div>
+
+        <Button 
+          onClick={handleSubmit} 
+          disabled={isSubmitting || !question.trim() || !answer.trim()} 
+          className="w-full"
+        >
+          {isSubmitting ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> 
+              Creating...
+            </>
+          ) : (
+            <>
+              <Plus className="mr-2 h-4 w-4" />
+              Create Q&A Pair
+            </>
+          )}
+        </Button>
+        
+        <div className="text-xs text-muted-foreground mt-2">
+          <p>Creating Q&A pairs helps your chatbot:</p>
+          <ul className="list-disc pl-5 space-y-1 mt-1">
+            <li>Provide consistent answers to common questions</li>
+            <li>Give accurate information about your products or services</li>
+            <li>Understand your business-specific terminology</li>
+          </ul>
+        </div>
+      </CardContent>
     </Card>
   );
 };

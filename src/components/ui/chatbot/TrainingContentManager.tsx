@@ -1,645 +1,519 @@
 
 import { useState, useEffect } from 'react';
-import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { toast } from 'sonner';
-import { Trash2, Edit, Save, X, FilePlus, MessageSquarePlus } from 'lucide-react';
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { supabase } from "@/lib/supabase";
+import { Loader2, Trash2, Edit, Check, X, Plus, FilePlus, Globe } from "lucide-react";
 import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { AlertCircle } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { supabase } from '@/lib/supabase';
 
-interface TrainingContentManagerProps {
+interface TrainingContentProps {
   userId: string;
   onContentUpdate?: () => void;
 }
 
-interface TrainingItem {
-  id: string;
-  question?: string;
-  answer?: string;
-  extracted_text?: string;
-  source_file?: string;
-  category: string;
-  priority: number;
-  content_type: string;
-}
-
-const priorityLabels = {
-  1: 'Low',
-  2: 'Medium-Low',
-  3: 'Medium',
-  4: 'Medium-High',
-  5: 'High'
-};
-
-const TrainingContentManager = ({ userId, onContentUpdate }: TrainingContentManagerProps) => {
-  const [trainingData, setTrainingData] = useState<TrainingItem[]>([]);
-  const [editingItem, setEditingItem] = useState<TrainingItem | null>(null);
+const TrainingContentManager = ({ userId, onContentUpdate }: TrainingContentProps) => {
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('qa');
+  const [error, setError] = useState<string | null>(null);
+  const [uploadedFiles, setUploadedFiles] = useState<any[]>([]);
+  const [crawledContent, setCrawledContent] = useState<any[]>([]);
+  const [qaContent, setQaContent] = useState<any[]>([]);
+  const [editingItem, setEditingItem] = useState<string | null>(null);
+  const [editedText, setEditedText] = useState('');
+  const [newQuestion, setNewQuestion] = useState('');
+  const [newAnswer, setNewAnswer] = useState('');
+  const [activeTab, setActiveTab] = useState("files");
 
+  // Fetch data when component mounts
   useEffect(() => {
-    loadTrainingData();
+    fetchAllContent();
   }, [userId]);
 
-  const loadTrainingData = async () => {
+  const fetchAllContent = async () => {
     setIsLoading(true);
+    setError(null);
+    
     try {
-      // Fetch all training data from chatbot_training_files
-      const { data, error } = await supabase
-        .from('chatbot_training_files')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false });
+      // Fetch uploaded files
+      const { data: files, error: filesError } = await supabase
+        .from("chatbot_training_files")
+        .select("*")
+        .eq("user_id", userId)
+        .eq("content_type", "file")
+        .order("created_at", { ascending: false });
       
-      if (error) {
-        console.error('Error loading training data:', error);
-        toast.error('Failed to load training data');
-        return;
-      }
+      if (filesError) throw filesError;
+      setUploadedFiles(files || []);
       
-      console.log('Loaded training data:', data);
-      setTrainingData(data || []);
-    } catch (error) {
-      console.error('Exception loading training data:', error);
-      toast.error('An unexpected error occurred while loading training data');
+      // Fetch Q&A content
+      const { data: qa, error: qaError } = await supabase
+        .from("chatbot_training_files")
+        .select("*")
+        .eq("user_id", userId)
+        .eq("content_type", "qa_pair")
+        .order("created_at", { ascending: false });
+      
+      if (qaError) throw qaError;
+      setQaContent(qa || []);
+      
+      // Fetch crawled content
+      const { data: crawled, error: crawledError } = await supabase
+        .from("chatbot_training_files")
+        .select("*")
+        .eq("user_id", userId)
+        .eq("content_type", "web_crawl")
+        .order("created_at", { ascending: false });
+      
+      if (crawledError) throw crawledError;
+      setCrawledContent(crawled || []);
+      
+    } catch (err: any) {
+      console.error("Error fetching content:", err);
+      setError(err.message || "Failed to load content");
+      toast.error("Failed to load training content");
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this item?')) return;
-    
+  const handleDelete = async (id: string, type: 'file' | 'qa' | 'crawl') => {
     try {
       const { error } = await supabase
-        .from('chatbot_training_files')
+        .from("chatbot_training_files")
         .delete()
-        .eq('id', id);
+        .eq("id", id);
       
-      if (error) {
-        console.error('Error deleting item:', error);
-        toast.error('Failed to delete item');
-        return;
+      if (error) throw error;
+      
+      toast.success("Content deleted successfully");
+      
+      // Update state to reflect the deletion
+      if (type === 'file') {
+        setUploadedFiles(prev => prev.filter(item => item.id !== id));
+      } else if (type === 'qa') {
+        setQaContent(prev => prev.filter(item => item.id !== id));
+      } else {
+        setCrawledContent(prev => prev.filter(item => item.id !== id));
       }
       
-      toast.success('Item deleted successfully');
-      setTrainingData(trainingData.filter(item => item.id !== id));
-      if (onContentUpdate) {
-        onContentUpdate();
-      }
-    } catch (error) {
-      console.error('Exception deleting item:', error);
-      toast.error('An unexpected error occurred while deleting the item');
+      if (onContentUpdate) onContentUpdate();
+    } catch (err: any) {
+      console.error("Error deleting content:", err);
+      toast.error("Failed to delete content");
     }
   };
 
-  const handleEdit = (item: TrainingItem) => {
-    setEditingItem({ ...item });
+  const startEditing = (id: string, content: string) => {
+    setEditingItem(id);
+    setEditedText(content);
   };
 
-  const handleSave = async () => {
-    if (!editingItem) return;
-    
+  const cancelEditing = () => {
+    setEditingItem(null);
+    setEditedText('');
+  };
+
+  const saveFileEdit = async (id: string) => {
     try {
-      // Prepare update data based on content type
-      const updateData: any = {
-        category: editingItem.category,
-        priority: editingItem.priority
-      };
+      const { error } = await supabase
+        .from("chatbot_training_files")
+        .update({ extracted_text: editedText })
+        .eq("id", id);
       
-      // Add specific fields based on content type
-      if (editingItem.content_type === 'qa_pair') {
-        updateData.question = editingItem.question;
-        updateData.answer = editingItem.answer;
-      } else if (editingItem.content_type === 'file' || editingItem.content_type === 'web_crawl') {
-        // For files and web crawls, allow updating extracted_text
-        updateData.extracted_text = editingItem.extracted_text;
-      }
+      if (error) throw error;
+      
+      setUploadedFiles(prev => 
+        prev.map(item => 
+          item.id === id ? { ...item, extracted_text: editedText } : item
+        )
+      );
+      
+      toast.success("Content updated successfully");
+      setEditingItem(null);
+      if (onContentUpdate) onContentUpdate();
+    } catch (err: any) {
+      console.error("Error updating content:", err);
+      toast.error("Failed to update content");
+    }
+  };
+
+  const saveQAEdit = async (id: string, field: 'question' | 'answer') => {
+    try {
+      const updateData = field === 'question' 
+        ? { question: editedText } 
+        : { answer: editedText };
       
       const { error } = await supabase
-        .from('chatbot_training_files')
+        .from("chatbot_training_files")
         .update(updateData)
-        .eq('id', editingItem.id);
+        .eq("id", id);
       
-      if (error) {
-        console.error('Error updating item:', error);
-        toast.error('Failed to update item');
-        return;
-      }
+      if (error) throw error;
       
-      toast.success('Item updated successfully');
+      setQaContent(prev => 
+        prev.map(item => 
+          item.id === id ? { ...item, [field]: editedText } : item
+        )
+      );
       
-      // Update local state
-      setTrainingData(trainingData.map(item => 
-        item.id === editingItem.id ? editingItem : item
-      ));
-      
+      toast.success("Q&A updated successfully");
       setEditingItem(null);
-      if (onContentUpdate) {
-        onContentUpdate();
-      }
-    } catch (error) {
-      console.error('Exception updating item:', error);
-      toast.error('An unexpected error occurred while updating the item');
+      if (onContentUpdate) onContentUpdate();
+    } catch (err: any) {
+      console.error("Error updating Q&A:", err);
+      toast.error("Failed to update Q&A");
     }
   };
 
-  const getContentByType = (contentType: string) => {
-    return trainingData.filter(item => {
-      if (contentType === 'qa') return item.content_type === 'qa_pair';
-      if (contentType === 'files') return item.content_type === 'file';
-      if (contentType === 'web') return item.content_type === 'web_crawl';
-      return false;
-    });
-  };
-
-  const renderQAPairs = () => {
-    const qaPairs = getContentByType('qa');
+  const handleCreateQA = async (e: React.FormEvent) => {
+    e.preventDefault();
     
-    if (qaPairs.length === 0) {
-      return (
-        <div className="text-center py-6">
-          <p className="text-muted-foreground">No Q&A pairs found. Add some using the form above.</p>
-          <Button 
-            variant="outline" 
-            className="mt-4" 
-            onClick={() => document.getElementById('add-qa-section')?.scrollIntoView({ behavior: 'smooth' })}
-          >
-            <MessageSquarePlus className="mr-2 h-4 w-4" />
-            Add Q&A Pair
-          </Button>
-        </div>
-      );
+    if (!newQuestion.trim() || !newAnswer.trim()) {
+      toast.error("Both question and answer are required");
+      return;
     }
     
-    return qaPairs.map(item => (
-      <Card key={item.id} className="mb-4">
-        <CardContent className="pt-4">
-          {editingItem && editingItem.id === item.id ? (
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor={`edit-question-${item.id}`}>Question</Label>
-                <Input 
-                  id={`edit-question-${item.id}`}
-                  value={editingItem.question || ''}
-                  onChange={(e) => setEditingItem({...editingItem, question: e.target.value})}
-                />
-              </div>
-              
-              <div>
-                <Label htmlFor={`edit-answer-${item.id}`}>Answer</Label>
-                <Textarea 
-                  id={`edit-answer-${item.id}`}
-                  value={editingItem.answer || ''}
-                  onChange={(e) => setEditingItem({...editingItem, answer: e.target.value})}
-                  rows={4}
-                />
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor={`edit-category-${item.id}`}>Category</Label>
-                  <Select 
-                    value={editingItem.category} 
-                    onValueChange={(val) => setEditingItem({...editingItem, category: val})}
-                  >
-                    <SelectTrigger id={`edit-category-${item.id}`}>
-                      <SelectValue placeholder="Select category" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="General">General</SelectItem>
-                      <SelectItem value="Properties">Properties</SelectItem>
-                      <SelectItem value="Services">Services</SelectItem>
-                      <SelectItem value="Location">Location</SelectItem>
-                      <SelectItem value="Process">Process</SelectItem>
-                      <SelectItem value="Pricing">Pricing</SelectItem>
-                      <SelectItem value="FAQ">FAQ</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                
-                <div>
-                  <Label htmlFor={`edit-priority-${item.id}`}>Priority</Label>
-                  <Select 
-                    value={editingItem.priority.toString()} 
-                    onValueChange={(val) => setEditingItem({...editingItem, priority: parseInt(val)})}
-                  >
-                    <SelectTrigger id={`edit-priority-${item.id}`}>
-                      <SelectValue placeholder="Select priority" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="1">Low (1)</SelectItem>
-                      <SelectItem value="2">Medium-Low (2)</SelectItem>
-                      <SelectItem value="3">Medium (3)</SelectItem>
-                      <SelectItem value="4">Medium-High (4)</SelectItem>
-                      <SelectItem value="5">High (5)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              
-              <div className="flex justify-end space-x-2">
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={() => setEditingItem(null)}
-                >
-                  <X className="mr-2 h-4 w-4" />
-                  Cancel
-                </Button>
-                <Button 
-                  size="sm" 
-                  onClick={handleSave}
-                >
-                  <Save className="mr-2 h-4 w-4" />
-                  Save
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div>
-              <div className="flex justify-between items-start mb-2">
-                <div className="font-medium text-lg">{item.question}</div>
-                <div className="flex space-x-1">
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    onClick={() => handleEdit(item)}
-                  >
-                    <Edit className="h-4 w-4" />
-                  </Button>
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    onClick={() => handleDelete(item.id)}
-                  >
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                  </Button>
-                </div>
-              </div>
-              
-              <div className="text-muted-foreground mt-2">{item.answer}</div>
-              
-              <div className="flex justify-between items-center mt-4">
-                <Badge variant="outline" className="mr-2">{item.category}</Badge>
-                <Badge variant={item.priority >= 4 ? "default" : "secondary"}>
-                  Priority: {priorityLabels[item.priority as keyof typeof priorityLabels]}
-                </Badge>
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    ));
+    try {
+      const { data, error } = await supabase
+        .from("chatbot_training_files")
+        .insert({
+          user_id: userId,
+          question: newQuestion,
+          answer: newAnswer,
+          content_type: "qa_pair",
+          category: "Custom Q&A",
+          priority: 8,
+          source_file: "Q&A Pair", // Required field in our unified schema
+          extracted_text: newAnswer // Also store in extracted_text for compatibility
+        })
+        .select();
+      
+      if (error) throw error;
+      
+      setQaContent(prev => [data[0], ...prev]);
+      setNewQuestion('');
+      setNewAnswer('');
+      toast.success("Q&A pair created successfully");
+      
+      if (onContentUpdate) onContentUpdate();
+    } catch (err: any) {
+      console.error("Error creating Q&A:", err);
+      toast.error("Failed to create Q&A pair");
+    }
   };
 
-  const renderFiles = () => {
-    const files = getContentByType('files');
-    
-    if (files.length === 0) {
-      return (
-        <div className="text-center py-6">
-          <p className="text-muted-foreground">No training files found. Upload some documents to extract content.</p>
-          <Button 
-            variant="outline" 
-            className="mt-4" 
-            onClick={() => document.getElementById('file-upload-section')?.scrollIntoView({ behavior: 'smooth' })}
-          >
-            <FilePlus className="mr-2 h-4 w-4" />
-            Upload Documents
-          </Button>
-        </div>
-      );
-    }
-    
-    return files.map(file => (
-      <Card key={file.id} className="mb-4">
-        <CardContent className="pt-4">
-          {editingItem && editingItem.id === file.id ? (
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor={`edit-source-${file.id}`}>Source File</Label>
-                <Input 
-                  id={`edit-source-${file.id}`}
-                  value={editingItem.source_file || ''}
-                  readOnly
-                />
-              </div>
-              
-              <div>
-                <Label htmlFor={`edit-text-${file.id}`}>Extracted Text</Label>
-                <Textarea 
-                  id={`edit-text-${file.id}`}
-                  value={editingItem.extracted_text || ''}
-                  onChange={(e) => setEditingItem({...editingItem, extracted_text: e.target.value})}
-                  rows={8}
-                />
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor={`edit-category-${file.id}`}>Category</Label>
-                  <Select 
-                    value={editingItem.category} 
-                    onValueChange={(val) => setEditingItem({...editingItem, category: val})}
-                  >
-                    <SelectTrigger id={`edit-category-${file.id}`}>
-                      <SelectValue placeholder="Select category" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="File Import">File Import</SelectItem>
-                      <SelectItem value="Properties">Properties</SelectItem>
-                      <SelectItem value="Services">Services</SelectItem>
-                      <SelectItem value="Location">Location</SelectItem>
-                      <SelectItem value="Process">Process</SelectItem>
-                      <SelectItem value="Pricing">Pricing</SelectItem>
-                      <SelectItem value="FAQ">FAQ</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                
-                <div>
-                  <Label htmlFor={`edit-priority-${file.id}`}>Priority</Label>
-                  <Select 
-                    value={editingItem.priority.toString()} 
-                    onValueChange={(val) => setEditingItem({...editingItem, priority: parseInt(val)})}
-                  >
-                    <SelectTrigger id={`edit-priority-${file.id}`}>
-                      <SelectValue placeholder="Select priority" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="1">Low (1)</SelectItem>
-                      <SelectItem value="2">Medium-Low (2)</SelectItem>
-                      <SelectItem value="3">Medium (3)</SelectItem>
-                      <SelectItem value="4">Medium-High (4)</SelectItem>
-                      <SelectItem value="5">High (5)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              
-              <div className="flex justify-end space-x-2">
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={() => setEditingItem(null)}
-                >
-                  <X className="mr-2 h-4 w-4" />
-                  Cancel
-                </Button>
-                <Button 
-                  size="sm" 
-                  onClick={handleSave}
-                >
-                  <Save className="mr-2 h-4 w-4" />
-                  Save
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div>
-              <div className="flex justify-between items-start mb-2">
-                <div className="font-medium text-lg">{file.source_file}</div>
-                <div className="flex space-x-1">
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    onClick={() => handleEdit(file)}
-                  >
-                    <Edit className="h-4 w-4" />
-                  </Button>
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    onClick={() => handleDelete(file.id)}
-                  >
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                  </Button>
-                </div>
-              </div>
-              
-              <div className="text-muted-foreground mt-2 line-clamp-3">{file.extracted_text}</div>
-              
-              <div className="flex justify-between items-center mt-4">
-                <Badge variant="outline">{file.category || 'Document'}</Badge>
-                <Badge variant="secondary">
-                  Priority: {priorityLabels[file.priority as keyof typeof priorityLabels] || 'Medium'}
-                </Badge>
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    ));
-  };
-
-  const renderWebContent = () => {
-    const webContent = getContentByType('web');
-    
-    if (webContent.length === 0) {
-      return (
-        <div className="text-center py-6">
-          <p className="text-muted-foreground">No web crawled content found. Use the web crawler to import content from your website.</p>
-          <Button 
-            variant="outline" 
-            className="mt-4" 
-            onClick={() => document.getElementById('web-crawler-section')?.scrollIntoView({ behavior: 'smooth' })}
-          >
-            <FilePlus className="mr-2 h-4 w-4" />
-            Crawl Website
-          </Button>
-        </div>
-      );
-    }
-    
-    return webContent.map(item => (
-      <Card key={item.id} className="mb-4">
-        <CardContent className="pt-4">
-          {editingItem && editingItem.id === item.id ? (
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor={`edit-source-${item.id}`}>Source URL</Label>
-                <Input 
-                  id={`edit-source-${item.id}`}
-                  value={editingItem.source_file || ''}
-                  readOnly
-                />
-              </div>
-              
-              <div>
-                <Label htmlFor={`edit-text-${item.id}`}>Extracted Text</Label>
-                <Textarea 
-                  id={`edit-text-${item.id}`}
-                  value={editingItem.extracted_text || ''}
-                  onChange={(e) => setEditingItem({...editingItem, extracted_text: e.target.value})}
-                  rows={8}
-                />
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor={`edit-category-${item.id}`}>Category</Label>
-                  <Select 
-                    value={editingItem.category} 
-                    onValueChange={(val) => setEditingItem({...editingItem, category: val})}
-                  >
-                    <SelectTrigger id={`edit-category-${item.id}`}>
-                      <SelectValue placeholder="Select category" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Web Crawler">Web Crawler</SelectItem>
-                      <SelectItem value="Properties">Properties</SelectItem>
-                      <SelectItem value="Services">Services</SelectItem>
-                      <SelectItem value="Location">Location</SelectItem>
-                      <SelectItem value="Process">Process</SelectItem>
-                      <SelectItem value="Pricing">Pricing</SelectItem>
-                      <SelectItem value="FAQ">FAQ</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                
-                <div>
-                  <Label htmlFor={`edit-priority-${item.id}`}>Priority</Label>
-                  <Select 
-                    value={editingItem.priority.toString()} 
-                    onValueChange={(val) => setEditingItem({...editingItem, priority: parseInt(val)})}
-                  >
-                    <SelectTrigger id={`edit-priority-${item.id}`}>
-                      <SelectValue placeholder="Select priority" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="1">Low (1)</SelectItem>
-                      <SelectItem value="2">Medium-Low (2)</SelectItem>
-                      <SelectItem value="3">Medium (3)</SelectItem>
-                      <SelectItem value="4">Medium-High (4)</SelectItem>
-                      <SelectItem value="5">High (5)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              
-              <div className="flex justify-end space-x-2">
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={() => setEditingItem(null)}
-                >
-                  <X className="mr-2 h-4 w-4" />
-                  Cancel
-                </Button>
-                <Button 
-                  size="sm" 
-                  onClick={handleSave}
-                >
-                  <Save className="mr-2 h-4 w-4" />
-                  Save
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div>
-              <div className="flex justify-between items-start mb-2">
-                <div className="font-medium text-lg">{item.source_file}</div>
-                <div className="flex space-x-1">
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    onClick={() => handleEdit(item)}
-                  >
-                    <Edit className="h-4 w-4" />
-                  </Button>
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    onClick={() => handleDelete(item.id)}
-                  >
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                  </Button>
-                </div>
-              </div>
-              
-              <div className="text-muted-foreground mt-2 line-clamp-3">{item.extracted_text}</div>
-              
-              <div className="flex justify-between items-center mt-4">
-                <Badge variant="outline">{item.category || 'Web Page'}</Badge>
-                <Badge variant="secondary">
-                  Priority: {priorityLabels[item.priority as keyof typeof priorityLabels] || 'Medium'}
-                </Badge>
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    ));
-  };
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center p-8">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div>
-      <Tabs defaultValue="qa" value={activeTab} onValueChange={setActiveTab}>
+      <Tabs defaultValue={activeTab} onValueChange={setActiveTab} value={activeTab}>
         <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="qa">Q&A Pairs ({getContentByType('qa').length})</TabsTrigger>
-          <TabsTrigger value="files">Document Files ({getContentByType('files').length})</TabsTrigger>
-          <TabsTrigger value="web">Web Content ({getContentByType('web').length})</TabsTrigger>
+          <TabsTrigger value="files">
+            <FilePlus className="mr-2 h-4 w-4" />
+            Text Files
+          </TabsTrigger>
+          <TabsTrigger value="qa">
+            <Plus className="mr-2 h-4 w-4" />
+            Q&A Pairs
+          </TabsTrigger>
+          <TabsTrigger value="crawl">
+            <Globe className="mr-2 h-4 w-4" />
+            Web Content
+          </TabsTrigger>
         </TabsList>
         
-        <TabsContent value="qa" className="mt-4">
-          <div className="space-y-4">
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={loadTrainingData} 
-              disabled={isLoading}
-            >
-              {isLoading ? 'Loading...' : 'Refresh Data'}
-            </Button>
-            
-            <div className="space-y-4">
-              {renderQAPairs()}
-            </div>
-          </div>
-        </TabsContent>
+        {error && (
+          <Alert variant="destructive" className="mt-4">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
         
         <TabsContent value="files" className="mt-4">
-          <div className="space-y-4">
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={loadTrainingData} 
-              disabled={isLoading}
-            >
-              {isLoading ? 'Loading...' : 'Refresh Data'}
-            </Button>
-            
-            <div className="space-y-4">
-              {renderFiles()}
-            </div>
-          </div>
+          <Card>
+            <CardHeader>
+              <CardTitle>Uploaded Text Files</CardTitle>
+              <CardDescription>View, edit or delete text files that you've uploaded for chatbot training</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {uploadedFiles.length === 0 ? (
+                <div className="text-center p-4 border border-dashed rounded-md">
+                  <p className="text-muted-foreground">No text files uploaded yet. Upload a file to get started.</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {uploadedFiles.map(file => (
+                    <div key={file.id} className="border rounded-md p-4">
+                      <div className="flex justify-between items-start mb-2">
+                        <div>
+                          <h3 className="font-medium">{file.source_file}</h3>
+                          <p className="text-sm text-muted-foreground">
+                            {new Date(file.created_at).toLocaleDateString()} - Priority: {file.priority}
+                          </p>
+                        </div>
+                        <div className="flex gap-2">
+                          {editingItem !== file.id && (
+                            <>
+                              <Button 
+                                size="sm" 
+                                variant="outline" 
+                                onClick={() => startEditing(file.id, file.extracted_text)}
+                              >
+                                <Edit className="h-4 w-4 mr-1" /> Edit
+                              </Button>
+                              <Button 
+                                size="sm" 
+                                variant="destructive" 
+                                onClick={() => handleDelete(file.id, 'file')}
+                              >
+                                <Trash2 className="h-4 w-4 mr-1" /> Delete
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      
+                      {editingItem === file.id ? (
+                        <div className="space-y-2">
+                          <Textarea
+                            value={editedText}
+                            onChange={(e) => setEditedText(e.target.value)}
+                            className="min-h-[200px]"
+                          />
+                          <div className="flex justify-end gap-2">
+                            <Button 
+                              size="sm" 
+                              variant="outline" 
+                              onClick={cancelEditing}
+                            >
+                              <X className="h-4 w-4 mr-1" /> Cancel
+                            </Button>
+                            <Button 
+                              size="sm" 
+                              onClick={() => saveFileEdit(file.id)}
+                            >
+                              <Check className="h-4 w-4 mr-1" /> Save
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="mt-2 bg-muted p-3 rounded-md text-sm max-h-40 overflow-y-auto">
+                          {file.extracted_text}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
         
-        <TabsContent value="web" className="mt-4">
-          <div className="space-y-4">
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={loadTrainingData} 
-              disabled={isLoading}
-            >
-              {isLoading ? 'Loading...' : 'Refresh Data'}
-            </Button>
-            
-            <div className="space-y-4">
-              {renderWebContent()}
-            </div>
-          </div>
+        <TabsContent value="qa" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Q&A Pairs</CardTitle>
+              <CardDescription>Create, edit, or delete custom question and answer pairs for your chatbot</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleCreateQA} className="mb-6 border p-4 rounded-md">
+                <h3 className="font-medium mb-3">Add New Q&A Pair</h3>
+                <div className="space-y-3">
+                  <div>
+                    <Label htmlFor="new-question">Question</Label>
+                    <Input 
+                      id="new-question"
+                      value={newQuestion}
+                      onChange={(e) => setNewQuestion(e.target.value)}
+                      placeholder="E.g., What services do you offer?"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="new-answer">Answer</Label>
+                    <Textarea 
+                      id="new-answer"
+                      value={newAnswer}
+                      onChange={(e) => setNewAnswer(e.target.value)}
+                      placeholder="E.g., We offer comprehensive real estate services including property listings, buyer representation, and market analysis."
+                      className="min-h-[100px]"
+                    />
+                  </div>
+                  <div className="pt-2">
+                    <Button type="submit" disabled={!newQuestion.trim() || !newAnswer.trim()}>
+                      <Plus className="h-4 w-4 mr-1" /> Add Q&A Pair
+                    </Button>
+                  </div>
+                </div>
+              </form>
+              
+              {qaContent.length === 0 ? (
+                <div className="text-center p-4 border border-dashed rounded-md">
+                  <p className="text-muted-foreground">No Q&A pairs created yet. Add a Q&A pair to get started.</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {qaContent.map(qa => (
+                    <div key={qa.id} className="border rounded-md p-4">
+                      <div className="flex justify-between items-start mb-2">
+                        <div>
+                          <h3 className="font-medium">Q&A Pair</h3>
+                          <p className="text-sm text-muted-foreground">
+                            {new Date(qa.created_at).toLocaleDateString()} - Priority: {qa.priority}
+                          </p>
+                        </div>
+                        <Button 
+                          size="sm" 
+                          variant="destructive" 
+                          onClick={() => handleDelete(qa.id, 'qa')}
+                        >
+                          <Trash2 className="h-4 w-4 mr-1" /> Delete
+                        </Button>
+                      </div>
+                      
+                      <div className="space-y-3">
+                        <div>
+                          <Label className="text-muted-foreground text-xs">Question:</Label>
+                          {editingItem === `${qa.id}-q` ? (
+                            <div className="space-y-2">
+                              <Textarea
+                                value={editedText}
+                                onChange={(e) => setEditedText(e.target.value)}
+                                className="min-h-[100px]"
+                              />
+                              <div className="flex justify-end gap-2">
+                                <Button 
+                                  size="sm" 
+                                  variant="outline" 
+                                  onClick={cancelEditing}
+                                >
+                                  <X className="h-4 w-4 mr-1" /> Cancel
+                                </Button>
+                                <Button 
+                                  size="sm" 
+                                  onClick={() => saveQAEdit(qa.id, 'question')}
+                                >
+                                  <Check className="h-4 w-4 mr-1" /> Save
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex justify-between items-start group">
+                              <div className="bg-muted p-3 rounded-md text-sm w-full">{qa.question}</div>
+                              <Button 
+                                size="sm" 
+                                variant="ghost" 
+                                className="opacity-0 group-hover:opacity-100 transition-opacity" 
+                                onClick={() => startEditing(`${qa.id}-q`, qa.question)}
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                        
+                        <div>
+                          <Label className="text-muted-foreground text-xs">Answer:</Label>
+                          {editingItem === `${qa.id}-a` ? (
+                            <div className="space-y-2">
+                              <Textarea
+                                value={editedText}
+                                onChange={(e) => setEditedText(e.target.value)}
+                                className="min-h-[100px]"
+                              />
+                              <div className="flex justify-end gap-2">
+                                <Button 
+                                  size="sm" 
+                                  variant="outline" 
+                                  onClick={cancelEditing}
+                                >
+                                  <X className="h-4 w-4 mr-1" /> Cancel
+                                </Button>
+                                <Button 
+                                  size="sm" 
+                                  onClick={() => saveQAEdit(qa.id, 'answer')}
+                                >
+                                  <Check className="h-4 w-4 mr-1" /> Save
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex justify-between items-start group">
+                              <div className="bg-muted p-3 rounded-md text-sm w-full">{qa.answer}</div>
+                              <Button 
+                                size="sm" 
+                                variant="ghost" 
+                                className="opacity-0 group-hover:opacity-100 transition-opacity" 
+                                onClick={() => startEditing(`${qa.id}-a`, qa.answer)}
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+        
+        <TabsContent value="crawl" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Crawled Web Content</CardTitle>
+              <CardDescription>View or delete web content that has been crawled from your website</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {crawledContent.length === 0 ? (
+                <div className="text-center p-4 border border-dashed rounded-md">
+                  <p className="text-muted-foreground">No web content has been crawled yet. Use the Web Crawler to add content.</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {crawledContent.map(content => (
+                    <div key={content.id} className="border rounded-md p-4">
+                      <div className="flex justify-between items-start mb-2">
+                        <div>
+                          <h3 className="font-medium truncate max-w-xs">{content.question || content.source_file || 'Web Content'}</h3>
+                          <p className="text-sm text-muted-foreground">
+                            {new Date(content.created_at).toLocaleDateString()} - Priority: {content.priority}
+                          </p>
+                        </div>
+                        <Button 
+                          size="sm" 
+                          variant="destructive" 
+                          onClick={() => handleDelete(content.id, 'crawl')}
+                        >
+                          <Trash2 className="h-4 w-4 mr-1" /> Delete
+                        </Button>
+                      </div>
+                      
+                      <div className="mt-2 bg-muted p-3 rounded-md text-sm max-h-40 overflow-y-auto">
+                        {content.extracted_text || content.answer}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>
   );
 };
 
-export default TrainingContentManager;
+export { TrainingContentManager };

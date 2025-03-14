@@ -1,0 +1,7 @@
+
+# A string used as a project ID
+project_id = "ckgaqkbsnrvccctqxsqv"
+
+[global.env]
+# Any environment variables for Edge Functions
+ENABLE_ALL_FEATURES = "true"

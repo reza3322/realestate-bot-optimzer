@@ -130,6 +130,7 @@ export default function ChatbotDemo() {
                 botName={botName}
                 welcomeMessage={welcomeMessage}
                 fontSize={fontSize}
+                userId="demo-user" // Added userId prop
               />
             </div>
           </div>
