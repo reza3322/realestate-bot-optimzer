@@ -41,9 +41,10 @@ const TrainingContentManager = ({ userId, onContentUpdate }: TrainingContentProp
     try {
       // Fetch uploaded files
       const { data: files, error: filesError } = await supabase
-        .from("chatbot_training_files_uploads")
+        .from("chatbot_training_files")
         .select("*")
         .eq("user_id", userId)
+        .eq("content_type", "file")
         .order("created_at", { ascending: false });
       
       if (filesError) throw filesError;
@@ -82,15 +83,8 @@ const TrainingContentManager = ({ userId, onContentUpdate }: TrainingContentProp
 
   const handleDelete = async (id: string, type: 'file' | 'qa' | 'crawl') => {
     try {
-      let tableName;
-      if (type === 'file') {
-        tableName = 'chatbot_training_files_uploads';
-      } else {
-        tableName = 'chatbot_training_files';
-      }
-      
       const { error } = await supabase
-        .from(tableName)
+        .from("chatbot_training_files")
         .delete()
         .eq("id", id);
       
@@ -127,7 +121,7 @@ const TrainingContentManager = ({ userId, onContentUpdate }: TrainingContentProp
   const saveFileEdit = async (id: string) => {
     try {
       const { error } = await supabase
-        .from("chatbot_training_files_uploads")
+        .from("chatbot_training_files")
         .update({ extracted_text: editedText })
         .eq("id", id);
       
@@ -193,7 +187,9 @@ const TrainingContentManager = ({ userId, onContentUpdate }: TrainingContentProp
           answer: newAnswer,
           content_type: "qa_pair",
           category: "Custom Q&A",
-          priority: 8
+          priority: 8,
+          source_file: "Q&A Pair", // Required field in our unified schema
+          extracted_text: newAnswer // Also store in extracted_text for compatibility
         })
         .select();
       
@@ -491,7 +487,7 @@ const TrainingContentManager = ({ userId, onContentUpdate }: TrainingContentProp
                     <div key={content.id} className="border rounded-md p-4">
                       <div className="flex justify-between items-start mb-2">
                         <div>
-                          <h3 className="font-medium truncate max-w-xs">{content.question || 'Web Content'}</h3>
+                          <h3 className="font-medium truncate max-w-xs">{content.question || content.source_file || 'Web Content'}</h3>
                           <p className="text-sm text-muted-foreground">
                             {new Date(content.created_at).toLocaleDateString()} - Priority: {content.priority}
                           </p>
@@ -506,7 +502,7 @@ const TrainingContentManager = ({ userId, onContentUpdate }: TrainingContentProp
                       </div>
                       
                       <div className="mt-2 bg-muted p-3 rounded-md text-sm max-h-40 overflow-y-auto">
-                        {content.answer}
+                        {content.extracted_text || content.answer}
                       </div>
                     </div>
                   ))}

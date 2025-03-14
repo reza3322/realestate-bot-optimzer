@@ -219,6 +219,7 @@ export type Database = {
       }
       chatbot_training_files: {
         Row: {
+          answer: string | null
           category: string | null
           content_type: string
           created_at: string | null
@@ -226,11 +227,13 @@ export type Database = {
           id: string
           priority: number | null
           processing_status: string | null
+          question: string | null
           source_file: string
           updated_at: string | null
           user_id: string
         }
         Insert: {
+          answer?: string | null
           category?: string | null
           content_type: string
           created_at?: string | null
@@ -238,11 +241,13 @@ export type Database = {
           id?: string
           priority?: number | null
           processing_status?: string | null
+          question?: string | null
           source_file: string
           updated_at?: string | null
           user_id: string
         }
         Update: {
+          answer?: string | null
           category?: string | null
           content_type?: string
           created_at?: string | null
@@ -250,6 +255,7 @@ export type Database = {
           id?: string
           priority?: number | null
           processing_status?: string | null
+          question?: string | null
           source_file?: string
           updated_at?: string | null
           user_id?: string
@@ -714,6 +720,31 @@ export type Database = {
           category: string
           priority: number
           similarity: number
+        }[]
+      }
+      search_properties: {
+        Args: {
+          user_id_param: string
+          query_text: string
+          max_results?: number
+        }
+        Returns: {
+          id: string
+          title: string
+          description: string
+          price: number
+          bedrooms: number
+          bathrooms: number
+          city: string
+          state: string
+          status: string
+          url: string
+          living_area: number
+          plot_area: number
+          garage_area: number
+          terrace: number
+          has_pool: boolean
+          relevance: number
         }[]
       }
       search_properties_by_style: {

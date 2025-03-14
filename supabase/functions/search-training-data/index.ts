@@ -66,22 +66,21 @@ serve(async (req) => {
     
     // Search file content if requested
     if (includeFiles) {
-      // First, try fuzzy text search for best matches
+      // First, try a direct query from the single chatbot_training_files table
       const { data: fileData, error: fileError } = await supabase
-        .from('chatbot_training_files_uploads')
+        .from('chatbot_training_files')
         .select('id, source_file, extracted_text, category, priority')
         .eq('user_id', userId)
-        .textSearch('extracted_text', query.split(' ').join(' & '), {
-          type: 'plain',
-          config: 'english'
-        })
+        .eq('content_type', 'file')
+        .order('priority', { ascending: false })
         .limit(5);
-      
-      if (fileError) {
-        console.error('Error searching file content:', fileError);
-      } else if (fileData && fileData.length > 0) {
-        console.log(`Found ${fileData.length} file content matches using text search`);
         
+      if (fileError) {
+        console.error('Error fetching file content:', fileError);
+      } else if (fileData && fileData.length > 0) {
+        console.log(`Found ${fileData.length} file content matches`);
+        
+        // Process and add file content matches
         result.file_content = fileData.map(file => ({
           id: file.id,
           source: file.source_file,
@@ -89,101 +88,26 @@ serve(async (req) => {
           text: file.extracted_text,
           priority: file.priority
         }));
-      } else {
-        // If no results from text search, try broader keyword-based search
-        console.log('No text search matches, trying keywords search');
-        
-        // Only proceed if we have keywords
-        if (keywords.length > 0) {
-          const keywordQueries = keywords.map(keyword => {
-            return supabase
-              .from('chatbot_training_files_uploads')
-              .select('id, source_file, extracted_text, category, priority')
-              .eq('user_id', userId)
-              .ilike('extracted_text', `%${keyword}%`)
-              .limit(2);
-          });
-          
-          const keywordResults = await Promise.all(keywordQueries);
-          
-          // Combine results and remove duplicates
-          const uniqueResults = new Map();
-          keywordResults.forEach(result => {
-            if (result.data) {
-              result.data.forEach(file => {
-                if (!uniqueResults.has(file.id)) {
-                  uniqueResults.set(file.id, file);
-                }
-              });
-            }
-          });
-          
-          if (uniqueResults.size > 0) {
-            console.log(`Found ${uniqueResults.size} file content matches using keywords`);
-            
-            result.file_content = Array.from(uniqueResults.values()).map(file => ({
-              id: file.id,
-              source: file.source_file,
-              category: file.category,
-              text: file.extracted_text,
-              priority: file.priority
-            })).slice(0, 3); // Limit to top 3
-          }
-        }
       }
     }
     
     // Search property listings if requested
     if (includeProperties) {
-      // Prepare search parameters based on the query
-      const searchParams = analyzePropertyQuery(query);
-      
-      if (searchParams) {
-        console.log('Searching properties with params:', searchParams);
-        
-        const { data: propertyData, error: propertyError } = await supabase.functions.invoke(
-          'search-properties',
-          {
-            body: { 
-              userId: userId, 
-              searchParams: searchParams
-            }
+      try {
+        // Use the search_properties function we created
+        const { data: propertyData, error: propertyError } = await supabase.rpc(
+          'search_properties',
+          { 
+            user_id_param: userId, 
+            query_text: propertyKeywords.length > 0 ? propertyKeywords.join(' ') : query,
+            max_results: 3 
           }
         );
         
         if (propertyError) {
           console.error('Error searching properties:', propertyError);
-        } else if (propertyData && propertyData.properties && propertyData.properties.length > 0) {
-          console.log(`Found ${propertyData.properties.length} property matches`);
-          
-          result.property_listings = propertyData.properties.map(property => ({
-            id: property.id,
-            title: property.title || `Property in ${property.city || 'Exclusive Location'}`,
-            price: property.price,
-            location: property.location,
-            features: property.features,
-            bedroomCount: property.bedrooms,
-            bathroomCount: property.bathrooms,
-            hasPool: property.has_pool,
-            url: property.url || `./property/${property.id}`
-          }));
-        } else {
-          console.log('No property matches found');
-        }
-      } else if (propertyKeywords.length > 0) {
-        // If we couldn't construct comprehensive search params but have property keywords,
-        // use them to search directly with the search_properties function
-        console.log(`Searching properties with keywords: ${propertyKeywords.join(', ')}`);
-        
-        const { data: propertyData, error: propertyError } = await supabase.rpc(
-          'search_properties',
-          { user_id_param: userId, query_text: propertyKeywords.join(' '), max_results: 3 }
-        );
-        
-        if (propertyError) {
-          console.error('Error searching properties with keywords:', propertyError);
         } else if (propertyData && propertyData.length > 0) {
-          console.log(`Found ${propertyData.length} property matches with keywords`);
+          console.log(`Found ${propertyData.length} property matches`);
           
           result.property_listings = propertyData.map(property => ({
             id: property.id,
@@ -193,7 +117,8 @@ serve(async (req) => {
             features: [
               property.bedrooms ? `${property.bedrooms} Bedrooms` : null,
               property.bathrooms ? `${property.bathrooms} Bathrooms` : null,
-              property.living_area ? `${property.living_area} m² Living Area` : null
+              property.living_area ? `${property.living_area} m² Living Area` : null,
+              property.has_pool ? 'Swimming Pool' : null
             ].filter(Boolean),
             bedroomCount: property.bedrooms,
             bathroomCount: property.bathrooms,
@@ -201,6 +126,8 @@ serve(async (req) => {
             url: property.url || `./property/${property.id}`
           }));
         }
+      } catch (error) {
+        console.error('Error processing property search:', error);
       }
     }
     
@@ -264,112 +191,4 @@ function extractPropertyKeywords(query) {
   // Find property terms in the query
   const lowerQuery = query.toLowerCase();
   return propertyTerms.filter(term => lowerQuery.includes(term));
-}
-
-// Helper function to analyze property-related queries and extract search parameters
-function analyzePropertyQuery(query) {
-  // Initialize search params object
-  const searchParams = {};
-  const lowerQuery = query.toLowerCase();
-  
-  // Check for property type
-  const typePatterns = [
-    { regex: /\b(?:apartment|flat|condo(?:minium)?)\b/i, type: 'apartment' },
-    { regex: /\bhouse\b/i, type: 'house' },
-    { regex: /\bvilla\b/i, type: 'villa' },
-    { regex: /\btownhouse\b/i, type: 'townhouse' },
-    { regex: /\b(?:land|plot|lot)\b/i, type: 'land' },
-    { regex: /\b(?:commercial|office|retail|shop)\b/i, type: 'commercial' }
-  ];
-  
-  for (const pattern of typePatterns) {
-    if (pattern.regex.test(lowerQuery)) {
-      searchParams.type = pattern.type;
-      break;
-    }
-  }
-  
-  // Check for location
-  const locationMatch = lowerQuery.match(/\bin\s+([a-z\s]+)(?:\s+area)?\b/i) || 
-                        lowerQuery.match(/\bnear\s+([a-z\s]+)\b/i) ||
-                        lowerQuery.match(/\bat\s+([a-z\s]+)\b/i);
-  
-  if (locationMatch && locationMatch[1]) {
-    searchParams.location = locationMatch[1].trim();
-  }
-  
-  // Check for price range
-  const minPriceMatch = lowerQuery.match(/\babove\s+(\d[,\d]*)\b/i) ||
-                        lowerQuery.match(/\bfrom\s+(\d[,\d]*)\b/i) ||
-                        lowerQuery.match(/\bminimum\s+(\d[,\d]*)\b/i) ||
-                        lowerQuery.match(/\bmore\s+than\s+(\d[,\d]*)\b/i);
-  
-  const maxPriceMatch = lowerQuery.match(/\bbelow\s+(\d[,\d]*)\b/i) ||
-                        lowerQuery.match(/\bunder\s+(\d[,\d]*)\b/i) ||
-                        lowerQuery.match(/\bless\s+than\s+(\d[,\d]*)\b/i) ||
-                        lowerQuery.match(/\bmax(?:imum)?\s+(\d[,\d]*)\b/i);
-  
-  if (minPriceMatch && minPriceMatch[1]) {
-    searchParams.minPrice = parseInt(minPriceMatch[1].replace(/,/g, ''), 10);
-  }
-  
-  if (maxPriceMatch && maxPriceMatch[1]) {
-    searchParams.maxPrice = parseInt(maxPriceMatch[1].replace(/,/g, ''), 10);
-  }
-  
-  // Check for number of bedrooms
-  const bedroomMatch = lowerQuery.match(/\b(\d+)\s*(?:bed|bedroom|br)\b/i) ||
-                      lowerQuery.match(/\b(one|two|three|four|five|six)\s*(?:bed|bedroom|br)\b/i);
-  
-  if (bedroomMatch && bedroomMatch[1]) {
-    const bedroomValue = bedroomMatch[1].toLowerCase();
-    const bedroomMap = { 'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5, 'six': 6 };
-    
-    searchParams.bedrooms = bedroomMap[bedroomValue] || parseInt(bedroomValue, 10);
-  }
-  
-  // Check for pool
-  if (/\bpool\b/i.test(lowerQuery) || /\bswimming\b/i.test(lowerQuery)) {
-    searchParams.hasPool = true;
-  }
-  
-  // Check for keywords to use for search
-  const keywords = [];
-  const keywordPatterns = [
-    /\bmodern\b/i, /\bluxury\b/i, /\bbeach\b/i, /\bview\b/i, 
-    /\bnew\b/i, /\brenovated\b/i, /\bfurnished\b/i, /\bgarden\b/i
-  ];
-  
-  keywordPatterns.forEach(pattern => {
-    const match = lowerQuery.match(pattern);
-    if (match) {
-      keywords.push(match[0]);
-    }
-  });
-  
-  if (keywords.length > 0) {
-    searchParams.keywords = keywords;
-  }
-  
-  // Add property style if mentioned
-  const stylePatterns = [
-    { regex: /\bmodern\b/i, style: 'modern' },
-    { regex: /\bcontemporary\b/i, style: 'contemporary' },
-    { regex: /\btraditional\b/i, style: 'traditional' },
-    { regex: /\brustic\b/i, style: 'rustic' },
-    { regex: /\bminimalist\b/i, style: 'minimalist' },
-    { regex: /\bindust(?:rial)?\b/i, style: 'industrial' },
-    { regex: /\bcountry\b/i, style: 'country' }
-  ];
-  
-  for (const pattern of stylePatterns) {
-    if (pattern.regex.test(lowerQuery)) {
-      searchParams.style = pattern.style;
-      break;
-    }
-  }
-  
-  // Only return searchParams if we have some meaningful parameters
-  const hasSearchParams = Object.keys(searchParams).length > 0;
-  return hasSearchParams ? searchParams : null;
 }

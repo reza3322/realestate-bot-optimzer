@@ -32,14 +32,16 @@ const QACreator = ({ userId, onCreateComplete }: QACreatorProps) => {
 
     try {
       const { error } = await supabase
-        .from("chatbot_training_data")
+        .from("chatbot_training_files")
         .insert({
           user_id: userId,
           question: question,
           answer: answer,
+          source_file: "Q&A Pair",
+          extracted_text: answer, // Also store in extracted_text for compatibility
           category: category,
           priority: priority,
-          content_type: "manual"
+          content_type: "qa_pair"
         });
 
       if (error) throw error;
