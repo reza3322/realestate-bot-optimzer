@@ -43,7 +43,8 @@ serve(async (req) => {
     console.log(`Query: "${message}"`);
     console.log(`Training data: ${JSON.stringify({
       qaCount: trainingResults.qaMatches?.length || 0,
-      fileCount: trainingResults.fileContent?.length || 0
+      fileCount: trainingResults.fileContent?.length || 0,
+      propertyCount: propertyRecommendations?.length || 0
     })}`);
     
     if (!message) {
@@ -75,15 +76,45 @@ serve(async (req) => {
       });
     }
     
-    // Truncate if too long
-    if (trainingContext.length > MAX_TRAINING_CONTEXT_LENGTH) {
-      trainingContext = trainingContext.substring(0, MAX_TRAINING_CONTEXT_LENGTH) + "...";
+    // Create property information context if we have recommendations
+    let propertyContext = "";
+    if (propertyRecommendations.length > 0) {
+      propertyContext += "Here are properties from our database that may be relevant to the user's query:\n\n";
+      
+      propertyRecommendations.forEach((property, index) => {
+        propertyContext += `Property ${index + 1}: ${property.title}\n`;
+        propertyContext += `Price: ${property.price}\n`;
+        propertyContext += `Location: ${property.location || 'Not specified'}\n`;
+        
+        if (property.bedrooms || property.bathroomCount) {
+          propertyContext += `Details: `;
+          if (property.bedroomCount) propertyContext += `${property.bedroomCount} bedrooms, `;
+          if (property.bathroomCount) propertyContext += `${property.bathroomCount} bathrooms, `;
+          propertyContext += '\n';
+        }
+        
+        if (property.features && property.features.length > 0) {
+          propertyContext += `Features: ${property.features.join(', ')}\n`;
+        }
+        
+        if (property.hasPool) {
+          propertyContext += `Swimming pool: Yes\n`;
+        }
+        
+        propertyContext += `URL: ${property.url}\n\n`;
+      });
     }
     
-    // Create property information if we have recommendations
-    const propertyInfo = propertyRecommendations.length > 0 
-      ? `I have ${propertyRecommendations.length} property listings that match the user's criteria. I should mention these properties only if relevant to their query.`
-      : "I don't have any specific property listings matching the user's criteria in my database.";
+    // Combine contexts
+    let combinedContext = trainingContext;
+    if (propertyContext) {
+      combinedContext += "\n" + propertyContext;
+    }
+    
+    // Truncate if too long
+    if (combinedContext.length > MAX_TRAINING_CONTEXT_LENGTH) {
+      combinedContext = combinedContext.substring(0, MAX_TRAINING_CONTEXT_LENGTH) + "...";
+    }
     
     // Previous messages for context
     const formattedPreviousMessages = previousMessages.map(msg => ({
@@ -92,25 +123,31 @@ serve(async (req) => {
     }));
     
     // Create appropriate system message
-    const systemMessage = `You are a friendly and professional real estate assistant representing a real estate agency.
+    let systemPrompt = `You are a friendly and professional real estate assistant representing a real estate agency.`;
+    
+    if (combinedContext) {
+      systemPrompt += `\n\nIMPORTANT - Use the following information from the user's database to answer their questions:
 
-${propertyInfo}
+${combinedContext}
 
-${trainingContext ? "IMPORTANT - Use the following knowledge base information to answer the user's questions when relevant:" : ""}
-
-${trainingContext}
-
-Guidelines:
+When responding:
+1. Prioritize using information from the user's database (training files and property listings).
+2. If the database contains relevant property information, highlight those details in your response.
+3. If the database doesn't contain information needed to answer the question completely, use your general knowledge but clearly indicate what information is not in the database.
+4. Always respond in a helpful, conversational tone as if you're a knowledgeable real estate agent.`;
+    } else {
+      systemPrompt += `\n\nI don't have any specific property listings or training data in my database for this query. I should respond using my general knowledge about real estate.`;
+    }
+    
+    systemPrompt += `\n\nGuidelines:
 - Always be helpful, friendly, and professional.
-- If the knowledge base information is relevant to the query, prioritize using it.
-- If the user asks about something not covered in the knowledge base or about properties, politely acknowledge the limits of your information and offer to help in other ways.
-- Avoid making up information that's not in the provided knowledge base.
 - Keep responses concise (3-5 sentences) and engaging.
-- If the user asks about contact options, encourage them to share their email or phone.`;
+- If the user asks about contact options, encourage them to share their email or phone.
+- Follow up with relevant questions to better understand their needs.`;
 
     // Create messages array for OpenAI
     const messages = [
-      { role: "system", content: systemMessage }
+      { role: "system", content: systemPrompt }
     ];
     
     // Add previous messages for context
@@ -134,13 +171,20 @@ Guidelines:
     // Extract potential lead information from user's message
     const extractedLeadInfo = extractLeadInfo(message, visitorInfo);
     
+    // Determine source based on what information was used
+    const source = trainingResults.qaMatches?.length > 0 || trainingResults.fileContent?.length > 0
+      ? 'training'
+      : propertyRecommendations.length > 0
+        ? 'properties'
+        : 'ai';
+    
     // Return the response with source information
     return new Response(
       JSON.stringify({
         response,
         leadInfo: extractedLeadInfo,
         conversationId,
-        source: trainingContext ? 'training' : 'ai'
+        source
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
