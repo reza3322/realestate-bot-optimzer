@@ -37,6 +37,17 @@ export const testChatbotResponse = async (
     const shouldSearchTraining = intentData.should_search_training;
     const shouldSearchProperties = intentData.should_search_properties;
     
+    // If the intent is agency_info or faq, we should ALWAYS search training data
+    const isAgencyOrFaqIntent = intentData.intent === 'agency_info' || 
+                                intentData.intent === 'faq' || 
+                                intentData.intent === 'general_query';
+                                
+    // Force training search for agency/faq questions regardless of intent analysis result
+    const finalShouldSearchTraining = shouldSearchTraining || isAgencyOrFaqIntent;
+    
+    console.log(`Search strategy - Training: ${finalShouldSearchTraining}, Properties: ${shouldSearchProperties}`);
+    console.log(`Intent: ${intentData.intent}, Is Agency/FAQ: ${isAgencyOrFaqIntent}`);
+    
     // Initialize result containers
     const trainingResults = {
       qaMatches: [],
@@ -45,41 +56,45 @@ export const testChatbotResponse = async (
     let propertyRecommendations: PropertyRecommendation[] = [];
     let responseSource = 'ai'; // Default source
     
-    // Step 3: Fetch training data if needed
-    if (shouldSearchTraining) {
-      console.log('Searching training data based on intent analysis...');
-      const searchResponse = await fetch('https://ckgaqkbsnrvccctqxsqv.supabase.co/functions/v1/search-training-data', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: message,
-          userId: userId,
-          conversationId: conversationId,
-          includeQA: true,
-          includeFiles: true,  
-          includeProperties: false, // Don't search properties here if we're focused on training data
-          previousMessages: previousMessages
-        })
-      });
+    // Step 3: ALWAYS fetch training data first for any intent - this is critical for agency info
+    console.log('Searching training data regardless of intent...');
+    const searchResponse = await fetch('https://ckgaqkbsnrvccctqxsqv.supabase.co/functions/v1/search-training-data', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query: message,
+        userId: userId,
+        conversationId: conversationId,
+        includeQA: true,
+        includeFiles: true,  
+        includeProperties: false, // Don't search properties here - we'll do that separately if needed
+        previousMessages: previousMessages
+      })
+    });
 
-      if (!searchResponse.ok) {
-        throw new Error(`Search API returned ${searchResponse.status}`);
-      }
+    if (!searchResponse.ok) {
+      throw new Error(`Search API returned ${searchResponse.status}`);
+    }
 
-      const searchResults = await searchResponse.json();
-      console.log('Training search results:', searchResults);
-      
-      // Update training results
-      trainingResults.qaMatches = searchResults.qa_matches || [];
-      trainingResults.fileContent = searchResults.file_content || [];
-      
-      // Check if we found good training matches
-      if (trainingResults.qaMatches.length > 0 || trainingResults.fileContent.length > 0) {
-        responseSource = 'training';
-      }
+    const searchResults = await searchResponse.json();
+    console.log('Training search results:', searchResults);
+    
+    // Update training results
+    trainingResults.qaMatches = searchResults.qa_matches || [];
+    trainingResults.fileContent = searchResults.file_content || [];
+    
+    // Check if we found good training matches
+    const hasGoodTrainingMatches = (trainingResults.qaMatches.length > 0 && 
+                                    trainingResults.qaMatches[0].similarity > 0.3) || 
+                                   (trainingResults.fileContent.length > 0 && 
+                                    trainingResults.fileContent[0].similarity > 0.3);
+    
+    if (hasGoodTrainingMatches) {
+      console.log('Found high-quality training matches, setting source to training');
+      responseSource = 'training';
     }
     
-    // Step 4: Fetch property data if needed and if we didn't find good training matches
+    // Step 4: Fetch property data if needed and if we're not dealing with a clear agency/FAQ question
     if (shouldSearchProperties && (responseSource !== 'training' || intentData.intent === 'property_search')) {
       console.log('Searching property data based on intent analysis...');
       const propertyResponse = await fetch('https://ckgaqkbsnrvccctqxsqv.supabase.co/functions/v1/search-training-data', {
@@ -128,9 +143,10 @@ export const testChatbotResponse = async (
         visitorInfo: visitorInfo,
         conversationId: conversationId,
         previousMessages: previousMessages,
-        trainingResults: trainingResults,  // Pass training results to the AI
+        trainingResults: trainingResults,  // Always pass training results to the AI
         propertyRecommendations: propertyRecommendations,
-        intentClassification: intentData.intent // Pass the intent classification
+        intentClassification: intentData.intent, // Pass the intent classification
+        responseSource: responseSource // Pass the determined source to help OpenAI prioritize
       })
     });
 

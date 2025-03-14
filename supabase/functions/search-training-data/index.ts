@@ -49,45 +49,51 @@ serve(async (req) => {
       property_listings: []
     };
     
-    // Search Q&A training data if requested
-    if (includeQA) {
-      const { data: qaData, error: qaError } = await supabase.rpc(
-        'search_training_data',
+    // Search all training data regardless of content_type
+    if (includeQA || includeFiles) {
+      // Use the search_all_training_content function which now combines all content types
+      const { data: trainingData, error: trainingError } = await supabase.rpc(
+        'search_all_training_content',
         { user_id_param: userId, query_text: query }
       );
       
-      if (qaError) {
-        console.error('Error searching training data:', qaError);
-      } else if (qaData && qaData.length > 0) {
-        console.log(`Found ${qaData.length} QA matches`);
-        result.qa_matches = qaData;
-      }
-    }
-    
-    // Search file content if requested
-    if (includeFiles) {
-      // First, try a direct query from the single chatbot_training_files table
-      const { data: fileData, error: fileError } = await supabase
-        .from('chatbot_training_files')
-        .select('id, source_file, extracted_text, category, priority')
-        .eq('user_id', userId)
-        .eq('content_type', 'file')
-        .order('priority', { ascending: false })
-        .limit(5);
+      if (trainingError) {
+        console.error('Error searching all training content:', trainingError);
+      } else if (trainingData && trainingData.length > 0) {
+        console.log(`Found ${trainingData.length} training content matches`);
         
-      if (fileError) {
-        console.error('Error fetching file content:', fileError);
-      } else if (fileData && fileData.length > 0) {
-        console.log(`Found ${fileData.length} file content matches`);
+        // Process and separate training content into qa_matches and file_content
+        trainingData.forEach(item => {
+          // Check content_type to determine whether it's a QA pair or file content
+          if (item.content_type === 'qa' && includeQA) {
+            // Extract question and answer from the content if it's in Q&A format
+            const qaMatch = extractQAPair(item.content);
+            if (qaMatch) {
+              result.qa_matches.push({
+                id: item.content_id,
+                question: qaMatch.question,
+                answer: qaMatch.answer,
+                category: item.category,
+                priority: item.priority,
+                similarity: item.similarity
+              });
+            }
+          } else if (includeFiles) {
+            // Treat as file content for all other content types
+            result.file_content.push({
+              id: item.content_id,
+              source: item.content_type,
+              category: item.category,
+              text: item.content,
+              priority: item.priority,
+              similarity: item.similarity
+            });
+          }
+        });
         
-        // Process and add file content matches
-        result.file_content = fileData.map(file => ({
-          id: file.id,
-          source: file.source_file,
-          category: file.category,
-          text: file.extracted_text,
-          priority: file.priority
-        }));
+        console.log(`Processed ${result.qa_matches.length} QA matches and ${result.file_content.length} file content items`);
+      } else {
+        console.log('No training content matches found');
       }
     }
     
@@ -150,6 +156,21 @@ serve(async (req) => {
     );
   }
 });
+
+// Helper function to extract question and answer from content
+function extractQAPair(content) {
+  // Check if content is in Q&A format
+  if (content.startsWith('Q:') && content.includes('\nA:')) {
+    const parts = content.split('\nA:');
+    if (parts.length >= 2) {
+      return {
+        question: parts[0].replace('Q:', '').trim(),
+        answer: parts[1].trim()
+      };
+    }
+  }
+  return null;
+}
 
 // Helper function to extract meaningful keywords from a query
 function extractKeywords(query) {
