@@ -1,11 +1,10 @@
 
-import { useState, useEffect } from 'react';
-import { User } from 'lucide-react';
-import { BotIcon } from './BotIcon';
-import { cn } from '@/lib/utils';
+import React from 'react';
+import { User, Bot } from 'lucide-react';
+import BotIcon from './BotIcon';
 import { Message, ChatStylesType } from './types';
 
-export interface ChatMessageProps {
+interface ChatMessageProps {
   message: Message;
   index: number;
   styles: ChatStylesType;
@@ -14,55 +13,37 @@ export interface ChatMessageProps {
   customUserBubbleStyle?: React.CSSProperties;
 }
 
-const ChatMessage = ({ 
+const ChatMessage: React.FC<ChatMessageProps> = ({ 
   message, 
   index, 
   styles,
   botIconName = 'bot',
   customBotIconStyle,
   customUserBubbleStyle
-}: ChatMessageProps) => {
-  const [visible, setVisible] = useState(false);
-  
-  // Fade in animation
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setVisible(true);
-    }, 100);
-    
-    return () => clearTimeout(timer);
-  }, []);
+}) => {
+  const isUser = message.role === 'user';
   
   return (
-    <div
-      className={cn(
-        "flex items-start gap-3 transition-opacity duration-300",
-        visible ? "opacity-100" : "opacity-0"
-      )}
+    <div 
+      className={`flex items-start gap-3 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}
+      data-message-index={index}
     >
-      {message.role === 'bot' && (
-        <div 
-          className={cn(styles.botIcon)}
-          style={customBotIconStyle}
-        >
+      {isUser ? (
+        <div className={`flex-shrink-0 ${styles.userIcon}`}>
+          <User className="h-5 w-5" />
+        </div>
+      ) : (
+        <div className={`flex-shrink-0 ${styles.botIcon}`} style={customBotIconStyle}>
           <BotIcon iconName={botIconName} className="h-5 w-5" />
         </div>
       )}
       
       <div 
-        className={cn(
-          message.role === 'user' ? styles.userBubble : styles.botBubble
-        )}
-        style={message.role === 'user' ? customUserBubbleStyle : {}}
+        className={`${isUser ? styles.userBubble : styles.botBubble} max-w-[75%] ${styles.font}`}
+        style={isUser ? customUserBubbleStyle : undefined}
       >
         {message.content}
       </div>
-      
-      {message.role === 'user' && (
-        <div className={cn(styles.userIcon)}>
-          <User className="h-5 w-5" />
-        </div>
-      )}
     </div>
   );
 };

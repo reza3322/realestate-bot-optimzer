@@ -1,3 +1,4 @@
+
 import { ChatTheme } from './types';
 
 // Get base theme styles

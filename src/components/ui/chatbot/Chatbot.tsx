@@ -2,7 +2,17 @@
 import { useState, useEffect, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { Paperclip, Send } from 'lucide-react';
-import { ChatMessage as ChatMessageType, Message, VisitorInfo, PropertyRecommendation, ChatTheme, ChatStylesType, LanguageCode } from './types';
+import { 
+  ChatMessage as ChatMessageType, 
+  Message, 
+  VisitorInfo, 
+  PropertyRecommendation, 
+  ChatTheme, 
+  ChatStylesType, 
+  LanguageCode,
+  ChatbotProps,
+  ChatbotResponse
+} from './types';
 import ChatHeader from './ChatHeader';
 import ChatInput from './ChatInput';
 import TypingIndicator from './TypingIndicator';
@@ -123,7 +133,7 @@ const Chatbot = ({
     console.log(`Chatbot mode: ${isLandingPageMode ? 'Landing Page Demo' : 'User Chatbot'}`);
     
     try {
-      const result = await testChatbotResponse(message, userId);
+      const result = await testChatbotResponse(message, userId) as ChatbotResponse;
       
       if (result.error) {
         console.error('Chatbot error:', result.error);
@@ -131,6 +141,19 @@ const Chatbot = ({
       } else {
         // Add the response to messages
         setMessages(prev => [...prev, { role: 'bot', content: result.content }]);
+        
+        // Handle additional response data if available
+        if (result.source) {
+          setResponseSource(result.source);
+        }
+        
+        if (result.conversationId) {
+          setConversationId(result.conversationId);
+        }
+        
+        if (result.propertyRecommendations && result.propertyRecommendations.length > 0) {
+          setPropertyRecommendations(result.propertyRecommendations);
+        }
       }
     } catch (err) {
       console.error('Chatbot exception:', err);

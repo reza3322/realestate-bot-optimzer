@@ -112,3 +112,13 @@ export interface ChatbotSettingsProps {
   isPremiumFeature?: (requiredPlan: string) => boolean;
   onSubmitSuccess?: () => void;
 }
+
+// Define the response structure for the testChatbotResponse function
+export interface ChatbotResponse {
+  content: string;
+  error?: string;
+  source?: 'ai' | 'training';
+  conversationId?: string;
+  leadInfo?: any;
+  propertyRecommendations?: PropertyRecommendation[];
+}
