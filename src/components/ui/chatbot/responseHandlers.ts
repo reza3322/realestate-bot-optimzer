@@ -1,4 +1,3 @@
-
 import { Message, PropertyRecommendation, VisitorInfo, ChatbotResponse } from './types';
 
 /**
@@ -12,25 +11,59 @@ export const testChatbotResponse = async (
   previousMessages: Message[] = []
 ): Promise<ChatbotResponse> => {
   console.log(`Processing chatbot response for user: ${userId}`);
+  console.log(`Current message: "${message}"`);
+  console.log(`Previous messages: ${previousMessages.length}`);
   
   try {
     // Step 1: First, analyze the intent using OpenAI to determine search strategy
-    const intentAnalysis = await fetch('https://ckgaqkbsnrvccctqxsqv.supabase.co/functions/v1/analyze-intent', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        message: message,
-        userId: userId,
-        conversationId: conversationId,
-        previousMessages: previousMessages
-      })
-    });
+    // Check for obvious agency-related questions with simple pattern matching first
+    const lowerMessage = message.toLowerCase();
+    const isObviousAgencyQuestion = 
+      lowerMessage.includes('agency') || 
+      lowerMessage.includes('company') || 
+      lowerMessage.includes('firm') ||
+      lowerMessage.includes('business') ||
+      lowerMessage.includes('office') ||
+      lowerMessage.includes('about you') ||
+      lowerMessage.includes('your name') ||
+      lowerMessage.includes('who are you') ||
+      lowerMessage.includes('your website') ||
+      lowerMessage.includes('your location') ||
+      lowerMessage.includes('your address') ||
+      lowerMessage.includes('contact information') ||
+      lowerMessage.includes('how can i contact');
+    
+    // If it's an obvious agency question, set intent directly
+    let intentData;
+    
+    if (isObviousAgencyQuestion) {
+      console.log('🏢 DETECTED AGENCY QUESTION via direct keyword matching:', message);
+      intentData = {
+        intent: 'agency_info',
+        should_search_training: true,
+        should_search_properties: false,
+        confidence: 0.95
+      };
+    } else {
+      // Otherwise, use the intent classification API
+      const intentAnalysis = await fetch('https://ckgaqkbsnrvccctqxsqv.supabase.co/functions/v1/analyze-intent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: message,
+          userId: userId,
+          conversationId: conversationId,
+          previousMessages: previousMessages
+        })
+      });
 
-    if (!intentAnalysis.ok) {
-      throw new Error(`Intent analysis API returned ${intentAnalysis.status}`);
+      if (!intentAnalysis.ok) {
+        throw new Error(`Intent analysis API returned ${intentAnalysis.status}`);
+      }
+
+      intentData = await intentAnalysis.json();
     }
-
-    const intentData = await intentAnalysis.json();
+    
     console.log('Intent analysis:', intentData);
     
     // Step 2: Determine search strategy based on intent
@@ -77,20 +110,54 @@ export const testChatbotResponse = async (
     }
 
     const searchResults = await searchResponse.json();
-    console.log('Training search results:', searchResults);
+    
+    // IMPORTANT: Log detailed training results to debug agency-related issues
+    console.log('🔍 Training search results:', JSON.stringify(searchResults, null, 2));
+    
+    if (isAgencyOrFaqIntent) {
+      console.log('🏢 Agency-related question detected, QA matches:', 
+                 searchResults.qa_matches?.length || 0, 
+                 'File content:', 
+                 searchResults.file_content?.length || 0);
+      
+      // Log the actual content for debugging
+      if (searchResults.qa_matches?.length > 0) {
+        searchResults.qa_matches.forEach((match: any, index: number) => {
+          console.log(`QA Match ${index + 1} (similarity: ${match.similarity.toFixed(2)}):`, 
+                     `Q: ${match.question}`, 
+                     `A: ${match.answer}`);
+        });
+      }
+      
+      if (searchResults.file_content?.length > 0) {
+        searchResults.file_content.forEach((content: any, index: number) => {
+          console.log(`File Content ${index + 1} (similarity: ${content.similarity.toFixed(2)}):`, 
+                     content.text.substring(0, 100) + '...');
+        });
+      }
+    }
     
     // Update training results
     trainingResults.qaMatches = searchResults.qa_matches || [];
     trainingResults.fileContent = searchResults.file_content || [];
     
     // Check if we found good training matches
+    // LOWERED threshold to capture more potential matches
     const hasGoodTrainingMatches = (trainingResults.qaMatches.length > 0 && 
-                                    trainingResults.qaMatches[0].similarity > 0.3) || 
+                                    trainingResults.qaMatches[0].similarity > 0.2) || 
                                    (trainingResults.fileContent.length > 0 && 
-                                    trainingResults.fileContent[0].similarity > 0.3);
+                                    trainingResults.fileContent[0].similarity > 0.2);
     
-    if (hasGoodTrainingMatches) {
-      console.log('Found high-quality training matches, setting source to training');
+    // For agency questions, force using training data even with lower similarities
+    const forceTrainingDataForAgency = isAgencyOrFaqIntent && 
+                                      (trainingResults.qaMatches.length > 0 || 
+                                       trainingResults.fileContent.length > 0);
+    
+    if (hasGoodTrainingMatches || forceTrainingDataForAgency) {
+      console.log('Found training matches, setting source to training');
+      if (forceTrainingDataForAgency) {
+        console.log('⭐️ FORCING training data source for agency question');
+      }
       responseSource = 'training';
     }
     
@@ -133,7 +200,28 @@ export const testChatbotResponse = async (
     
     console.log(`Found training data: ${hasTrainingData}, property data: ${hasPropertyData}, intent: ${intentData.intent}`);
     
-    // Step 6: Send the message, intent, and any found data to the OpenAI API 
+    // Step 6: Prepare more detailed context from training data to help OpenAI
+    let trainingContext = '';
+    if (hasTrainingData) {
+      if (trainingResults.qaMatches.length > 0) {
+        trainingContext += 'Relevant agency information from our knowledge base:\n\n';
+        trainingResults.qaMatches.forEach((match: any, index: number) => {
+          trainingContext += `Q: ${match.question}\nA: ${match.answer}\n\n`;
+        });
+      }
+      
+      if (trainingResults.fileContent.length > 0) {
+        trainingContext += 'Additional information from our documents:\n\n';
+        trainingResults.fileContent.forEach((content: any) => {
+          // Extract a relevant snippet rather than the entire content
+          trainingContext += `${content.text.substring(0, 500)}...\n\n`;
+        });
+      }
+      
+      console.log('📚 Prepared training context for OpenAI:', trainingContext.substring(0, 200) + '...');
+    }
+    
+    // Step 7: Send the message, intent, and any found data to the OpenAI API 
     const aiResponse = await fetch('https://ckgaqkbsnrvccctqxsqv.supabase.co/functions/v1/ai-chatbot', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -146,7 +234,9 @@ export const testChatbotResponse = async (
         trainingResults: trainingResults,  // Always pass training results to the AI
         propertyRecommendations: propertyRecommendations,
         intentClassification: intentData.intent, // Pass the intent classification
-        responseSource: responseSource // Pass the determined source to help OpenAI prioritize
+        responseSource: responseSource, // Pass the determined source to help OpenAI prioritize
+        trainingContext: trainingContext, // Pass the formatted training context
+        isAgencyQuestion: isAgencyOrFaqIntent // Explicitly flag agency questions
       })
     });
 

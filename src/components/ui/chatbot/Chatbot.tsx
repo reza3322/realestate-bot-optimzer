@@ -1,3 +1,4 @@
+
 import { useState, useRef, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import ChatHeader from './ChatHeader';
@@ -66,6 +67,30 @@ const Chatbot = ({
 
   const chatStyles = getChatStyles(theme, variation, primaryColor);
   
+  // Restore conversation from localStorage on initial load
+  useEffect(() => {
+    const savedConversation = localStorage.getItem(`chatConversation_${userId}`);
+    const savedConversationId = localStorage.getItem(`chatConversationId_${userId}`);
+    
+    if (savedConversation) {
+      try {
+        const parsedMessages = JSON.parse(savedConversation) as Message[];
+        // Only restore if there are more messages than just the welcome
+        if (parsedMessages.length > 1) {
+          console.log(`Restoring previous conversation with ${parsedMessages.length} messages`);
+          setMessages(parsedMessages);
+        }
+      } catch (e) {
+        console.error('Error restoring conversation:', e);
+      }
+    }
+    
+    if (savedConversationId) {
+      setConversationId(savedConversationId);
+      console.log(`Restored conversation ID: ${savedConversationId}`);
+    }
+  }, [userId]);
+  
   useEffect(() => {
     if (messages.length === 1 && messages[0].role === 'bot') {
       setMessages([{ role: 'bot', content: defaultWelcomeMessage }]);
@@ -89,6 +114,19 @@ const Chatbot = ({
       }));
     }
   }, []);
+  
+  // Save conversation to localStorage whenever it changes
+  useEffect(() => {
+    // Don't save if it's just the welcome message
+    if (messages.length > 1) {
+      localStorage.setItem(`chatConversation_${userId}`, JSON.stringify(messages));
+      console.log(`Saved conversation with ${messages.length} messages`);
+    }
+    
+    if (conversationId) {
+      localStorage.setItem(`chatConversationId_${userId}`, conversationId);
+    }
+  }, [messages, conversationId, userId]);
 
   const handleSendMessage = async (message: string) => {
     setMessages(prev => [...prev, { role: 'user', content: message }]);
@@ -98,12 +136,27 @@ const Chatbot = ({
     setResponseSource(null);
     
     console.log(`Sending message. User ID: ${userId}, Conversation ID: ${conversationId || 'New conversation'}`);
+    console.log(`Previous messages being sent: ${messages.length}`);
     
     try {
       // Get all previous messages except the initial welcome
       const previousMsgs = messages.filter(msg => 
         !(msg.role === 'bot' && msg.content === defaultWelcomeMessage) 
       );
+      
+      // Log if we're dealing with an agency question for debugging
+      const lowerMessage = message.toLowerCase();
+      const isAgencyQuestion = 
+        lowerMessage.includes('agency') || 
+        lowerMessage.includes('company') || 
+        lowerMessage.includes('about you') ||
+        lowerMessage.includes('your name') ||
+        lowerMessage.includes('who are you');
+      
+      if (isAgencyQuestion) {
+        console.log('🏢 SENDING AGENCY QUESTION:', message);
+        console.log('WITH CONVERSATION HISTORY:', JSON.stringify(previousMsgs, null, 2));
+      }
       
       const result = await testChatbotResponse(
         message, 
@@ -140,6 +193,7 @@ const Chatbot = ({
         // Set response source
         if (result.source) {
           setResponseSource(result.source as 'ai' | 'training');
+          console.log(`Response source: ${result.source}`);
         } else {
           setResponseSource('ai');
         }

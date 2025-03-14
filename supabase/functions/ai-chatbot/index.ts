@@ -1,19 +1,8 @@
 
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.0";
 import { Configuration, OpenAIApi } from "https://esm.sh/openai@3.3.0";
 
-// Constants
-const OPENAI_MODEL = "gpt-4o-mini";
-const MAX_TRAINING_CONTEXT_LENGTH = 8000;
-
-// Initialize Supabase client
-const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
-const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
-// Initialize OpenAI
 const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
 const openai = openAIApiKey ? new OpenAIApi(new Configuration({ apiKey: openAIApiKey })) : null;
 
@@ -32,21 +21,15 @@ serve(async (req) => {
     const { 
       message, 
       userId, 
-      visitorInfo = {}, 
-      conversationId, 
+      conversationId,
       previousMessages = [],
       trainingResults = {},
       propertyRecommendations = [],
-      intentClassification = 'general_query'
+      intentClassification,
+      responseSource = 'ai',
+      trainingContext = '',
+      isAgencyQuestion = false
     } = await req.json();
-    
-    console.log(`Processing request for user ${userId}, intent: ${intentClassification}`);
-    console.log(`Query: "${message}"`);
-    console.log(`Training data: ${JSON.stringify({
-      qaCount: trainingResults.qaMatches?.length || 0,
-      fileCount: trainingResults.fileContent?.length || 0,
-      propertyCount: propertyRecommendations?.length || 0
-    })}`);
     
     if (!message) {
       return new Response(
@@ -54,192 +37,117 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
-
-    // Format training content for the AI prompt
-    let trainingContext = "";
     
-    // Add Q&A pairs from training data
-    if (trainingResults.qaMatches && trainingResults.qaMatches.length > 0) {
-      trainingContext += "Here are some knowledge base Q&A pairs that may be relevant to the user's question:\n\n";
-      
-      trainingResults.qaMatches.forEach((match, index) => {
-        trainingContext += `Q: ${match.question}\nA: ${match.answer}\n\n`;
-      });
+    console.log(`AI chatbot processing - User ID: ${userId}, Intent: ${intentClassification}`);
+    console.log(`Is agency question: ${isAgencyQuestion}, Response source: ${responseSource}`);
+    
+    if (isAgencyQuestion) {
+      console.log('🏢 AGENCY QUESTION DETECTED IN AI FUNCTION');
     }
     
-    // Add content from uploaded files
-    if (trainingResults.fileContent && trainingResults.fileContent.length > 0) {
-      trainingContext += "Here is relevant information from our knowledge base:\n\n";
-      
-      trainingResults.fileContent.forEach((content, index) => {
-        trainingContext += `Source: ${content.source || 'Uploaded file'}\n`;
-        trainingContext += `Content: ${content.text.substring(0, 1000)}\n\n`;
-      });
-    }
-    
-    // Create property information context if we have recommendations
-    let propertyContext = "";
-    if (propertyRecommendations.length > 0) {
-      propertyContext += "Here are properties from our database that may be relevant to the user's query:\n\n";
-      
-      propertyRecommendations.forEach((property, index) => {
-        propertyContext += `Property ${index + 1}: ${property.title}\n`;
-        propertyContext += `Price: ${property.price}\n`;
-        propertyContext += `Location: ${property.location || 'Not specified'}\n`;
-        
-        if (property.bedrooms || property.bathroomCount) {
-          propertyContext += `Details: `;
-          if (property.bedroomCount) propertyContext += `${property.bedroomCount} bedrooms, `;
-          if (property.bathroomCount) propertyContext += `${property.bathroomCount} bathrooms, `;
-          propertyContext += '\n';
-        }
-        
-        if (property.features && property.features.length > 0) {
-          propertyContext += `Features: ${property.features.join(', ')}\n`;
-        }
-        
-        if (property.hasPool) {
-          propertyContext += `Swimming pool: Yes\n`;
-        }
-        
-        propertyContext += `URL: ${property.url}\n\n`;
-      });
-    }
-    
-    // Combine contexts
-    let combinedContext = trainingContext;
-    if (propertyContext) {
-      combinedContext += "\n" + propertyContext;
-    }
-    
-    // Truncate if too long
-    if (combinedContext.length > MAX_TRAINING_CONTEXT_LENGTH) {
-      combinedContext = combinedContext.substring(0, MAX_TRAINING_CONTEXT_LENGTH) + "...";
-    }
-    
-    // Previous messages for context
+    // Format previous messages for OpenAI
     const formattedPreviousMessages = previousMessages.map(msg => ({
-      role: msg.role === 'bot' ? 'assistant' : 'user',
+      role: msg.role === 'user' ? 'user' : 'assistant',
       content: msg.content
     }));
     
-    // Create appropriate system message based on intent
-    let systemPrompt = `You are a friendly and professional real estate assistant representing a real estate agency.`;
+    // Create a system prompt that includes agency information and instructions
+    let systemContent = `You are an AI assistant for a real estate agency. Respond in a helpful, friendly manner.`;
     
-    // Adjust system prompt based on intent
-    if (intentClassification === 'faq') {
-      systemPrompt += ` You specialize in answering questions about real estate services, policies, and company-specific information.`;
-    } else if (intentClassification === 'property_search') {
-      systemPrompt += ` You specialize in helping users find properties that match their needs and preferences.`;
+    // Check if we're dealing with an agency question - if so, prioritize training data
+    if (isAgencyQuestion) {
+      console.log('🏢 Handling agency question, prioritizing training data');
+      
+      // Add specific agency instructions for this type of question
+      systemContent += `\n\nThis is a question about our agency. ONLY use the provided training data to answer this question. DO NOT make up information about the agency. If no training data is available, politely explain that you don't have that specific information.`;
+      
+      // Include any training context at the top of the prompt
+      if (trainingContext) {
+        systemContent += `\n\nHere is information about our agency:\n${trainingContext}`;
+      }
+    }
+    else {
+      // For non-agency questions, add general instructions
+      systemContent += `\n\nFollow these guidelines:
+- Always be accurate and specific.
+- If you don't know something, say so rather than making up information.
+- Keep responses concise and easy to understand.
+- Be friendly and conversational in tone.`;
+      
+      // Include training context if available
+      if (trainingContext) {
+        systemContent += `\n\nHere is relevant information from our knowledge base that may help with your response:\n${trainingContext}`;
+      }
     }
     
-    if (combinedContext) {
-      systemPrompt += `\n\nIMPORTANT - Use the following information from the user's database to answer their questions:
-
-${combinedContext}
-
-When responding:
-1. Prioritize using information from the user's database (training files and property listings).
-2. If the database contains relevant property information, highlight those details in your response.
-3. If the database doesn't contain information needed to answer the question completely, use your general knowledge but clearly indicate what information is not in the database.
-4. Always respond in a helpful, conversational tone as if you're a knowledgeable real estate agent.`;
-    } else {
-      systemPrompt += `\n\nI don't have any specific property listings or training data in my database for this query. I should respond using my general knowledge about real estate.`;
+    // Add property information if available
+    if (propertyRecommendations && propertyRecommendations.length > 0) {
+      systemContent += `\n\nThe following properties may be relevant to the user's query:`;
+      propertyRecommendations.forEach((property, index) => {
+        systemContent += `\nProperty ${index + 1}: ${property.title}, Price: ${property.price}, ${property.bedroomCount || 0} bedrooms, Location: ${property.location || 'Not specified'}`;
+        if (property.features && property.features.length > 0) {
+          systemContent += `, Features: ${property.features.join(', ')}`;
+        }
+      });
     }
     
-    systemPrompt += `\n\nGuidelines:
-- Always be helpful, friendly, and professional.
-- Keep responses concise (3-5 sentences) and engaging.
-- If the user asks about contact options, encourage them to share their email or phone.
-- Follow up with relevant questions to better understand their needs.`;
-
-    // Create messages array for OpenAI
+    // Log the system content for debugging
+    console.log(`System content preview: ${systemContent.substring(0, 200)}...`);
+    
+    // Create messages array starting with the system message
     const messages = [
-      { role: "system", content: systemPrompt }
+      { role: 'system', content: systemContent }
     ];
     
-    // Add previous messages for context
+    // Add conversation history for context
     if (formattedPreviousMessages.length > 0) {
       messages.push(...formattedPreviousMessages);
     }
     
-    // Add current message
-    messages.push({ role: "user", content: message });
+    // Add the current user message
+    messages.push({ role: 'user', content: message });
     
-    // Call OpenAI API with our enhanced prompt
-    const completion = await openai.createChatCompletion({
-      model: OPENAI_MODEL,
-      messages,
+    // Call OpenAI API
+    const chatCompletion = await openai.createChatCompletion({
+      model: 'gpt-4o-mini',
+      messages: messages,
       temperature: 0.7,
       max_tokens: 500
     });
     
-    const response = completion.data.choices[0].message.content;
+    // Get the response
+    const aiResponse = chatCompletion.data.choices[0].message.content;
     
-    // Extract potential lead information from user's message
-    const extractedLeadInfo = extractLeadInfo(message, visitorInfo);
+    // Determine the response source - we'll pass the original but might override
+    let finalResponseSource = responseSource;
     
-    // Determine source based on what information was used and intent
-    let source = 'ai';
-    if (trainingResults.qaMatches?.length > 0 || trainingResults.fileContent?.length > 0) {
-      source = 'training';
-    } else if (propertyRecommendations.length > 0 && intentClassification === 'property_search') {
-      source = 'properties';
+    // For agency questions, if we had training data, mark as training source
+    if (isAgencyQuestion && trainingContext) {
+      finalResponseSource = 'training';
+      console.log('🏢 Marking response as training source for agency question');
     }
     
-    // Return the response with source information
+    // Log the final response
+    console.log(`Response (from ${finalResponseSource}):`);
+    console.log(aiResponse.substring(0, 100) + '...');
+    
     return new Response(
       JSON.stringify({
-        response,
-        leadInfo: extractedLeadInfo,
-        conversationId,
-        source,
-        intent: intentClassification
+        response: aiResponse,
+        source: finalResponseSource,
+        conversationId: conversationId || `conv_${Date.now()}`,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
-    console.error("Error processing request:", error);
+    console.error('Error in AI chatbot function:', error);
     
     return new Response(
       JSON.stringify({ 
         error: error.message,
-        response: "Sorry, I encountered an error while processing your request. Please try again." 
+        response: "I'm sorry, I encountered an error. Please try again."
       }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });
-
-// Extract potential lead information from the message and visitor info
-function extractLeadInfo(message, visitorInfo) {
-  const extractedInfo = { ...visitorInfo };
-  const lowerMessage = message.toLowerCase();
-  
-  // Extract email
-  const emailMatch = message.match(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/);
-  if (emailMatch && !extractedInfo.email) {
-    extractedInfo.email = emailMatch[0];
-  }
-  
-  // Extract phone number (various formats)
-  const phoneMatches = message.match(/(?:\+\d{1,3}[ -]?)?\(?\d{3}\)?[ -]?\d{3}[ -]?\d{4}/g) || 
-                     message.match(/(?:\+\d{1,3}[ -]?)?\d{10,}/g);
-  if (phoneMatches && !extractedInfo.phone) {
-    extractedInfo.phone = phoneMatches[0];
-  }
-  
-  // Extract name (simple approach)
-  const nameMatch = message.match(/(?:my name is|I am|I'm) ([A-Za-z]+(?: [A-Za-z]+)?)/i);
-  if (nameMatch && !extractedInfo.firstName) {
-    const fullName = nameMatch[1].split(' ');
-    if (fullName.length > 1) {
-      extractedInfo.firstName = fullName[0];
-      extractedInfo.lastName = fullName.slice(1).join(' ');
-    } else {
-      extractedInfo.firstName = fullName[0];
-    }
-  }
-  
-  return extractedInfo;
-}
