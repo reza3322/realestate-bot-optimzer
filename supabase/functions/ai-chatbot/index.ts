@@ -36,10 +36,11 @@ serve(async (req) => {
       conversationId, 
       previousMessages = [],
       trainingResults = {},
-      propertyRecommendations = []
+      propertyRecommendations = [],
+      intentClassification = 'general_query'
     } = await req.json();
     
-    console.log(`Processing request for user ${userId}`);
+    console.log(`Processing request for user ${userId}, intent: ${intentClassification}`);
     console.log(`Query: "${message}"`);
     console.log(`Training data: ${JSON.stringify({
       qaCount: trainingResults.qaMatches?.length || 0,
@@ -122,8 +123,15 @@ serve(async (req) => {
       content: msg.content
     }));
     
-    // Create appropriate system message
+    // Create appropriate system message based on intent
     let systemPrompt = `You are a friendly and professional real estate assistant representing a real estate agency.`;
+    
+    // Adjust system prompt based on intent
+    if (intentClassification === 'faq') {
+      systemPrompt += ` You specialize in answering questions about real estate services, policies, and company-specific information.`;
+    } else if (intentClassification === 'property_search') {
+      systemPrompt += ` You specialize in helping users find properties that match their needs and preferences.`;
+    }
     
     if (combinedContext) {
       systemPrompt += `\n\nIMPORTANT - Use the following information from the user's database to answer their questions:
@@ -171,12 +179,13 @@ When responding:
     // Extract potential lead information from user's message
     const extractedLeadInfo = extractLeadInfo(message, visitorInfo);
     
-    // Determine source based on what information was used
-    const source = trainingResults.qaMatches?.length > 0 || trainingResults.fileContent?.length > 0
-      ? 'training'
-      : propertyRecommendations.length > 0
-        ? 'properties'
-        : 'ai';
+    // Determine source based on what information was used and intent
+    let source = 'ai';
+    if (trainingResults.qaMatches?.length > 0 || trainingResults.fileContent?.length > 0) {
+      source = 'training';
+    } else if (propertyRecommendations.length > 0 && intentClassification === 'property_search') {
+      source = 'properties';
+    }
     
     // Return the response with source information
     return new Response(
@@ -184,7 +193,8 @@ When responding:
         response,
         leadInfo: extractedLeadInfo,
         conversationId,
-        source
+        source,
+        intent: intentClassification
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
