@@ -1,3 +1,4 @@
+
 import { useState, useRef, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import ChatHeader from './ChatHeader';
@@ -137,7 +138,7 @@ const Chatbot = ({
 
   const handleSendMessage = async (message: string) => {
     // Add user message to the UI immediately
-    const newMessages = [...messages, { role: 'user', content: message }];
+    const newMessages: Message[] = [...messages, { role: 'user', content: message }];
     setMessages(newMessages);
     
     // Execute callback
@@ -172,7 +173,7 @@ const Chatbot = ({
         console.log('WITH CONVERSATION HISTORY:', JSON.stringify(previousMsgs, null, 2));
       }
       
-      // Call the API
+      // Call the API - ensure we're working with valid Message objects
       const result = await testChatbotResponse(
         message, 
         userId, 
@@ -198,12 +199,15 @@ const Chatbot = ({
           setPropertyRecommendations(newPropertyRecs);
         }
         
-        // Store the bot's response as a proper Message object
-        setMessages(prev => [...prev, { 
+        // Create a valid Message object for the bot's response
+        const botMessage: Message = { 
           role: 'bot', 
           content: result.response,
           properties: newPropertyRecs
-        }]);
+        };
+        
+        // Update state with the new message
+        setMessages(prev => [...prev, botMessage]);
         
         // Set response source
         if (result.source) {
