@@ -129,14 +129,14 @@ serve(async (req) => {
       { role: 'system', content: systemContent }
     ];
     
-    // Add conversation history for context
+    // Add previous messages to maintain conversation context
     if (formattedPreviousMessages.length > 0) {
       console.log(`Adding ${formattedPreviousMessages.length} previous messages to conversation context`);
       messages.push(...formattedPreviousMessages);
     }
     
     // Add the current user message
-    messages.push({ role: 'user', content: message });
+    messages.push({ role: "user", content: message });
     
     // Call OpenAI API with increased temperature for more dynamic responses
     // and increased max_tokens to allow for fuller responses
