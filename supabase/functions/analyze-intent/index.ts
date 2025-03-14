@@ -36,14 +36,21 @@ serve(async (req) => {
       content: msg.content
     }));
     
-    // Analyze intent using OpenAI
+    // Analyze intent using OpenAI with improved prompt to detect agency-related questions
     const prompt = `
     Analyze the following user message in a real estate chatbot context: "${message}"
 
     Based on the message, classify the primary intent into EXACTLY ONE of these categories:
     1. "general_query" - General real estate questions, greetings, or small talk
-    2. "faq" - Questions about the business, services, policies, or other company-specific information
+    2. "faq" - Questions about the business, services, policies, agency information, locations, office hours, or other company-specific information
     3. "property_search" - Questions about specific properties, listings, or availability
+    
+    Classify as "faq" if the user is asking ANYTHING about:
+    - The agency itself (history, team, locations)
+    - Services provided by the agency
+    - Contact information, office hours, service areas
+    - Processes, fees, or commission structure
+    - Agency policies, guarantees, certifications
     
     Return ONLY the category name as your answer, nothing else.
     `;
