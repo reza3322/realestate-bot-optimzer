@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -29,7 +28,6 @@ const TrainingContentManager = ({ userId, onContentUpdate }: TrainingContentProp
   const [newAnswer, setNewAnswer] = useState('');
   const [activeTab, setActiveTab] = useState("files");
 
-  // Fetch data when component mounts
   useEffect(() => {
     fetchAllContent();
   }, [userId]);
@@ -39,7 +37,6 @@ const TrainingContentManager = ({ userId, onContentUpdate }: TrainingContentProp
     setError(null);
     
     try {
-      // Fetch uploaded files
       const { data: files, error: filesError } = await supabase
         .from("chatbot_training_files")
         .select("*")
@@ -50,7 +47,6 @@ const TrainingContentManager = ({ userId, onContentUpdate }: TrainingContentProp
       if (filesError) throw filesError;
       setUploadedFiles(files || []);
       
-      // Fetch Q&A content
       const { data: qa, error: qaError } = await supabase
         .from("chatbot_training_files")
         .select("*")
@@ -61,12 +57,11 @@ const TrainingContentManager = ({ userId, onContentUpdate }: TrainingContentProp
       if (qaError) throw qaError;
       setQaContent(qa || []);
       
-      // Fetch crawled content
       const { data: crawled, error: crawledError } = await supabase
         .from("chatbot_training_files")
         .select("*")
         .eq("user_id", userId)
-        .eq("content_type", "web_crawl")
+        .eq("category", "Web Crawler")
         .order("created_at", { ascending: false });
       
       if (crawledError) throw crawledError;
@@ -92,7 +87,6 @@ const TrainingContentManager = ({ userId, onContentUpdate }: TrainingContentProp
       
       toast.success("Content deleted successfully");
       
-      // Update state to reflect the deletion
       if (type === 'file') {
         setUploadedFiles(prev => prev.filter(item => item.id !== id));
       } else if (type === 'qa') {
@@ -188,8 +182,8 @@ const TrainingContentManager = ({ userId, onContentUpdate }: TrainingContentProp
           content_type: "qa_pair",
           category: "Custom Q&A",
           priority: 8,
-          source_file: "Q&A Pair", // Required field in our unified schema
-          extracted_text: newAnswer // Also store in extracted_text for compatibility
+          source_file: "Q&A Pair",
+          extracted_text: newAnswer
         })
         .select();
       
@@ -487,7 +481,7 @@ const TrainingContentManager = ({ userId, onContentUpdate }: TrainingContentProp
                     <div key={content.id} className="border rounded-md p-4">
                       <div className="flex justify-between items-start mb-2">
                         <div>
-                          <h3 className="font-medium truncate max-w-xs">{content.question || content.source_file || 'Web Content'}</h3>
+                          <h3 className="font-medium truncate max-w-xs">{content.source_file || 'Web Content'}</h3>
                           <p className="text-sm text-muted-foreground">
                             {new Date(content.created_at).toLocaleDateString()} - Priority: {content.priority}
                           </p>
@@ -502,7 +496,7 @@ const TrainingContentManager = ({ userId, onContentUpdate }: TrainingContentProp
                       </div>
                       
                       <div className="mt-2 bg-muted p-3 rounded-md text-sm max-h-40 overflow-y-auto">
-                        {content.extracted_text || content.answer}
+                        {content.extracted_text}
                       </div>
                     </div>
                   ))}

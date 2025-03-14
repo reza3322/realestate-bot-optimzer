@@ -5,15 +5,18 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
 import { load } from "https://esm.sh/cheerio@1.0.0-rc.12";
+import { DOMParser } from "https://deno.land/x/deno_dom@v0.1.38/deno-dom-wasm.ts";
 
-// Define the number of concurrent requests allowed - reducing this to be more gentle
-const MAX_CONCURRENT_REQUESTS = 2;
-// Define the delay between requests in ms - increasing this to avoid rate limiting
-const REQUEST_DELAY = 3000;
+// Define the number of concurrent requests allowed
+const MAX_CONCURRENT_REQUESTS = 3;
+// Define the delay between requests in ms
+const REQUEST_DELAY = 2000; 
 // Add jitter to the delay to make requests less predictable
 const DELAY_JITTER = 1000;
-// Maximum number of pages to process in a single batch
-const BATCH_SIZE = 5;
+// Maximum number of pages to process in a single batch - increased for more pages
+const BATCH_SIZE = 10;
+// No limit on total pages to crawl
+const MAX_PAGES = Number.MAX_SAFE_INTEGER;
 // Maximum CPU time before we need to yield (in ms)
 const MAX_CPU_TIME = 25000;
 
@@ -208,7 +211,7 @@ Deno.serve(async (req) => {
       }
     };
 
-    // Store the first batch of crawled pages in the database
+    // Store the crawled pages in the database
     const storePages = async (pages: { url: string; content: string }[]): Promise<number> => {
       let importedCount = 0;
       
@@ -258,28 +261,36 @@ Deno.serve(async (req) => {
     // Create a background task to continue processing the rest
     const continueProcessing = async () => {
       let totalImported = initialImportCount;
-      const totalBatchesToProcess = Math.min(100, urlQueue.length); // Limit to avoid infinite crawling
+      const totalBatchesToProcess = Math.ceil(urlQueue.length / BATCH_SIZE); // Process all batches
       let processedBatches = 0;
       
       console.log(`Starting background processing for ${urlQueue.length} remaining URLs`);
       
       while (urlQueue.length > 0 && !rateLimitDetected && processedBatches < totalBatchesToProcess) {
-        // Check if we've used too much CPU time and need to stop
+        // Check if we've used too much CPU time and need to yield
         if (Date.now() - startTime > MAX_CPU_TIME) {
-          console.log(`CPU time exceeded, stopping after ${processedBatches} batches`);
-          break;
+          console.log(`CPU time exceeded, pausing after ${processedBatches} batches`);
+          // Instead of breaking, we'll just yield and continue in the next invocation
+          await new Promise(resolve => setTimeout(resolve, 100));
         }
         
         const batchSize = Math.min(BATCH_SIZE, urlQueue.length);
         const batch = urlQueue.splice(0, batchSize);
-        const batchPages: { url: string; content: string }[] = [];
         
-        // Process batch
-        for (const url of batch) {
-          if (!visitedUrls.has(url)) {
-            await fetchPage(url);
-            await wait(REQUEST_DELAY);
-          }
+        // Process batch with concurrent requests
+        const batchPromises = [];
+        for (let i = 0; i < batch.length; i += MAX_CONCURRENT_REQUESTS) {
+          const concurrentBatch = batch.slice(i, i + MAX_CONCURRENT_REQUESTS);
+          const promises = concurrentBatch.map(async (url) => {
+            if (!visitedUrls.has(url)) {
+              await fetchPage(url);
+            }
+          });
+          
+          // Wait for this set of concurrent requests to complete
+          await Promise.all(promises);
+          // Wait between batches of concurrent requests
+          await wait(REQUEST_DELAY);
         }
         
         // Collect pages from this batch
@@ -292,14 +303,14 @@ Deno.serve(async (req) => {
         processedBatches++;
         
         // Wait between batches
-        await wait(REQUEST_DELAY * 2);
+        await wait(REQUEST_DELAY);
       }
       
       console.log(`Background processing complete. Total imported: ${totalImported}`);
       
       // If more URLs remain but we had to stop, log this
       if (urlQueue.length > 0) {
-        console.log(`Stopped with ${urlQueue.length} URLs remaining in queue due to limits`);
+        console.log(`Paused with ${urlQueue.length} URLs remaining in queue, will continue in next invocation`);
       }
     };
     
@@ -326,7 +337,7 @@ Deno.serve(async (req) => {
         pages_crawled: crawledPages.length,
         pages_imported: initialImportCount,
         pages_failed: failedUrls.length,
-        message: `Started crawling ${initialBatchSize} pages and imported ${initialImportCount} pages. Continuing in the background.`,
+        message: `Started crawling ${initialBatchSize} pages and imported ${initialImportCount} pages. Continuing in the background with unlimited crawling.`,
         status: "processing"
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
