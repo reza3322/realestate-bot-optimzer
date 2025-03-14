@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -66,7 +67,7 @@ const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
               extracted_text: fileContent,
               category: "File Import",
               priority: priority,
-              content_type: "file",
+              content_type: "text/plain",
               processing_status: "complete"
             });
 

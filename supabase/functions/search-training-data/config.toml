@@ -1,5 +1,0 @@
-
-project_id = "ckgaqkbsnrvccctqxsqv"
-
-[global.env]
-ENABLE_ALL_FEATURES = "true"

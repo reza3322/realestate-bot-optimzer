@@ -36,10 +36,4 @@ verify_jwt = true
 verify_jwt = false
 
 [functions.web-crawler]
-verify_jwt = false
-
-[functions.search-training-data]
-verify_jwt = false
-
-[functions.search-properties]
-verify_jwt = false
+verify_jwt = true

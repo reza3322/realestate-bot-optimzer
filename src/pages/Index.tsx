@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import Navbar from '@/components/layout/Navbar';
 import Hero from '@/components/sections/Hero';
 import Benefits from '@/components/sections/Benefits';
+import Demo from '@/components/sections/Demo';
 import Cta from '@/components/sections/Cta';
 import Footer from '@/components/sections/Footer';
 import { Button } from '@/components/ui/button';
@@ -57,7 +58,7 @@ const Index = () => {
         {/* Features section is currently hidden */}
         {/* <Features /> */}
         <Benefits />
-        {/* Removed Demo component with chatbot */}
+        <Demo />
         <Cta />
       </main>
       <Footer />

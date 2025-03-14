@@ -1,6 +1,6 @@
-
 import { useState } from 'react';
 import { GradientHeading } from '@/components/ui/gradient-heading';
+import Chatbot from '@/components/ui/chatbot/Chatbot';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   Palette, 
@@ -313,50 +313,17 @@ const Demo = () => {
             </div>
           </div>
           
-          {/* Static chat preview mockup */}
+          {/* Chat preview - fixed height container */}
           <div className="md:col-span-3 bg-white dark:bg-gray-800 rounded-xl shadow-xl p-4">
-            <div className="h-full flex flex-col">
-              <div className="p-3 bg-blue-500 text-white rounded-t-lg">
-                <h3 className="font-medium">RealHome Assistant</h3>
-              </div>
-              
-              <div className="flex-1 p-4 overflow-y-auto">
-                <div className="flex flex-col gap-3">
-                  <div className="bg-gray-100 dark:bg-gray-700 p-3 rounded-lg max-w-[80%] self-start">
-                    <p>👋 Hi there! I'm your RealHomeAI assistant. I can help you find properties, answer questions about listings, and even schedule viewings.</p>
-                  </div>
-                  
-                  <div className="bg-blue-500 text-white p-3 rounded-lg max-w-[80%] self-end">
-                    <p>Hi! I'm looking for a villa near the beach.</p>
-                  </div>
-                  
-                  <div className="bg-gray-100 dark:bg-gray-700 p-3 rounded-lg max-w-[80%] self-start">
-                    <p>I'd be happy to help you find a beach villa! Here are some options from our database:</p>
-                    <div className="mt-2">
-                      <p className="font-medium">🏡 Beach Villa Serenity – €1,250,000</p>
-                      <p>📍 Beachfront, Costa del Sol</p>
-                      <p>✅ 4 Bedrooms, 3 Bathrooms, Private Pool</p>
-                      <p className="text-blue-600 underline">View Listing</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="p-3 border-t flex gap-2">
-                <input 
-                  type="text" 
-                  className="flex-1 p-2 rounded-full border" 
-                  placeholder="Type your message..."
-                  disabled
-                />
-                <button className="bg-blue-500 text-white p-2 rounded-full">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="22" y1="2" x2="11" y2="13"></line>
-                    <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-                  </svg>
-                </button>
-              </div>
-            </div>
+            <Chatbot 
+              theme={theme}
+              variation={variation}
+              fontStyle={fontStyle}
+              welcomeMessage="👋 Hi there! I'm your RealHomeAI assistant. I can help you find properties, answer questions about listings, and even schedule viewings. Try asking me about available properties or how I can help with your real estate needs!"
+              placeholderText="Type your message here..."
+              useRealAPI={useRealAPI}
+              buttonStyle={getButtonStyleObject()} // Apply the button style object
+            />
           </div>
         </div>
       </div>

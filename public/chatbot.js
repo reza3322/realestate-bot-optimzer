@@ -17,14 +17,8 @@
     localStorage.setItem('realhome_visitor_id', visitorId);
   }
   
-  // Create a conversation ID for this session or retrieve existing one
-  let conversationId = localStorage.getItem(`realhome_conversation_${userId}`);
-  if (!conversationId) {
-    conversationId = 'conv_' + Math.random().toString(36).substring(2, 15);
-    localStorage.setItem(`realhome_conversation_${userId}`, conversationId);
-  }
-  
-  console.log(`Initializing chatbot for user ${userId} with conversation ID ${conversationId}`);
+  // Create a conversation ID for this session
+  const conversationId = 'conv_' + Math.random().toString(36).substring(2, 15);
   
   // Create styles
   const style = document.createElement('style');
@@ -190,23 +184,6 @@
       animation-delay: 0.4s;
     }
 
-    .realhome-chatbot-message a {
-      color: #3b82f6;
-      text-decoration: underline;
-      word-break: break-all;
-    }
-    
-    .realhome-chatbot-message.bot a:hover {
-      color: #2563eb;
-    }
-
-    .realhome-property-image {
-      max-width: 100%;
-      border-radius: 8px;
-      margin-top: 8px;
-      margin-bottom: 8px;
-    }
-
     @keyframes typing {
       0% { transform: translateY(0); }
       50% { transform: translateY(-5px); }
@@ -276,48 +253,8 @@
   container.appendChild(chatWindow);
   document.body.appendChild(container);
   
-  // Load previous chat messages if they exist
-  const loadPreviousMessages = async () => {
-    try {
-      if (!conversationId) return;
-      
-      // Get previous messages from the API
-      const response = await fetch('https://ckgaqkbsnrvccctqxsqv.supabase.co/functions/v1/get-conversation-history', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          conversationId,
-          userId
-        })
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        if (data.messages && data.messages.length > 0) {
-          // Clear the messages container
-          messagesContainer.innerHTML = '';
-          
-          // Add previous messages
-          data.messages.forEach(exchange => {
-            addMessage('user', exchange.message);
-            addMessage('bot', exchange.response);
-          });
-          
-          console.log(`Loaded ${data.messages.length} previous messages`);
-        } else {
-          // Add default welcome message
-          addMessage('bot', 'Hi there! I\'m your RealHome assistant. How can I help you with your real estate needs today?');
-        }
-      } else {
-        // Add default welcome message
-        addMessage('bot', 'Hi there! I\'m your RealHome assistant. How can I help you with your real estate needs today?');
-      }
-    } catch (error) {
-      console.error('Error loading previous messages:', error);
-      // Add default welcome message
-      addMessage('bot', 'Hi there! I\'m your RealHome assistant. How can I help you with your real estate needs today?');
-    }
-  };
+  // Add a default welcome message
+  addMessage('bot', 'Hi there! I\'m your RealHome assistant. How can I help you with your real estate needs today?');
   
   // Event listeners for opening/closing the window
   button.addEventListener('click', () => {
@@ -346,9 +283,7 @@
         body: JSON.stringify({
           message,
           userId,
-          visitorInfo: {
-            visitorId
-          },
+          visitorId,
           conversationId
         })
       })
@@ -358,28 +293,7 @@
         if (data.error) {
           addMessage('bot', 'Sorry, I encountered an error. Please try again later.');
         } else {
-          // Save conversation ID for future reference
-          if (data.conversationId && data.conversationId !== conversationId) {
-            conversationId = data.conversationId;
-            localStorage.setItem(`realhome_conversation_${userId}`, conversationId);
-          }
-          
-          // Process property links to keep them in the widget
-          let processedResponse = data.response;
-          
-          // Fix links to use the embedded handler instead of external links
-          processedResponse = processedResponse.replace(
-            /\[([^\]]+)\]\(https?:\/\/[^)]+\/property\/([a-zA-Z0-9-]+)\)/g, 
-            '[$1](javascript:handlePropertyClick("$2"))'
-          );
-          
-          // Also fix any other property URLs
-          processedResponse = processedResponse.replace(
-            /https?:\/\/[^)\s]+\/property\/([a-zA-Z0-9-]+)/g, 
-            'javascript:handlePropertyClick("$1")'
-          );
-          
-          addMessage('bot', processedResponse);
+          addMessage('bot', data.response);
         }
       })
       .catch(error => {
@@ -398,37 +312,11 @@
   
   sendButton.addEventListener('click', sendMessage);
   
-  // Handle property link clicks in the chat
-  window.handlePropertyClick = function(propertyId) {
-    console.log(`Property clicked: ${propertyId}`);
-    
-    // Instead of navigating away, send a follow-up question about this property
-    input.value = `Tell me more about this property (${propertyId})`;
-    // Optional: automatically send the message
-    // sendMessage();
-  };
-  
   // Function to add a message to the chat
   function addMessage(sender, text) {
     const messageElement = document.createElement('div');
     messageElement.className = `realhome-chatbot-message ${sender}`;
-    
-    // Process markdown in bot messages
-    if (sender === 'bot') {
-      // Convert markdown links
-      let processedText = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" onclick="event.stopPropagation();">$1</a>');
-      
-      // Convert bold
-      processedText = processedText.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-      
-      // Convert line breaks
-      processedText = processedText.replace(/\n/g, '<br>');
-      
-      messageElement.innerHTML = processedText;
-    } else {
-      messageElement.textContent = text;
-    }
-    
+    messageElement.textContent = text;
     messagesContainer.appendChild(messageElement);
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
   }
@@ -458,7 +346,9 @@
     }
   }
   
-  // Load settings and previous conversation
+  // -------------------------------------------
+  // BELOW IS THE UPDATED loadSettings() FUNCTION
+  // -------------------------------------------
   async function loadSettings() {
     try {
       // **This URL is stripped down to only user_id and select=settings** 
@@ -486,13 +376,8 @@
       } else {
         console.error('Failed to fetch settings:', response.statusText);
       }
-      
-      // After settings, load previous messages
-      await loadPreviousMessages();
     } catch (error) {
       console.error('Error loading chatbot settings:', error);
-      // Still try to load previous messages even if settings fail
-      await loadPreviousMessages();
     }
   }
   
@@ -556,6 +441,12 @@
       header.querySelector('div:first-child').textContent = settings.botName;
     }
     
+    // Update welcome message - only if no messages have been exchanged
+    if (settings.welcomeMessage && messagesContainer.childElementCount <= 1) {
+      messagesContainer.innerHTML = '';
+      addMessage('bot', settings.welcomeMessage);
+    }
+    
     // Update input placeholder
     if (settings.placeholderText) {
       input.placeholder = settings.placeholderText;
@@ -565,3 +456,4 @@
   // Finally, load settings when the script loads
   loadSettings();
 })();
+

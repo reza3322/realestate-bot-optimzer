@@ -1,3 +1,4 @@
+
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.0";
@@ -6,8 +7,6 @@ import { Configuration, OpenAIApi } from "https://esm.sh/openai@3.3.0";
 // Constants
 const MAX_PROPERTY_RECOMMENDATIONS = 3;
 const OPENAI_MODEL = "gpt-4o-mini";
-const MAX_PREVIOUS_MESSAGES = 10;
-const MAX_RESPONSE_LENGTH = 300;
 
 // Initialize Supabase client
 const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
@@ -30,23 +29,10 @@ serve(async (req) => {
   }
 
   try {
-    const { 
-      message, 
-      userId, 
-      visitorInfo, 
-      conversationId, 
-      previousMessages = [], 
-      propertyRecommendations = [],
-      trainingResults = {},
-      systemMessage = '' // Allow custom system message override
-    } = await req.json();
+    const { message, userId, visitorInfo, conversationId, previousMessages = [] } = await req.json();
     
     console.log(`🔄 Processing request from user ${userId}, message: ${message.substring(0, 50)}...`);
     console.log(`👤 Visitor info:`, JSON.stringify(visitorInfo));
-    console.log(`🏠 Property recommendations received:`, propertyRecommendations.length);
-    console.log(`💬 Previous messages count:`, previousMessages.length);
-    console.log(`🧠 Training data available:`, trainingResults?.qaMatches?.length || 0, 'QA matches,', 
-                trainingResults?.fileContent?.length || 0, 'file content matches');
 
     if (!message) {
       return new Response(
@@ -55,172 +41,39 @@ serve(async (req) => {
       );
     }
 
-    // Persist conversation history in database for better context retention
-    let existingConversation = null;
-    let storedPreviousMessages = [];
+    // 1. Search for property recommendations based on the message
+    const propertyRecommendations = await searchForPropertyRecommendations(userId, message);
     
-    if (conversationId) {
-      // Fetch any existing conversation history from the database
-      const { data: conversationHistory } = await supabase
-        .from('chatbot_conversations')
-        .select('message, response')
-        .eq('conversation_id', conversationId)
-        .order('created_at', { ascending: true })
-        .limit(MAX_PREVIOUS_MESSAGES);
+    // 2. Generate a response using OpenAI or fall back to hardcoded response
+    let response, isVerified = false;
+    if (openai) {
+      console.log("🤖 Using OpenAI to generate response");
+      // Get property context for OpenAI
+      const propertyContext = propertyRecommendations.length > 0 
+        ? `You have found ${propertyRecommendations.length} properties that might interest the user:\n` +
+          propertyRecommendations.map((p, i) => 
+            `Property ${i+1}: ${p.title}, Price: ${p.price}, Location: ${p.location || 'N/A'}, Features: ${p.features?.join(', ') || 'N/A'}`
+          ).join('\n')
+        : "You don't have any specific property listings that match the user's query.";
       
-      if (conversationHistory && conversationHistory.length > 0) {
-        console.log(`📚 Found ${conversationHistory.length} previous messages in database`);
-        
-        // Convert database history to message format
-        storedPreviousMessages = conversationHistory.flatMap(entry => [
-          { role: 'user', content: entry.message },
-          { role: 'assistant', content: entry.response }
-        ]);
-      }
-    }
-    
-    // Combine stored messages with client-provided previous messages, prioritizing client messages
-    const mergedPreviousMessages = previousMessages.length > 0 ? 
-      previousMessages : 
-      storedPreviousMessages;
-    
-    // Limit to most recent messages to keep context relevant
-    const recentMessages = mergedPreviousMessages.slice(-MAX_PREVIOUS_MESSAGES);
-    
-    console.log(`💬 Using ${recentMessages.length} messages for context`);
-
-    // IMPROVED PROPERTY DETECTION: Check if this is a direct request for properties
-    const isDirectPropertyRequest = message.toLowerCase().match(/show me|list|find|properties|houses|apartments|villas|get me/i);
-    
-    // Aggressive property query detection - check if message contains location and property type
-    const hasLocation = message.toLowerCase().match(/(in|at|near|around) ([a-zA-Z\s]+)/i);
-    const hasPropertyType = message.toLowerCase().match(/villa|apartment|penthouse|house|condo|flat|studio/i);
-    const hasBedroomCount = message.toLowerCase().match(/(\d+) bed/i);
-    const hasBudget = message.toLowerCase().match(/(\d+)[k|m]|\$(\d+)|€(\d+)|euro/i);
-    
-    const propertyInfoProvided = (hasLocation && hasPropertyType) || 
-                                (hasLocation && hasBedroomCount) || 
-                                (hasPropertyType && hasBudget);
-    
-    // Prioritize property search when criteria are provided
-    const shouldSearchProperties = isDirectPropertyRequest || propertyInfoProvided;
-
-    // Always use the provided property recommendations or search for properties
-    // NEVER create fictional properties
-    let finalPropertyRecommendations = [...propertyRecommendations];
-    
-    // MODIFIED: Always fetch from database if it's a property query, regardless of what was passed
-    if (shouldSearchProperties) {
-      console.log("🔍 User appears to be asking about properties. Fetching from database...");
-      const dbProperties = await fetchPropertiesFromDatabase(userId, message);
-      
-      if (dbProperties && dbProperties.length > 0) {
-        console.log(`📊 Found ${dbProperties.length} properties in database`);
-        finalPropertyRecommendations = dbProperties;
-      }
-    }
-
-    // Check if we can use training data for the response
-    const canUseTrainingData = trainingResults && 
-      ((trainingResults.qaMatches && trainingResults.qaMatches.length > 0) || 
-       (trainingResults.fileContent && trainingResults.fileContent.length > 0));
-    
-    // MODIFIED: Check if user is asking about specific property attributes
-    const askingAboutPrice = message.toLowerCase().includes('price') || message.toLowerCase().includes('cost') || message.toLowerCase().includes('how much');
-    const askingAboutBedrooms = message.toLowerCase().includes('bedroom') || message.toLowerCase().includes('how many room');
-    const askingAboutPool = message.toLowerCase().includes('pool') || message.toLowerCase().includes('swimming');
-    const askingSpecificAttribute = askingAboutPrice || askingAboutBedrooms || askingAboutPool;
-    
-    let response = '';
-    let isVerified = false;
-    
-    // Handle specific property attribute queries directly if we have matching properties
-    if (finalPropertyRecommendations.length > 0 && askingSpecificAttribute) {
-      console.log("🎯 User is asking about specific property attributes, generating direct response");
-      if (askingAboutPrice) {
-        const property = finalPropertyRecommendations[0];
-        const price = typeof property.price === 'number' 
-          ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(property.price)
-          : property.price;
-        response = `${property.title || 'This property'} is priced at ${price}. Would you like to know more about it or schedule a viewing? 😊`;
-      } else if (askingAboutBedrooms) {
-        const property = finalPropertyRecommendations[0];
-        response = `${property.title || 'This property'} has ${property.bedroomCount || 'several'} bedrooms. Would you like to see it in person?`;
-      } else if (askingAboutPool) {
-        const property = finalPropertyRecommendations[0];
-        if (property.hasPool) {
-          response = `Yes, ${property.title || 'this property'} has a swimming pool. It's a beautiful feature of the property!`;
-        } else {
-          response = `${property.title || 'This property'} doesn't have a swimming pool. Would you like me to find properties with pools instead?`;
-        }
-      }
-      isVerified = true;
-    }
-    // If we haven't generated a direct response and we have training data, use that
-    else if (!response && !shouldSearchProperties && canUseTrainingData) {
-      console.log("🧠 Using training data to generate response for non-property question");
-      response = generateTrainingDataResponse(message, trainingResults);
-      isVerified = true;
-    } 
-    // Otherwise, use OpenAI if available with strict instructions not to make up properties
-    else if (!response && openai) {
-      console.log("🤖 Using OpenAI to generate response with human-like communication");
-      
-      // Check if we need to ask for contact information (no properties found)
-      const shouldAskForContact = finalPropertyRecommendations.length === 0 && shouldSearchProperties;
-      
-      // Default system message with more human-like tone if not provided
-      const defaultSystemMessage = `You are a helpful and human-like real estate assistant.
-
-Guidelines:
-- Always check the user's property database for answers.
-- If a user asks about a specific property, respond only with the relevant detail (e.g., just the price, just the number of bedrooms).
-- If a user asks general real estate questions, check the provided training data.
-- Keep responses short (3-5 lines max) and engaging like a human assistant would.
-- If no property matches, ask if they want to be contacted instead of making up details.
-- Remember what the user previously asked so you don't repeat questions.
-- NEVER invent property listings or details. Do not make up any property information.
-- ONLY recommend properties that exist in the provided propertyRecommendations array.
-
-Example Interactions:
-**User:** "What is the price of the Golden Mile villa?"
-**Chatbot:** "The Golden Mile Villa is priced at €2,500,000. Would you like to schedule a viewing? 😊"
-
-**User:** "Does it have a pool?"
-**Chatbot:** "Yes, this villa has a private swimming pool. Let me know if you'd like more details!"`;
-      
-      // Use provided system message or default
-      const finalSystemMessage = systemMessage || defaultSystemMessage;
-      
-      // Update property context with available properties
-      const propertyContext = finalPropertyRecommendations.length > 0 
-        ? `You have found ${finalPropertyRecommendations.length} properties in the database that match the user's criteria. ONLY show these properties when the user asks about real estate.` 
-        : "You don't have any specific property listings that match the user's query in our database. DO NOT make up or invent properties. Instead, ask for their contact details (email/phone) so we can notify them when matching properties become available.";
-      
-      // Generate response with improved restrictions
+      // Generate response
       response = await generateAIResponse(
         message, 
-        recentMessages, 
-        finalSystemMessage,
-        propertyContext,
-        visitorInfo,
-        trainingResults?.fileContent || [],
-        shouldAskForContact
+        previousMessages, 
+        propertyContext, 
+        visitorInfo
       );
       
-      // Verify the response meets quality standards
-      isVerified = await verifyResponse(message, response, finalPropertyRecommendations);
+      // Verify the response meets our quality standards
+      isVerified = await verifyResponse(message, response, propertyRecommendations);
       
       if (!isVerified) {
-        console.log("❌ Response verification failed, regenerating with stricter guidelines...");
+        console.log("❌ Response verification failed, regenerating...");
         response = await generateAIResponse(
           message, 
-          recentMessages, 
-          finalSystemMessage,
+          previousMessages, 
           propertyContext, 
           visitorInfo,
-          trainingResults?.fileContent || [],
-          shouldAskForContact,
           true // Include quality guidelines
         );
         isVerified = true; // Assume second attempt is good enough
@@ -228,28 +81,14 @@ Example Interactions:
     } else {
       // Fallback to a scripted response if no OpenAI key is available
       console.log("⚠️ No OpenAI API key, using fallback response");
-      response = generateFallbackResponse(message, finalPropertyRecommendations);
+      response = generateFallbackResponse(message, propertyRecommendations);
       isVerified = true;
     }
-    
-    // CRITICAL FIX: Always show property recommendations when we have them and user is asking about properties
-    const showPropertyRecommendations = shouldSearchProperties && 
-      finalPropertyRecommendations.length > 0 &&
-      !askingSpecificAttribute; // Don't show all properties if asking about specific attribute
-    
-    if (showPropertyRecommendations && 
-        !response.includes('🏡') && !response.includes('View Listing')) {
-      response = formatPropertyRecommendations(response, finalPropertyRecommendations);
-    } else if (finalPropertyRecommendations.length === 0 && shouldSearchProperties && 
-              !response.toLowerCase().includes('email') && !response.toLowerCase().includes('contact')) {
-      // If no properties but user is asking for them, ensure we ask for contact details
-      response = addContactRequestToResponse(response);
-    }
 
-    // Extract potential lead information
-    const extractedLeadInfo = extractLeadInfo(message, visitorInfo || {});
+    // 3. Extract potential lead information
+    const extractedLeadInfo = extractLeadInfo(message, visitorInfo);
 
-    // Save the conversation
+    // 4. Save the conversation
     const newConversationId = await saveConversation(
       userId, 
       message, 
@@ -258,14 +97,13 @@ Example Interactions:
       conversationId
     );
 
-    // Return the response with all relevant information
+    // 5. Return the response with all relevant information
     const responseObj = {
       response,
       isVerified,
       conversationId: newConversationId || conversationId,
       leadInfo: extractedLeadInfo,
-      propertyRecommendations: finalPropertyRecommendations.slice(0, MAX_PROPERTY_RECOMMENDATIONS),
-      source: canUseTrainingData ? 'training' : 'ai'
+      propertyRecommendations: propertyRecommendations.slice(0, MAX_PROPERTY_RECOMMENDATIONS)
     };
 
     return new Response(
@@ -284,220 +122,135 @@ Example Interactions:
   }
 });
 
-// Generate a response using uploaded training data
-function generateTrainingDataResponse(message, trainingResults) {
-  console.log("Generating response from training data");
-  
-  // First check if we have direct QA matches
-  if (trainingResults.qaMatches && trainingResults.qaMatches.length > 0) {
-    // Use the highest similarity match
-    const bestMatch = trainingResults.qaMatches[0];
-    console.log(`Using QA match with similarity ${bestMatch.similarity}`);
-    return bestMatch.answer;
-  }
-  
-  // Otherwise, use file content if available
-  if (trainingResults.fileContent && trainingResults.fileContent.length > 0) {
-    const bestFileMatch = trainingResults.fileContent[0];
-    console.log(`Using file content from ${bestFileMatch.source}`);
-    
-    // Create a response that references the source
-    return `Based on our information: ${bestFileMatch.text.substring(0, 300)}...`;
-  }
-  
-  // Should never get here but just in case
-  return "I found some information about that, but I'm having trouble formatting it. Let me try another approach.";
-}
-
-// Fetch properties directly from the database - improved to be more aggressive in finding matches
-async function fetchPropertiesFromDatabase(userId, query) {
+// Helper function to search for properties based on message content
+async function searchForPropertyRecommendations(userId, message) {
   try {
-    console.log(`🔍 Searching for properties related to: "${query.substring(0, 30)}..."`);
+    console.log(`🔍 Searching for properties for user ${userId} based on message: ${message.substring(0, 30)}...`);
     
-    // Extract keywords from the query
-    const keywords = extractKeywords(query);
+    // Extract search parameters from the message
+    const searchParams = extractSearchParams(message);
+    console.log("📊 Extracted search params:", searchParams);
     
-    // Extract location with improved regex
-    const locationMatch = query.match(/in\s+([a-zA-Z\s]+?)(?:,|\s|$|\?|\.)/i) || 
-                          query.match(/(?:at|near|around) ([a-zA-Z\s]+)/i);
-    const location = locationMatch ? locationMatch[1].trim() : null;
-    
-    // Extract bedroom count
-    const bedroomMatch = query.match(/(\d+)\s*(?:bed|bedroom|br)/i);
-    const bedrooms = bedroomMatch ? parseInt(bedroomMatch[1]) : null;
-    
-    // Extract property type
-    const typeMatch = query.match(/(villa|apartment|penthouse|house|condo|flat|studio)/i);
-    const propertyType = typeMatch ? typeMatch[1].toLowerCase() : null;
-    
-    // Extract budget with improved regex
-    const budgetMatch = query.match(/(\d+)[k|m]|\$(\d+)|€(\d+)|euro/i);
-    
-    // Prepare query with just basic filters initially
-    let propertyQuery = supabase
-      .from('properties')
-      .select('id, title, description, price, bedrooms, bathrooms, city, state, status, url, living_area, plot_area, garage_area, terrace, has_pool, type')
-      .eq('user_id', userId)
-      .eq('status', 'active')
-      .limit(MAX_PROPERTY_RECOMMENDATIONS);
-    
-    // Add location filter if available - more flexible now
-    if (location) {
-      const locationLower = location.toLowerCase();
-      propertyQuery = propertyQuery.or(`city.ilike.%${locationLower}%,state.ilike.%${locationLower}%,description.ilike.%${locationLower}%`);
-    }
-    
-    // Add bedrooms filter if available - only if specifically mentioned
-    if (bedrooms) {
-      propertyQuery = propertyQuery.eq('bedrooms', bedrooms);
-    }
-    
-    // Add type filter if available - with exact matches
-    if (propertyType) {
-      propertyQuery = propertyQuery.eq('type', propertyType);
-    }
-    
-    // Execute query
-    const { data, error } = await propertyQuery;
+    // Search for properties
+    const { data, error } = await supabase.functions.invoke('search-properties', {
+      body: { userId, searchParams }
+    });
     
     if (error) {
-      console.error("Error fetching properties:", error);
+      console.error("❌ Error searching for properties:", error);
       return [];
     }
     
-    if (!data || data.length === 0) {
-      console.log("No properties found with exact match, trying broader search");
-      
-      // Try a broader search if no exact matches
-      const { data: broadData, error: broadError } = await supabase
-        .from('properties')
-        .select('id, title, description, price, bedrooms, bathrooms, city, state, status, url, living_area, plot_area, garage_area, terrace, has_pool, type')
-        .eq('user_id', userId)
-        .eq('status', 'active')
-        .limit(MAX_PROPERTY_RECOMMENDATIONS);
-      
-      if (broadError || !broadData || broadData.length === 0) {
-        console.log("No properties found in broader search either");
-        return [];
-      }
-      
-      console.log(`Found ${broadData.length} properties in broader search`);
-      return broadData.map(property => formatPropertyData(property));
-    }
-    
-    console.log(`Found ${data.length} properties in database`);
-    
-    // Format the properties for the response
-    return data.map(property => formatPropertyData(property));
+    return data?.properties || [];
   } catch (error) {
-    console.error("Error in fetchPropertiesFromDatabase:", error);
+    console.error("❌ Error in property search:", error);
     return [];
   }
 }
 
-// Format property data to match the expected format
-function formatPropertyData(property) {
-  // Create URL if not provided
-  const url = property.url || `./property/${property.id}`;
+// Helper function to extract search parameters from a message
+function extractSearchParams(message) {
+  const lowerMessage = message.toLowerCase();
   
-  // Extract features
-  const features = [];
-  if (property.bedrooms) features.push(`${property.bedrooms} Bedrooms`);
-  if (property.bathrooms) features.push(`${property.bathrooms} Bathrooms`);
-  if (property.living_area) features.push(`${property.living_area} m² Living Area`);
-  if (property.has_pool) features.push(`Swimming Pool`);
+  // Default search parameters
+  const params = {
+    maxResults: MAX_PROPERTY_RECOMMENDATIONS
+  };
   
-  // Format location
-  const location = property.city ? 
-    (property.state ? `${property.city}, ${property.state}` : property.city) : 
-    'Exclusive Location';
+  // Extract location
+  const locationMatches = [
+    { regex: /in\s+([a-zA-Z\s]+?)(?:,|\s|$|\?|\.)/i, group: 1 },
+    { regex: /(?:marbella|ibiza|malaga|madrid|barcelona|valencia|seville|granada)/gi, group: 0 }
+  ];
   
-  // Generate a highlight if not available
-  let highlight = null;
-  if (property.description) {
-    const descLower = property.description.toLowerCase();
-    if (descLower.includes('view') || descLower.includes('panoramic')) {
-      highlight = 'Breathtaking views from your private terrace!';
-    } else if (descLower.includes('modern') || descLower.includes('contemporary')) {
-      highlight = 'Stunning modern design with high-end finishes!';
-    } else if (property.has_pool) {
-      highlight = 'Enjoy your own private swimming pool!';
-    } else {
-      highlight = 'Perfect home in a prime location!';
+  for (const match of locationMatches) {
+    const locationMatch = lowerMessage.match(match.regex);
+    if (locationMatch) {
+      params.location = locationMatch[match.group];
+      break;
     }
   }
   
-  return {
-    id: property.id,
-    title: property.title || `${property.type || 'Property'} in ${property.city || 'Exclusive Location'}`,
-    price: property.price,
-    location: location,
-    bedroomCount: property.bedrooms,
-    bathroomCount: property.bathrooms,
-    hasPool: property.has_pool,
-    propertyType: property.type,
-    features: features,
-    highlight: highlight,
-    url: url
+  // Extract property type
+  const typeRegex = /(villa|apartment|penthouse|house|condo|flat|studio)/gi;
+  const typeMatch = lowerMessage.match(typeRegex);
+  if (typeMatch) {
+    params.type = typeMatch[0].toLowerCase();
+  }
+  
+  // Extract price range
+  const minPriceRegex = /(?:from|min|above|over|more than)\s*(?:€|euro|eur|£|\$|usd|dollar)?[ ]?(\d+[,.]\d+|\d+)[ ]?(?:€|euro|eur|£|\$|usd|dollar|k|m)?/i;
+  const minPriceMatch = lowerMessage.match(minPriceRegex);
+  if (minPriceMatch) {
+    let minPrice = minPriceMatch[1].replace(',', '');
+    if (lowerMessage.includes('k')) {
+      minPrice = parseFloat(minPrice) * 1000;
+    } else if (lowerMessage.includes('m')) {
+      minPrice = parseFloat(minPrice) * 1000000;
+    }
+    params.minPrice = parseFloat(minPrice);
+  }
+  
+  const maxPriceRegex = /(?:up to|max|under|below|less than)\s*(?:€|euro|eur|£|\$|usd|dollar)?[ ]?(\d+[,.]\d+|\d+)[ ]?(?:€|euro|eur|£|\$|usd|dollar|k|m)?/i;
+  const maxPriceMatch = lowerMessage.match(maxPriceRegex);
+  if (maxPriceMatch) {
+    let maxPrice = maxPriceMatch[1].replace(',', '');
+    if (lowerMessage.includes('k')) {
+      maxPrice = parseFloat(maxPrice) * 1000;
+    } else if (lowerMessage.includes('m')) {
+      maxPrice = parseFloat(maxPrice) * 1000000;
+    }
+    params.maxPrice = parseFloat(maxPrice);
+  }
+  
+  // Extract bedrooms
+  const bedroomsRegex = /(\d+)\s*(?:bed|bedroom|br)/i;
+  const bedroomsMatch = lowerMessage.match(bedroomsRegex);
+  if (bedroomsMatch) {
+    params.bedrooms = parseInt(bedroomsMatch[1]);
+  }
+  
+  // Extract style preferences
+  const styleKeywords = {
+    'modern': ['modern', 'contemporary', 'minimalist', 'sleek'],
+    'classic': ['classic', 'traditional', 'mediterranean', 'rustic', 'spanish'],
+    'luxury': ['luxury', 'high-end', 'premium', 'exclusive']
   };
-}
-
-// Extract keywords from query
-function extractKeywords(query) {
-  const keywords = [];
-  const lowerQuery = query.toLowerCase();
   
-  // Property types
-  const propertyTypes = ['villa', 'apartment', 'penthouse', 'house', 'condo', 'flat', 'studio'];
-  propertyTypes.forEach(type => {
-    if (lowerQuery.includes(type)) keywords.push(type);
-  });
-  
-  // Features
-  const features = ['pool', 'garden', 'view', 'sea', 'beach', 'golf', 'modern', 'luxury'];
-  features.forEach(feature => {
-    if (lowerQuery.includes(feature)) keywords.push(feature);
-  });
-  
-  return keywords;
-}
-
-// Add contact request to response if no properties found
-function addContactRequestToResponse(response) {
-  if (response.toLowerCase().includes('email') || response.toLowerCase().includes('contact')) {
-    return response; // Already has contact request
+  for (const [style, keywords] of Object.entries(styleKeywords)) {
+    if (keywords.some(keyword => lowerMessage.includes(keyword))) {
+      params.style = style;
+      break;
+    }
   }
   
-  return `${response}\n\nI couldn't find any properties matching your criteria in our database right now. Would you like to leave your email or phone number so we can contact you when properties that match your requirements become available? 😊`;
+  return params;
 }
 
-// Generate a response using OpenAI with improved instructions for ONLY using database properties
-async function generateAIResponse(message, previousMessages, systemMessage, propertyContext, visitorInfo, crawledContent = [], shouldAskForContact = false, includeQualityGuidelines = false) {
-  // Create system message with improved instructions to NEVER invent properties
-  let systemContent = systemMessage + `\n\n${propertyContext}`;
-
-  // Add crawled content if available
-  if (crawledContent && crawledContent.length > 0) {
-    systemContent += `\n\nHere is some additional information about our real estate agency (only reference if directly relevant):\n\n`;
-    
-    crawledContent.forEach((item, index) => {
-      systemContent += `Source: ${item.source}\nCategory: ${item.category}\nContent: ${item.text.substring(0, 300)}...\n\n`;
-    });
-  }
-
-  if (shouldAskForContact) {
-    systemContent += '\n\nIMPORTANT: Since we have no matching properties, ask the user for their contact information (email/phone) so we can notify them when suitable properties become available.';
-  }
-
-  // Create messages array for OpenAI with the enhanced system message
+// Generate a response using OpenAI
+async function generateAIResponse(message, previousMessages, propertyContext, visitorInfo, includeQualityGuidelines = false) {
+  // Create messages array for OpenAI
   const messages = [
     {
       role: "system",
-      content: systemContent
+      content: `You are a helpful real estate assistant for a luxury real estate agency. 
+      ${includeQualityGuidelines ? `
+IMPORTANT GUIDELINES:
+1. When recommending properties, NEVER list more than 3 properties at a time.
+2. Format property recommendations clearly with emojis, bullet points, and proper spacing.
+3. Always structure your answers in a conversational, friendly tone.
+4. Avoid overwhelming the user with long blocks of text.
+5. If you mention a property, always provide a well-formatted listing with price, location, and key features.
+6. Ask clarifying questions if the user's request is vague.
+7. Always try to capture lead information by asking for name, email, or phone when appropriate.` : ''}
+
+${propertyContext}
+
+When a visitor shows interest in a property, ask for their contact details to organize a viewing or provide more information.`
     }
   ];
   
-  // Add previous messages to maintain conversation context
+  // Add previous messages
   if (previousMessages && previousMessages.length > 0) {
     previousMessages.forEach(msg => {
       messages.push({
@@ -510,185 +263,179 @@ async function generateAIResponse(message, previousMessages, systemMessage, prop
   // Add current message
   messages.push({ role: "user", content: message });
   
-  // Call OpenAI API with modified parameters for more direct responses
+  // Call OpenAI API
   const completion = await openai.createChatCompletion({
     model: OPENAI_MODEL,
     messages,
     temperature: 0.7,
-    max_tokens: MAX_RESPONSE_LENGTH,
-    frequency_penalty: 0.7,
-    presence_penalty: 0.6
+    max_tokens: 500
   });
   
   return completion.data.choices[0].message.content;
 }
 
-// Improved property recommendations format
-function formatPropertyRecommendations(response, propertyRecommendations) {
-  if (!propertyRecommendations || propertyRecommendations.length === 0) {
-    return response;
-  }
+// Verify the quality of the response
+async function verifyResponse(userQuestion, generatedResponse, propertyRecommendations) {
+  try {
+    // Skip verification if no OpenAI API key
+    if (!openai) return true;
+    
+    // Create verification prompt
+    const prompt = `You are an AI assistant verifying chatbot responses.
 
-  // Limit to maximum of 3 properties
-  const displayProperties = propertyRecommendations.slice(0, 3);
-  
-  // Create a property showcase section
-  let propertySection = "\n\nHere are some properties you might like:\n\n";
-  
-  displayProperties.forEach((property, index) => {
-    // Format price with currency
-    const price = typeof property.price === 'number' 
-      ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(property.price)
-      : property.price;
-      
-    // Create emoji icons based on property features
-    const icons = [];
-    if (property.propertyType === 'villa') icons.push('🏠');
-    else if (property.propertyType === 'apartment') icons.push('🏢');
-    else icons.push('🏡');
-    
-    if (property.hasPool) icons.push('🏊');
-    
-    // Add property entry
-    propertySection += `${icons.join(' ')} **${property.title || 'Exclusive Property'} – ${price}**\n`;
-    
-    // Add location if available
-    if (property.location) {
-      propertySection += `📍 ${property.location}\n`;
-    }
-    
-    // Add basic details
-    if (property.bedroomCount || property.bathroomCount) {
-      const details = [];
-      if (property.bedroomCount) details.push(`${property.bedroomCount} Bedrooms`);
-      if (property.bathroomCount) details.push(`${property.bathroomCount} Bathrooms`);
-      propertySection += `✅ ${details.join(', ')}\n`;
-    }
-    
-    // Ensure URLs are formatted for in-app navigation
-    const clickableUrl = property.url 
-      ? property.url  // Use provided URL (already relative URL that stays in the app)
-      : `./property/${property.id}`; // Fallback to a generated URL
-    
-    propertySection += `🔗 [View Listing](${clickableUrl})\n\n`;
-  });
-  
-  propertySection += "Would you like more information about any of these properties?";
+- The user asked: "${userQuestion}"
+- The chatbot wants to reply: "${generatedResponse}"
 
-  // If the original response already has property listings, replace them
-  if (response.toLowerCase().includes('property') && 
-      (response.toLowerCase().includes('listing') || response.includes('🏡'))) {
-    // Get the first sentence of the original response
-    const firstSentence = response.split(/[.!?]/)[0] + '.';
-    return firstSentence + propertySection;
-  } else {
-    // Otherwise add the property section to the response
-    return response + propertySection;
+✅ If the response is correct, relevant to real estate, and useful, reply with "APPROVED".
+❌ If the response contains marketing spam, unnecessary metadata, or is unclear, reply with "REJECTED".
+❌ If the response contains more than 3 property recommendations, reply with "REJECTED".
+❌ If the response contains long, unstructured text, reply with "REJECTED".
+
+Only respond with "APPROVED" or "REJECTED".`;
+
+    // Call OpenAI for verification
+    const verification = await openai.createChatCompletion({
+      model: OPENAI_MODEL,
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.1,
+      max_tokens: 10
+    });
+    
+    const result = verification.data.choices[0].message.content.trim();
+    console.log(`🔍 Response verification result: ${result}`);
+    
+    return result === "APPROVED";
+  } catch (error) {
+    console.error("❌ Error verifying response:", error);
+    // If verification fails, assume the response is good enough
+    return true;
   }
 }
 
-// Extract potential lead information from the message and visitor info
-function extractLeadInfo(message, visitorInfo) {
-  const extractedInfo = { ...visitorInfo };
+// Generate a fallback response when OpenAI is not available
+function generateFallbackResponse(message, propertyRecommendations) {
   const lowerMessage = message.toLowerCase();
   
-  // Extract email
-  const emailMatch = message.match(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/);
-  if (emailMatch && !extractedInfo.email) {
-    extractedInfo.email = emailMatch[0];
-  }
-  
-  // Extract phone number (various formats)
-  const phoneMatches = message.match(/(?:\+\d{1,3}[ -]?)?\(?\d{3}\)?[ -]?\d{3}[ -]?\d{4}/g) || 
-                     message.match(/(?:\+\d{1,3}[ -]?)?\d{10,}/g);
-  if (phoneMatches && !extractedInfo.phone) {
-    extractedInfo.phone = phoneMatches[0];
-  }
-  
-  // Extract name (simple approach)
-  const nameMatch = message.match(/(?:my name is|I am|I'm) ([A-Za-z]+(?: [A-Za-z]+)?)/i);
-  if (nameMatch && !extractedInfo.firstName) {
-    const fullName = nameMatch[1].split(' ');
-    if (fullName.length > 1) {
-      extractedInfo.firstName = fullName[0];
-      extractedInfo.lastName = fullName.slice(1).join(' ');
+  // Check for property inquiry
+  if (lowerMessage.includes('property') || 
+      lowerMessage.includes('house') || 
+      lowerMessage.includes('villa') || 
+      lowerMessage.includes('apartment')) {
+    
+    if (propertyRecommendations.length > 0) {
+      // Format property recommendations
+      let response = `I found some great properties that might interest you!\n\n`;
+      
+      propertyRecommendations.slice(0, MAX_PROPERTY_RECOMMENDATIONS).forEach((property, index) => {
+        response += `🏡 **${property.title}** – ${formatPrice(property.price)}\n`;
+        response += `📍 **${property.location || 'Exclusive location'}**\n`;
+        
+        if (property.features && property.features.length > 0) {
+          response += `✅ ${Array.isArray(property.features) ? property.features.join(', ') : property.features}\n`;
+        }
+        
+        if (property.highlight) {
+          response += `✨ ${property.highlight}\n`;
+        }
+        
+        if (property.url) {
+          response += `🔗 [View Listing](${property.url})\n`;
+        }
+        
+        response += '\n';
+      });
+      
+      response += "Would you like to **schedule a viewing** or hear about **more options**? 😊";
+      return response;
     } else {
-      extractedInfo.firstName = fullName[0];
+      return "I'd be happy to help you find the perfect property! Could you tell me a bit more about what you're looking for? For example, are you interested in a villa, apartment, or house? And do you have a specific location or budget in mind?";
     }
   }
   
-  return extractedInfo;
+  // Greeting
+  if (lowerMessage.includes('hello') || 
+      lowerMessage.includes('hi') || 
+      lowerMessage.includes('hey')) {
+    return "Hello! 👋 I'm your personal real estate assistant. How can I help you today? Are you looking to buy, sell, or rent a property?";
+  }
+  
+  // Default response
+  return "Thank you for your message. I'm your personal real estate assistant and I'm here to help you find your dream property. Please let me know what you're looking for, and I'll be happy to assist you!";
 }
 
-// Verify the response doesn't invent properties and follows our guidelines
-async function verifyResponse(message, response, propertyRecommendations) {
-  // Check if the response mentions properties when we don't have any
-  const noProperties = propertyRecommendations.length === 0;
-  const responseMentionsSpecificProperties = response.match(/\d+ bedroom|\d+ bathroom|swimming pool|terrace|villa in|apartment in|penthouse in|(\$|€)[0-9,.]+/gi);
+// Extract potential lead information from the message
+function extractLeadInfo(message, currentVisitorInfo) {
+  const emailRegex = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g;
+  const phoneRegex = /(\+?[0-9]{1,4}[\s.-]?)?(\()?[0-9]{3}(\))?[\s.-]?[0-9]{3}[\s.-]?[0-9]{4}\b/g;
+  const nameRegex = /(?:my name is|i am|i'm) ([A-Za-z]+)(?: [A-Za-z]+)?/i;
   
-  if (noProperties && responseMentionsSpecificProperties) {
-    console.log("❌ Response verification failed: Mentions specific properties when none exist in database");
-    return false;
+  const leadInfo = { ...currentVisitorInfo };
+  
+  // Extract email
+  const emailMatch = message.match(emailRegex);
+  if (emailMatch && !leadInfo.email) {
+    leadInfo.email = emailMatch[0];
   }
   
-  // Check if it asks for contact when no properties available
-  const asksForContact = response.toLowerCase().includes('email') || 
-                       response.toLowerCase().includes('phone') || 
-                       response.toLowerCase().includes('contact');
-  
-  if (noProperties && message.toLowerCase().includes('property') && !asksForContact) {
-    console.log("❌ Response verification failed: Doesn't ask for contact when no properties found");
-    return false;
+  // Extract phone
+  const phoneMatch = message.match(phoneRegex);
+  if (phoneMatch && !leadInfo.phone) {
+    leadInfo.phone = phoneMatch[0];
   }
   
-  // All good!
-  return true;
+  // Extract name
+  const nameMatch = message.match(nameRegex);
+  if (nameMatch && !leadInfo.name) {
+    leadInfo.name = nameMatch[1];
+  }
+  
+  return leadInfo;
 }
 
-// Generate a simple fallback response if OpenAI is not available
-function generateFallbackResponse(message, propertyRecommendations) {
-  // If we have properties, show them
-  if (propertyRecommendations && propertyRecommendations.length > 0) {
-    return "Thank you for your interest in our properties. I've found some listings that might match what you're looking for.";
-  }
-  
-  // Check if the query seems to be about properties
-  if (message.toLowerCase().match(/house|property|apartment|villa|flat|condo|real estate|buy|rent|purchase/i)) {
-    return "I couldn't find any properties matching your criteria in our database right now. Would you like to leave your email or phone number so we can contact you when properties that match your requirements become available? 😊";
-  }
-  
-  // Generic fallback
-  return "Thank you for your message. How can I assist you with your real estate needs today?";
-}
-
-// Save the conversation to the database (with fix for visitor_info)
+// Save the conversation to the database
 async function saveConversation(userId, message, response, visitorId, conversationId) {
   try {
-    // Generate a new conversation ID if needed
-    if (!conversationId) {
-      conversationId = 'conv_' + Math.random().toString(36).substring(2, 15);
-    }
-    
-    // Insert the conversation into the database - FIXED: removed visitor_info column
     const { data, error } = await supabase
       .from('chatbot_conversations')
       .insert({
         user_id: userId,
-        conversation_id: conversationId,
+        message,
+        response,
         visitor_id: visitorId,
-        message: message,
-        response: response
-      });
+        conversation_id: conversationId || `conv-${Date.now()}`
+      })
+      .select('conversation_id');
     
     if (error) {
-      console.error('❌ Error saving conversation:', error);
-    } else {
-      console.log('✅ Conversation saved successfully');
+      console.error("❌ Error saving conversation:", error);
+      return conversationId;
     }
     
-    return conversationId;
+    return data && data.length > 0 ? data[0].conversation_id : conversationId;
   } catch (error) {
-    console.error('❌ Exception saving conversation:', error);
+    console.error("❌ Error in saveConversation:", error);
     return conversationId;
+  }
+}
+
+// Helper function to format price
+function formatPrice(price) {
+  if (!price) return 'Price on request';
+  
+  try {
+    if (typeof price === 'string') {
+      if (price.includes('€') || price.includes('$') || price.includes('£')) {
+        return price;
+      }
+      price = parseFloat(price.replace(/[^\d.-]/g, ''));
+    }
+    
+    return new Intl.NumberFormat('en-US', { 
+      style: 'currency', 
+      currency: 'EUR', 
+      maximumFractionDigits: 0 
+    }).format(price);
+  } catch (e) {
+    return `€${price}`;
   }
 }

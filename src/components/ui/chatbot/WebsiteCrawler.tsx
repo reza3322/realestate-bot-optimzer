@@ -7,8 +7,11 @@ import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Globe, Loader2, AlertCircle, CheckCircle2, ExternalLink, Code } from "lucide-react";
+import { Globe, Loader2, AlertCircle, CheckCircle2, ExternalLink, Lock, Code } from "lucide-react";
 import { Label } from "@/components/ui/label";
+import { Slider } from "@/components/ui/slider";
+import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 
 interface WebsiteCrawlerProps {
   userId: string;
@@ -16,13 +19,28 @@ interface WebsiteCrawlerProps {
   onCrawlComplete?: (success: boolean) => void;
 }
 
-const WebsiteCrawler = ({ userId, onCrawlComplete }: WebsiteCrawlerProps) => {
+const WebsiteCrawler = ({ userId, userPlan = "starter", onCrawlComplete }: WebsiteCrawlerProps) => {
   const [websiteUrl, setWebsiteUrl] = useState<string>("");
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [status, setStatus] = useState<string>("");
   const [error, setError] = useState<string>("");
   const [progress, setProgress] = useState<number>(0);
   const [result, setResult] = useState<any>(null);
+  const [maxPages, setMaxPages] = useState<number>(getDefaultMaxPages());
+  
+  function getDefaultMaxPages() {
+    if (userPlan === "premium") return 50;
+    if (userPlan === "enterprise") return 200;
+    return 10; // Default for starter plan
+  }
+  
+  function getMaxPagesLimit() {
+    if (userPlan === "enterprise") return 500;
+    if (userPlan === "premium") return 200;
+    return 10; // Default for starter plan
+  }
+  
+  const isPremium = userPlan === "premium" || userPlan === "enterprise";
 
   const isValidUrl = (url: string) => {
     try {
@@ -59,13 +77,14 @@ const WebsiteCrawler = ({ userId, onCrawlComplete }: WebsiteCrawlerProps) => {
 
     try {
       // Call the Supabase Edge Function to crawl the website
-      setStatus("Crawling website pages...");
+      setStatus("Crawling website pages with JavaScript support...");
       setProgress(30);
       
       const { data, error } = await supabase.functions.invoke("web-crawler", {
         body: {
           userId,
           url: formattedUrl,
+          maxPages: maxPages
         },
       });
 
@@ -82,10 +101,10 @@ const WebsiteCrawler = ({ userId, onCrawlComplete }: WebsiteCrawlerProps) => {
       }
 
       setProgress(100);
-      setStatus("Initial pages crawled successfully! Continuing in the background...");
+      setStatus("Website crawled successfully!");
       setResult(data);
       
-      toast.success("Website crawling has started! Initial pages processed for chatbot training. The rest will continue in the background.");
+      toast.success("Website crawled and content processed for chatbot training!");
       
       setTimeout(() => {
         setProgress(0);
@@ -111,10 +130,15 @@ const WebsiteCrawler = ({ userId, onCrawlComplete }: WebsiteCrawlerProps) => {
         <CardTitle className="text-lg flex items-center">
           <Globe className="mr-2 h-5 w-5 text-primary" />
           Crawl Your Website
+          {isPremium && (
+            <Badge variant="outline" className="ml-2 bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400 border-amber-200 dark:border-amber-800">
+              Premium
+            </Badge>
+          )}
         </CardTitle>
         <CardDescription>
           Enter your website URL to extract content for chatbot training.
-          Your chatbot will learn from your website content to provide more relevant responses.
+          Your chatbot will learn from your website content, including JavaScript-rendered content, and provide more relevant responses.
         </CardDescription>
       </CardHeader>
 
@@ -147,6 +171,35 @@ const WebsiteCrawler = ({ userId, onCrawlComplete }: WebsiteCrawlerProps) => {
           </div>
         </div>
 
+        <div className="space-y-2">
+          <div className="flex justify-between items-center">
+            <Label htmlFor="max-pages" className="flex items-center">
+              Pages to Crawl
+              {!isPremium && (
+                <Lock className="ml-1 h-3 w-3 text-muted-foreground" />
+              )}
+            </Label>
+            <span className="text-sm font-medium">
+              {maxPages} {maxPages === getMaxPagesLimit() ? "(Max)" : ""}
+            </span>
+          </div>
+          <Slider
+            id="max-pages"
+            value={[maxPages]}
+            min={1}
+            max={getMaxPagesLimit()}
+            step={1}
+            onValueChange={(values) => setMaxPages(values[0])}
+            disabled={isProcessing || !isPremium}
+            className={!isPremium ? "opacity-70" : ""}
+          />
+          {!isPremium && (
+            <p className="text-xs text-muted-foreground mt-1">
+              Upgrade to Premium to crawl more than 10 pages.
+            </p>
+          )}
+        </div>
+
         {(status || progress > 0) && (
           <div className="space-y-2">
             {progress > 0 && (
@@ -170,8 +223,7 @@ const WebsiteCrawler = ({ userId, onCrawlComplete }: WebsiteCrawlerProps) => {
           <Alert className="mt-2 bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-900">
             <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
             <AlertDescription>
-              Successfully started crawling your website. Initial pages processed: {result.pages_imported}.
-              {result.status === "processing" && " The crawler is continuing to process more pages in the background."}
+              Successfully crawled {result.pages_imported} pages from your website.
               {result.pages_failed > 0 && ` (${result.pages_failed} pages failed)`}
             </AlertDescription>
           </Alert>
@@ -195,14 +247,29 @@ const WebsiteCrawler = ({ userId, onCrawlComplete }: WebsiteCrawlerProps) => {
           )}
         </Button>
 
+        <div className="flex items-center space-x-2 p-2 bg-blue-50 dark:bg-blue-950/30 rounded border border-blue-200 dark:border-blue-900">
+          <Code className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+          <p className="text-xs text-blue-700 dark:text-blue-300">
+            <span className="font-medium">New:</span> Our crawler now extracts JavaScript-rendered content for better training data.
+          </p>
+        </div>
+
         <div className="text-xs text-muted-foreground mt-2 bg-muted/40 p-3 rounded-md border">
           <p className="font-medium mb-1">For best results:</p>
           <ul className="list-disc pl-5 space-y-1">
             <li>Make sure your website is publicly accessible</li>
-            <li>The crawler processes your entire website in batches to avoid timeouts</li>
+            <li>The crawler will extract content from HTML pages and JavaScript-rendered content</li>
             <li>Only pages on the same domain will be crawled</li>
-            <li>Large websites may take some time to fully process in the background</li>
-            <li>The crawler automatically adjusts its speed to avoid rate limiting</li>
+            <li>
+              {isPremium
+                ? `Up to ${getMaxPagesLimit()} pages will be processed with your ${userPlan} plan`
+                : "Up to 10 pages will be processed with your current plan"}
+            </li>
+            {!isPremium && (
+              <li className="text-primary-600 dark:text-primary-400">
+                Upgrade to Premium for up to 200 pages, or Enterprise for up to 500 pages
+              </li>
+            )}
           </ul>
         </div>
       </CardContent>

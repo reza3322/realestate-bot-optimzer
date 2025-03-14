@@ -40,26 +40,15 @@ serve(async (req) => {
       hasPool
     } = searchParams || {};
 
-    // Start with a basic query
     let query = supabaseClient
       .from('properties')
       .select('id, title, description, price, bedrooms, bathrooms, city, state, status, url, living_area, plot_area, garage_area, terrace, has_pool')
       .eq('user_id', userId)
       .eq('status', 'active');
 
-    // Apply filters - IMPROVED FLEXIBILITY 
-    if (type) {
-      // Convert to lowercase and look for partial matches
-      const lowerType = type.toLowerCase();
-      query = query.or(`type.ilike.%${lowerType}%,title.ilike.%${lowerType}%,description.ilike.%${lowerType}%`);
-    }
-    
-    if (location) {
-      // More flexible location matching
-      const lowerLocation = location.toLowerCase();
-      query = query.or(`city.ilike.%${lowerLocation}%,state.ilike.%${lowerLocation}%,description.ilike.%${lowerLocation}%`);
-    }
-    
+    // Apply filters
+    if (type) query = query.eq('type', type);
+    if (location) query = query.or(`city.ilike.%${location}%,state.ilike.%${location}%`);
     if (minPrice) query = query.gte('price', minPrice);
     if (maxPrice) query = query.lte('price', maxPrice);
     if (bedrooms) query = query.gte('bedrooms', bedrooms);
@@ -73,8 +62,8 @@ serve(async (req) => {
       throw error;
     }
 
-    // If no results and style is provided, try style-based search
-    if ((!properties || properties.length === 0) && style) {
+    // If we have a style query, use the database function for better relevance matching
+    if (style && properties.length === 0) {
       console.log(`No results with basic filtering, trying style-based search for: ${style}`);
       const { data: styleResults, error: styleError } = await supabaseClient
         .rpc('search_properties_by_style', { 
@@ -87,65 +76,13 @@ serve(async (req) => {
         console.error('Error searching properties by style:', styleError);
       } else if (styleResults && styleResults.length > 0) {
         console.log(`Found ${styleResults.length} properties by style`);
-        
-        // Make sure URLs are included in the response
-        const enhancedResults = styleResults.map(property => {
-          // Make sure URL exists, create a placeholder if not
-          if (!property.url) {
-            property.url = `https://youragency.com/listing/${property.id.substring(0, 6)}`;
-          }
-          
-          return {
-            ...property,
-            features: extractFeatures(property),
-            highlight: getHighlight(property),
-            location: property.city ? (property.state ? `${property.city}, ${property.state}` : property.city) : 'Exclusive Location'
-          };
-        });
-        
-        return new Response(
-          JSON.stringify({ properties: enhancedResults }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-    }
-
-    // If still no results, try a broader search
-    if (!properties || properties.length === 0) {
-      console.log('No specific matches found, trying broader search');
-      
-      // Fall back to a broader search just to show something relevant
-      const { data: broadResults, error: broadError } = await supabaseClient
-        .from('properties')
-        .select('id, title, description, price, bedrooms, bathrooms, city, state, status, url, living_area, plot_area, garage_area, terrace, has_pool')
-        .eq('user_id', userId)
-        .eq('status', 'active')
-        .limit(maxResults);
-        
-      if (broadError) {
-        console.error('Error in broader property search:', broadError);
-      } else if (broadResults && broadResults.length > 0) {
-        console.log(`Found ${broadResults.length} properties in broader search`);
-        
-        // Format and return properties
-        const formattedProperties = broadResults.map(property => {
-          // Make sure URL exists, create a placeholder if not
-          if (!property.url) {
-            property.url = `https://youragency.com/listing/${property.id.substring(0, 6)}`;
-          }
-          
-          return {
-            ...property,
-            features: extractFeatures(property),
-            highlight: getHighlight(property),
-            location: property.city ? (property.state ? `${property.city}, ${property.state}` : property.city) : 'Exclusive Location'
-          };
-        });
-
         return new Response(
           JSON.stringify({ 
-            properties: formattedProperties,
-            message: 'Showing best available properties based on broader search'
+            properties: styleResults.map(property => ({
+              ...property,
+              features: extractFeatures(property),
+              highlight: getHighlight(property)
+            })) 
           }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
@@ -153,19 +90,11 @@ serve(async (req) => {
     }
 
     // Format and return properties
-    const formattedProperties = properties ? properties.map(property => {
-      // Make sure URL exists, create a placeholder if not
-      if (!property.url) {
-        property.url = `https://youragency.com/listing/${property.id.substring(0, 6)}`;
-      }
-      
-      return {
-        ...property,
-        features: extractFeatures(property),
-        highlight: getHighlight(property),
-        location: property.city ? (property.state ? `${property.city}, ${property.state}` : property.city) : 'Exclusive Location'
-      };
-    }) : [];
+    const formattedProperties = properties.map(property => ({
+      ...property,
+      features: extractFeatures(property),
+      highlight: getHighlight(property)
+    }));
 
     return new Response(
       JSON.stringify({ properties: formattedProperties }),

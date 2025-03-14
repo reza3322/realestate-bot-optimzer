@@ -44,7 +44,6 @@ const TrainingContentManager = ({ userId, onContentUpdate }: TrainingContentProp
         .from("chatbot_training_files")
         .select("*")
         .eq("user_id", userId)
-        .eq("content_type", "file")
         .order("created_at", { ascending: false });
       
       if (filesError) throw filesError;
@@ -52,7 +51,7 @@ const TrainingContentManager = ({ userId, onContentUpdate }: TrainingContentProp
       
       // Fetch Q&A content
       const { data: qa, error: qaError } = await supabase
-        .from("chatbot_training_files")
+        .from("chatbot_training_data")
         .select("*")
         .eq("user_id", userId)
         .eq("content_type", "qa_pair")
@@ -63,7 +62,7 @@ const TrainingContentManager = ({ userId, onContentUpdate }: TrainingContentProp
       
       // Fetch crawled content
       const { data: crawled, error: crawledError } = await supabase
-        .from("chatbot_training_files")
+        .from("chatbot_training_data")
         .select("*")
         .eq("user_id", userId)
         .eq("content_type", "web_crawl")
@@ -83,8 +82,15 @@ const TrainingContentManager = ({ userId, onContentUpdate }: TrainingContentProp
 
   const handleDelete = async (id: string, type: 'file' | 'qa' | 'crawl') => {
     try {
+      let tableName;
+      if (type === 'file') {
+        tableName = 'chatbot_training_files';
+      } else {
+        tableName = 'chatbot_training_data';
+      }
+      
       const { error } = await supabase
-        .from("chatbot_training_files")
+        .from(tableName)
         .delete()
         .eq("id", id);
       
@@ -149,7 +155,7 @@ const TrainingContentManager = ({ userId, onContentUpdate }: TrainingContentProp
         : { answer: editedText };
       
       const { error } = await supabase
-        .from("chatbot_training_files")
+        .from("chatbot_training_data")
         .update(updateData)
         .eq("id", id);
       
@@ -180,16 +186,14 @@ const TrainingContentManager = ({ userId, onContentUpdate }: TrainingContentProp
     
     try {
       const { data, error } = await supabase
-        .from("chatbot_training_files")
+        .from("chatbot_training_data")
         .insert({
           user_id: userId,
           question: newQuestion,
           answer: newAnswer,
           content_type: "qa_pair",
           category: "Custom Q&A",
-          priority: 8,
-          source_file: "Q&A Pair", // Required field in our unified schema
-          extracted_text: newAnswer // Also store in extracted_text for compatibility
+          priority: 8
         })
         .select();
       
@@ -487,7 +491,7 @@ const TrainingContentManager = ({ userId, onContentUpdate }: TrainingContentProp
                     <div key={content.id} className="border rounded-md p-4">
                       <div className="flex justify-between items-start mb-2">
                         <div>
-                          <h3 className="font-medium truncate max-w-xs">{content.question || content.source_file || 'Web Content'}</h3>
+                          <h3 className="font-medium truncate max-w-xs">{content.question || 'Web Content'}</h3>
                           <p className="text-sm text-muted-foreground">
                             {new Date(content.created_at).toLocaleDateString()} - Priority: {content.priority}
                           </p>
@@ -502,7 +506,7 @@ const TrainingContentManager = ({ userId, onContentUpdate }: TrainingContentProp
                       </div>
                       
                       <div className="mt-2 bg-muted p-3 rounded-md text-sm max-h-40 overflow-y-auto">
-                        {content.extracted_text || content.answer}
+                        {content.answer}
                       </div>
                     </div>
                   ))}

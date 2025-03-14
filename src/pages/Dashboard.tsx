@@ -17,7 +17,7 @@ import Integrations from '@/components/dashboard/Integrations';
 import AccountSettings from '@/components/dashboard/AccountSettings';
 import ChatbotSettings from '@/components/dashboard/ChatbotSettings';
 import ChatConversations from "@/components/dashboard/ChatConversations";
-import { PlusCircle, Upload, FileSpreadsheet, Users, Bell } from 'lucide-react';
+import { PlusCircle, Upload, FileSpreadsheet, Users, Bell, Lock } from 'lucide-react';
 
 const Dashboard = () => {
   const [user, setUser] = useState(null);
@@ -113,7 +113,7 @@ const Dashboard = () => {
             console.error('Error fetching profile:', profileError);
           } else if (profileData) {
             setUserProfile(profileData);
-            setUserPlan('enterprise');
+            setUserPlan(profileData.plan || 'starter');
           }
           
           const role = await getUserRole(session.user.id);
@@ -257,7 +257,15 @@ const Dashboard = () => {
 
   const firstName = userProfile?.first_name || user.user_metadata?.first_name || user.email?.split('@')[0] || 'there';
   
-  const isPremiumFeature = () => false;
+  const isPremiumFeature = (requiredPlan) => {
+    const planLevels = {
+      'starter': 1,
+      'professional': 2,
+      'enterprise': 3
+    };
+    
+    return planLevels[userPlan] < planLevels[requiredPlan];
+  };
 
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground">
@@ -286,7 +294,7 @@ const Dashboard = () => {
             </TabsList>
             
             <TabsContent value="overview" className="space-y-4 md:space-y-6">
-              <QuickStats stats={stats} userPlan="enterprise" isPremiumFeature={isPremiumFeature} userId={user.id} />
+              <QuickStats stats={stats} userPlan={userPlan} isPremiumFeature={isPremiumFeature} userId={user.id} />
               
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
                 <Card className="col-span-1">
@@ -348,10 +356,13 @@ const Dashboard = () => {
                         <Button 
                           onClick={() => setActiveTab('marketing')} 
                           className="flex justify-start items-center h-auto py-2 w-full"
-                          variant="outline"
+                          variant={isPremiumFeature('professional') ? "outline" : "outline"}
                           size="sm">
-                          <Bell className="mr-2 h-4 w-4 flex-shrink-0" />
-                          <span className="truncate">AI Follow-ups</span>
+                          {isPremiumFeature('professional') && <Lock className="mr-2 h-4 w-4 text-muted-foreground flex-shrink-0" />}
+                          {!isPremiumFeature('professional') && <Bell className="mr-2 h-4 w-4 flex-shrink-0" />}
+                          <span className="truncate">
+                            {isPremiumFeature('professional') ? 'AI Follow-ups (Pro)' : 'AI Follow-ups'}
+                          </span>
                         </Button>
                         
                         <Button 
@@ -359,10 +370,25 @@ const Dashboard = () => {
                           className="flex justify-start items-center h-auto py-2 w-full"
                           variant="outline" 
                           size="sm">
-                          <Users className="mr-2 h-4 w-4 flex-shrink-0" />
-                          <span className="truncate">Manage Team</span>
+                          {isPremiumFeature('professional') ? (
+                            <>
+                              <Lock className="mr-2 h-4 w-4 text-muted-foreground flex-shrink-0" />
+                              <span className="truncate">Team (Pro)</span>
+                            </>
+                          ) : (
+                            <>
+                              <Users className="mr-2 h-4 w-4 flex-shrink-0" />
+                              <span className="truncate">Manage Team</span>
+                            </>
+                          )}
                         </Button>
                       </div>
+                      
+                      {userPlan === 'starter' && (
+                        <Button onClick={() => setActiveTab('settings')} variant="default" size="sm" className="mt-2 w-full">
+                          Upgrade to Professional
+                        </Button>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
@@ -374,31 +400,31 @@ const Dashboard = () => {
             </TabsContent>
             
             <TabsContent value="properties">
-              <PropertyListings userId={user?.id} userPlan="enterprise" isPremiumFeature={isPremiumFeature} />
+              <PropertyListings userId={user?.id} userPlan={userPlan} isPremiumFeature={isPremiumFeature} />
             </TabsContent>
             
             <TabsContent value="leads">
-              <LeadManagement userPlan="enterprise" isPremiumFeature={isPremiumFeature} />
+              <LeadManagement userPlan={userPlan} isPremiumFeature={isPremiumFeature} />
             </TabsContent>
             
             <TabsContent value="marketing">
-              <MarketingAutomation userPlan="enterprise" isPremiumFeature={isPremiumFeature} />
+              <MarketingAutomation userPlan={userPlan} isPremiumFeature={isPremiumFeature} />
             </TabsContent>
             
             <TabsContent value="chatbot">
               <ChatbotSettings 
                 userId={user.id} 
-                userPlan="enterprise" 
+                userPlan={userPlan} 
                 isPremiumFeature={isPremiumFeature} 
               />
             </TabsContent>
             
             <TabsContent value="integrations">
-              <Integrations userPlan="enterprise" isPremiumFeature={isPremiumFeature} />
+              <Integrations userPlan={userPlan} isPremiumFeature={isPremiumFeature} />
             </TabsContent>
             
             <TabsContent value="settings">
-              <AccountSettings user={user} userPlan="enterprise" userProfile={userProfile} />
+              <AccountSettings user={user} userPlan={userPlan} userProfile={userProfile} />
             </TabsContent>
           </Tabs>
         </main>

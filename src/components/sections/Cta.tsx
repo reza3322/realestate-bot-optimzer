@@ -4,18 +4,110 @@ import { Check, Star } from 'lucide-react';
 import { motion } from 'framer-motion';
 import confetti from 'canvas-confetti';
 import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
+interface PricingPlan {
+  name: string;
+  price: string;
+  yearlyPrice: string;
+  period: string;
+  features: string[];
+  description: string;
+  buttonText: string;
+  href: string;
+  isPopular: boolean;
+}
+
+const pricingPlans: PricingPlan[] = [
+  {
+    name: "STARTER",
+    price: "99",
+    yearlyPrice: "89",
+    period: "per month",
+    features: [
+      "AI Chatbot integration",
+      "Basic CRM functionality",
+      "Lead qualification",
+      "Email notifications",
+      "Basic analytics dashboard",
+    ],
+    description: "Perfect for individual agents and small agencies",
+    buttonText: "Start Free Trial",
+    href: "#",
+    isPopular: false,
+  },
+  {
+    name: "PROFESSIONAL",
+    price: "299",
+    yearlyPrice: "269",
+    period: "per month",
+    features: [
+      "Everything in Starter",
+      "AI Agent integration",
+      "Advanced CRM functionality",
+      "30 qualified leads per month",
+      "Automated follow-ups",
+      "Property matching engine",
+      "Priority support",
+    ],
+    description: "Ideal for growing teams and established agencies",
+    buttonText: "Get Started",
+    href: "#",
+    isPopular: true,
+  },
+  {
+    name: "ENTERPRISE",
+    price: "599",
+    yearlyPrice: "539",
+    period: "per month",
+    features: [
+      "Everything in Professional",
+      "Social media AI agent",
+      "Unlimited qualified leads",
+      "Custom integrations",
+      "Dedicated account manager",
+      "White-label solutions",
+      "Advanced analytics",
+      "API access",
+    ],
+    description: "For large agencies with specific needs",
+    buttonText: "Contact Sales",
+    href: "#",
+    isPopular: false,
+  },
+];
+
 const Cta = () => {
   const [isMonthly, setIsMonthly] = useState(true);
   const switchRef = useRef<HTMLButtonElement>(null);
   const navigate = useNavigate();
+  // Remove clerk auth and use a simple state for auth status
   const [isSignedIn, setIsSignedIn] = useState(false);
+
+  // Check if we're on desktop (for animations)
+  const useMediaQuery = (query: string): boolean => {
+    const [matches, setMatches] = useState(false);
+    
+    useState(() => {
+      const media = window.matchMedia(query);
+      if (media.matches !== matches) {
+        setMatches(media.matches);
+      }
+      
+      const listener = () => setMatches(media.matches);
+      window.addEventListener("resize", listener);
+      return () => window.removeEventListener("resize", listener);
+    });
+    
+    return matches;
+  };
   
+  const isDesktop = useMediaQuery("(min-width: 768px)");
+
   const handleToggle = (checked: boolean) => {
     setIsMonthly(!checked);
     if (checked && switchRef.current) {
@@ -45,38 +137,24 @@ const Cta = () => {
     }
   };
 
-  const handlePlanSelection = (event: React.MouseEvent) => {
+  const handlePlanSelection = (plan: PricingPlan) => {
     // Prevent any default scrolling behavior
-    event.preventDefault();
+    event?.preventDefault();
+    
+    if (plan.name === "ENTERPRISE") {
+      // Modify to use a controlled scroll that doesn't affect page position
+      // Instead of directly scrolling, we'll use the navigate function
+      navigate('/#contact');
+      return;
+    }
     
     if (isSignedIn) {
       navigate('/dashboard');
-      toast.success(`Selected plan! This would integrate with a payment provider in production.`);
+      toast.success(`Selected ${plan.name} plan! This would integrate with a payment provider in production.`);
     } else {
       navigate('/auth');
     }
   };
-
-  const features = [
-    "AI Chatbot integration",
-    "Advanced CRM functionality",
-    "Unlimited qualified leads",
-    "Automated follow-ups",
-    "Property matching engine",
-    "Priority support",
-    "Social media AI agent",
-    "Custom integrations",
-    "White-label solutions",
-    "Advanced analytics",
-    "API access"
-  ];
-
-  const perks = [
-    "24/7 Support",
-    "Exclusive Webinars",
-    "Priority Assistance",
-    "Early Feature Access"
-  ];
 
   return (
     <section id="pricing" className="py-20 relative">
@@ -86,7 +164,7 @@ const Cta = () => {
             Simple, Transparent Pricing
           </h2>
           <p className="text-muted-foreground text-lg max-w-3xl mx-auto">
-            One ultimate plan with all features included. Get access to our platform, lead generation tools, and dedicated support.
+            Choose the plan that works for you. All plans include access to our platform, lead generation tools, and dedicated support.
           </p>
         </div>
 
@@ -102,79 +180,100 @@ const Cta = () => {
               />
             </label>
             <span className="font-semibold">
-              Annual billing <span className="text-primary">(Save 15%)</span>
+              Annual billing <span className="text-primary">(Save 10%)</span>
             </span>
           </div>
         </div>
 
-        <motion.div
-          initial={{ y: 50, opacity: 0 }}
-          whileInView={{ y: 0, opacity: 1 }}
-          viewport={{ once: true }}
-          transition={{
-            duration: 1.2,
-            type: "spring",
-            stiffness: 100,
-            damping: 30,
-            delay: 0.3,
-            opacity: { duration: 0.5 },
-          }}
-          className="max-w-lg mx-auto rounded-2xl border border-border bg-background overflow-hidden"
-        >
-          {/* Plan header */}
-          <div className="p-6 pb-4">
-            <h3 className="text-2xl font-bold">Ultimate Plan</h3>
-            <p className="text-muted-foreground mt-1">
-              Access everything you need to grow your business.
-            </p>
-            
-            <div className="mt-6 flex items-baseline">
-              <span className="text-5xl font-bold">
-                €{isMonthly ? "199" : "169"}
-              </span>
-              {isMonthly && (
-                <span className="text-muted-foreground ml-2 line-through">€199</span>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-7xl mx-auto">
+          {pricingPlans.map((plan, index) => (
+            <motion.div
+              key={index}
+              initial={{ y: 50, opacity: 0 }}
+              whileInView={
+                isDesktop
+                  ? {
+                      y: plan.isPopular ? -20 : 0,
+                      opacity: 1,
+                      x: index === 2 ? -30 : index === 0 ? 30 : 0,
+                      scale: index === 0 || index === 2 ? 0.94 : 1.0,
+                    }
+                  : { y: 0, opacity: 1 }
+              }
+              viewport={{ once: true }}
+              transition={{
+                duration: 1.6,
+                type: "spring",
+                stiffness: 100,
+                damping: 30,
+                delay: index * 0.1 + 0.3,
+                opacity: { duration: 0.5 },
+              }}
+              className={cn(
+                "rounded-2xl border p-6 bg-background text-center flex flex-col relative",
+                plan.isPopular ? "border-primary border-2" : "border-border",
+                !plan.isPopular && "mt-5",
+                index === 0 || index === 2
+                  ? "z-0 transform-gpu"
+                  : "z-10",
+                index === 0 && "origin-right",
+                index === 2 && "origin-left"
               )}
-            </div>
-            <p className="text-sm text-muted-foreground mt-1">
-              {isMonthly ? "per month" : "per month, billed annually"}
-            </p>
-            
-            <Button 
-              className="w-full mt-6"
-              size="lg"
-              onClick={handlePlanSelection}
             >
-              Get Started
-            </Button>
-          </div>
-          
-          {/* Features section */}
-          <div className="border-t bg-muted/40 p-6">
-            <h4 className="font-semibold mb-4">Features:</h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {features.slice(0, 4).map((feature, i) => (
-                <div key={`feature-${i}`} className="flex items-start gap-2">
-                  <Check className="h-4 w-4 text-primary mt-1 flex-shrink-0" />
-                  <span className="text-sm">{feature}</span>
+              {plan.isPopular && (
+                <div className="absolute top-0 right-0 bg-primary py-0.5 px-2 rounded-bl-xl rounded-tr-xl flex items-center">
+                  <Star className="text-primary-foreground h-4 w-4 fill-current" />
+                  <span className="text-primary-foreground ml-1 font-sans font-semibold text-xs">
+                    Popular
+                  </span>
                 </div>
-              ))}
-            </div>
-          </div>
-          
-          {/* Perks section */}
-          <div className="border-t bg-muted/40 p-6">
-            <h4 className="font-semibold mb-4">Perks:</h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {perks.map((perk, i) => (
-                <div key={`perk-${i}`} className="flex items-start gap-2">
-                  <Check className="h-4 w-4 text-primary mt-1 flex-shrink-0" />
-                  <span className="text-sm">{perk}</span>
+              )}
+              <div className="flex-1 flex flex-col">
+                <p className="text-base font-semibold text-muted-foreground">
+                  {plan.name}
+                </p>
+                <div className="mt-6 flex items-center justify-center gap-x-2">
+                  <span className="text-5xl font-bold tracking-tight text-foreground">
+                    €{isMonthly ? plan.price : plan.yearlyPrice}
+                  </span>
+                  <span className="text-sm font-semibold leading-6 tracking-wide text-muted-foreground">
+                    / {plan.period}
+                  </span>
                 </div>
-              ))}
-            </div>
-          </div>
-        </motion.div>
+
+                <p className="text-xs leading-5 text-muted-foreground mt-1">
+                  {isMonthly ? "billed monthly" : "billed annually"}
+                </p>
+
+                <ul className="mt-6 space-y-3">
+                  {plan.features.map((feature, idx) => (
+                    <li key={idx} className="flex items-start gap-2">
+                      <Check className="h-4 w-4 text-primary mt-1 flex-shrink-0" />
+                      <span className="text-left text-sm">{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+
+                <div className="mt-auto pt-8">
+                  <Button 
+                    variant={plan.isPopular ? "default" : "outline"} 
+                    size="lg"
+                    className={cn(
+                      "w-full group relative overflow-hidden",
+                      "transform-gpu transition-all duration-300 ease-out hover:ring-2 hover:ring-primary hover:ring-offset-1 hover:bg-primary hover:text-primary-foreground"
+                    )}
+                    onClick={() => handlePlanSelection(plan)}
+                  >
+                    {plan.buttonText}
+                  </Button>
+                  <p className="mt-4 text-xs leading-5 text-muted-foreground">
+                    {plan.description}
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+          ))}
+        </div>
       </div>
     </section>
   );

@@ -216,7 +216,7 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
       
       setLoading(true);
       try {
-        await createChatbotSettingsTable(userId);
+        await createChatbotSettingsTable();
         
         console.log(`Fetching settings for user ID: ${userId}`);
         const { data, error } = await supabase
@@ -366,18 +366,13 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
 
     setIsTesting(true);
     try {
-      const visitorInfo = {
-        visitorId: `test-visitor-${Date.now()}`,
-        name: "Test User"
-      };
+      const { response, error } = await testChatbotResponse(testMessage, userId);
       
-      const result = await testChatbotResponse(testMessage, userId, visitorInfo);
-      
-      if (result.error) {
-        throw new Error(result.error);
+      if (error) {
+        throw new Error(error);
       }
 
-      setTestResponse(result.response);
+      setTestResponse(response);
       toast.success("Test message processed successfully");
     } catch (error) {
       console.error("Error testing chatbot:", error);
@@ -593,7 +588,7 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
                       <Label htmlFor="language">Language</Label>
                       <Select 
                         value={settings.language || 'en'} 
-                        onValueChange={(value) => setSettings({...settings, language: value as LanguageCode})}
+                        onValueChange={(value) => setSettings({...settings, language: value})}
                       >
                         <SelectTrigger id="language">
                           <SelectValue placeholder="Select language" />
@@ -894,7 +889,6 @@ const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettings
                           borderRadius: settings.buttonStyle === 'pill' ? '9999px' : 
                                         settings.buttonStyle === 'rounded' ? '0.375rem' : '0'
                         }}
-                        userId={userId}
                       />
                     </div>
                   </CardContent>

@@ -1,6 +1,6 @@
 
 -- Create table for storing chatbot training data (Q&A pairs)
-CREATE TABLE IF NOT EXISTS public.chatbot_training_files (
+CREATE TABLE IF NOT EXISTS public.chatbot_training_data (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL,
   question TEXT NOT NULL,
@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS public.chatbot_training_files (
 );
 
 -- Create table for storing chatbot training files (extracted text from documents)
-CREATE TABLE IF NOT EXISTS public.chatbot_training_files_uploads (
+CREATE TABLE IF NOT EXISTS public.chatbot_training_files (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL,
   source_file TEXT NOT NULL,
@@ -37,49 +37,49 @@ CREATE TABLE IF NOT EXISTS public.chatbot_conversations (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
 );
 
--- Enable RLS and create policies for chatbot_training_files
-ALTER TABLE public.chatbot_training_files ENABLE ROW LEVEL SECURITY;
+-- Enable RLS and create policies for chatbot_training_data
+ALTER TABLE public.chatbot_training_data ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Users can view their own training data"
-  ON public.chatbot_training_files
+  ON public.chatbot_training_data
   FOR SELECT
   USING (auth.uid() = user_id);
 
 CREATE POLICY "Users can insert their own training data"
-  ON public.chatbot_training_files
+  ON public.chatbot_training_data
   FOR INSERT
   WITH CHECK (auth.uid() = user_id);
 
 CREATE POLICY "Users can update their own training data"
-  ON public.chatbot_training_files
+  ON public.chatbot_training_data
   FOR UPDATE
   USING (auth.uid() = user_id);
 
 CREATE POLICY "Users can delete their own training data"
-  ON public.chatbot_training_files
+  ON public.chatbot_training_data
   FOR DELETE
   USING (auth.uid() = user_id);
 
--- Enable RLS and create policies for chatbot_training_files_uploads
-ALTER TABLE public.chatbot_training_files_uploads ENABLE ROW LEVEL SECURITY;
+-- Enable RLS and create policies for chatbot_training_files
+ALTER TABLE public.chatbot_training_files ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Users can view their own training files"
-  ON public.chatbot_training_files_uploads
+  ON public.chatbot_training_files
   FOR SELECT
   USING (auth.uid() = user_id);
 
 CREATE POLICY "Users can insert their own training files"
-  ON public.chatbot_training_files_uploads
+  ON public.chatbot_training_files
   FOR INSERT
   WITH CHECK (auth.uid() = user_id);
 
 CREATE POLICY "Users can update their own training files"
-  ON public.chatbot_training_files_uploads
+  ON public.chatbot_training_files
   FOR UPDATE
   USING (auth.uid() = user_id);
 
 CREATE POLICY "Users can delete their own training files"
-  ON public.chatbot_training_files_uploads
+  ON public.chatbot_training_files
   FOR DELETE
   USING (auth.uid() = user_id);
 
