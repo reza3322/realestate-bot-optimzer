@@ -35,7 +35,13 @@ export const testChatbotResponse = async (
       lowerMessage.includes('how can i contact') || 
       lowerMessage.includes('tell me about your') ||
       lowerMessage.includes('what is your') ||
-      lowerMessage.includes('where are you');
+      lowerMessage.includes('where are you') ||
+      lowerMessage.includes('your team') ||
+      lowerMessage.includes('your services') ||
+      lowerMessage.includes('your experience') ||
+      lowerMessage.includes('how long have you') ||
+      lowerMessage.includes('your hours') ||
+      lowerMessage.includes('when are you');
     
     // If it's an obvious agency question, set intent directly
     let intentData;
@@ -145,12 +151,11 @@ export const testChatbotResponse = async (
     trainingResults.qaMatches = searchResults.qa_matches || [];
     trainingResults.fileContent = searchResults.file_content || [];
     
-    // Check if we found good training matches
-    // LOWERED threshold to capture more potential matches
+    // Check if we found good training matches - LOWER the threshold for agency questions
     const hasGoodTrainingMatches = (trainingResults.qaMatches.length > 0 && 
-                                    trainingResults.qaMatches[0].similarity > 0.15) || 
-                                   (trainingResults.fileContent.length > 0 && 
-                                    trainingResults.fileContent[0].similarity > 0.15);
+                                   trainingResults.qaMatches[0].similarity > 0.15) || 
+                                  (trainingResults.fileContent.length > 0 && 
+                                   trainingResults.fileContent[0].similarity > 0.15);
     
     // For agency questions, force using training data even with lower similarities
     const forceTrainingDataForAgency = isAgencyOrFaqIntent && 
@@ -215,10 +220,9 @@ export const testChatbotResponse = async (
       }
       
       if (trainingResults.fileContent.length > 0) {
-        trainingContext += 'Additional information from our documents:\n\n';
+        trainingContext += 'Additional information from our website and documents:\n\n';
         trainingResults.fileContent.forEach((content: any) => {
-          // Extract a relevant snippet rather than the entire content
-          trainingContext += `${content.text.substring(0, 500)}...\n\n`;
+          trainingContext += `Source: ${content.source || 'Website'}\nCategory: ${content.category || 'General'}\nContent: ${content.text.substring(0, 800)}...\n\n`;
         });
       }
       

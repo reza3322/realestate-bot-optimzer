@@ -158,7 +158,7 @@ serve(async (req) => {
       model: 'gpt-4o-mini', // Using the most recent model
       messages: messages,
       temperature: 0.75, // Slightly increased for more natural responses
-      max_tokens: 600,    // Increased to allow for more detailed responses
+      max_tokens: 800,    // Increased to allow for more detailed responses
       presence_penalty: 0.2, // Slight penalty to avoid repetition
       frequency_penalty: 0.2 // Slight penalty to encourage diversity
     });
