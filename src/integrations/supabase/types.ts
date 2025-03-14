@@ -47,6 +47,54 @@ export type Database = {
           },
         ]
       }
+      automation_history: {
+        Row: {
+          automation_id: string
+          clicked_at: string | null
+          created_at: string | null
+          id: string
+          lead_id: string
+          opened_at: string | null
+          sent_at: string | null
+          status: string
+        }
+        Insert: {
+          automation_id: string
+          clicked_at?: string | null
+          created_at?: string | null
+          id?: string
+          lead_id: string
+          opened_at?: string | null
+          sent_at?: string | null
+          status: string
+        }
+        Update: {
+          automation_id?: string
+          clicked_at?: string | null
+          created_at?: string | null
+          id?: string
+          lead_id?: string
+          opened_at?: string | null
+          sent_at?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "automation_history_automation_id_fkey"
+            columns: ["automation_id"]
+            isOneToOne: false
+            referencedRelation: "marketing_automations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "automation_history_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       automations: {
         Row: {
           active: boolean | null
@@ -169,43 +217,52 @@ export type Database = {
         }
         Relationships: []
       }
-      chatbot_training_data: {
+      chatbot_training_files: {
         Row: {
-          answer: string
+          answer: string | null
           category: string | null
           content_type: string
           created_at: string | null
+          extracted_text: string
           id: string
           priority: number | null
-          question: string
+          processing_status: string | null
+          question: string | null
+          source_file: string
           updated_at: string | null
           user_id: string
         }
         Insert: {
-          answer: string
+          answer?: string | null
           category?: string | null
           content_type: string
           created_at?: string | null
+          extracted_text: string
           id?: string
           priority?: number | null
-          question: string
+          processing_status?: string | null
+          question?: string | null
+          source_file: string
           updated_at?: string | null
           user_id: string
         }
         Update: {
-          answer?: string
+          answer?: string | null
           category?: string | null
           content_type?: string
           created_at?: string | null
+          extracted_text?: string
           id?: string
           priority?: number | null
-          question?: string
+          processing_status?: string | null
+          question?: string | null
+          source_file?: string
           updated_at?: string | null
           user_id?: string
         }
         Relationships: []
       }
-      chatbot_training_files: {
+      chatbot_training_files_uploads: {
         Row: {
           category: string | null
           content_type: string
@@ -285,10 +342,12 @@ export type Database = {
       leads: {
         Row: {
           budget: number | null
+          conversation_id: string | null
           created_at: string
           email: string
           first_name: string
           id: string
+          in_marketing_automation: boolean | null
           last_name: string
           notes: string | null
           phone: string | null
@@ -300,10 +359,12 @@ export type Database = {
         }
         Insert: {
           budget?: number | null
+          conversation_id?: string | null
           created_at?: string
           email: string
           first_name: string
           id?: string
+          in_marketing_automation?: boolean | null
           last_name: string
           notes?: string | null
           phone?: string | null
@@ -315,10 +376,12 @@ export type Database = {
         }
         Update: {
           budget?: number | null
+          conversation_id?: string | null
           created_at?: string
           email?: string
           first_name?: string
           id?: string
+          in_marketing_automation?: boolean | null
           last_name?: string
           notes?: string | null
           phone?: string | null
@@ -337,6 +400,42 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      marketing_automations: {
+        Row: {
+          active: boolean | null
+          content: string
+          created_at: string | null
+          id: string
+          name: string
+          schedule: Json | null
+          type: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          active?: boolean | null
+          content: string
+          created_at?: string | null
+          id?: string
+          name: string
+          schedule?: Json | null
+          type: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          active?: boolean | null
+          content?: string
+          created_at?: string | null
+          id?: string
+          name?: string
+          schedule?: Json | null
+          type?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
       }
       profiles: {
         Row: {
@@ -609,6 +708,45 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: string
       }
+      search_all_training_content: {
+        Args: {
+          user_id_param: string
+          query_text: string
+        }
+        Returns: {
+          content_id: string
+          content_type: string
+          content: string
+          category: string
+          priority: number
+          similarity: number
+        }[]
+      }
+      search_properties: {
+        Args: {
+          user_id_param: string
+          query_text: string
+          max_results?: number
+        }
+        Returns: {
+          id: string
+          title: string
+          description: string
+          price: number
+          bedrooms: number
+          bathrooms: number
+          city: string
+          state: string
+          status: string
+          url: string
+          living_area: number
+          plot_area: number
+          garage_area: number
+          terrace: number
+          has_pool: boolean
+          relevance: number
+        }[]
+      }
       search_properties_by_style: {
         Args: {
           user_id_param: string
@@ -632,6 +770,20 @@ export type Database = {
           terrace: number
           has_pool: boolean
           relevance: number
+        }[]
+      }
+      search_training_data: {
+        Args: {
+          user_id_param: string
+          query_text: string
+        }
+        Returns: {
+          id: string
+          question: string
+          answer: string
+          category: string
+          priority: number
+          similarity: number
         }[]
       }
     }
