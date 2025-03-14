@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import ChatHeader from './ChatHeader';
@@ -199,7 +198,7 @@ const Chatbot = ({
           setPropertyRecommendations(newPropertyRecs);
         }
         
-        // Store the bot's response
+        // Store the bot's response as a proper Message object
         setMessages(prev => [...prev, { 
           role: 'bot', 
           content: result.response,

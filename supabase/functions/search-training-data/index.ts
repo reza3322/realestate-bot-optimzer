@@ -51,6 +51,8 @@ serve(async (req) => {
     
     // Search all training data regardless of content_type
     if (includeQA || includeFiles) {
+      console.log('🔍 Searching for all training content types');
+      
       // Use the search_all_training_content function which now combines all content types
       const { data: trainingData, error: trainingError } = await supabase.rpc(
         'search_all_training_content',
@@ -61,14 +63,18 @@ serve(async (req) => {
         console.error('Error searching all training content:', trainingError);
       } else if (trainingData && trainingData.length > 0) {
         console.log(`Found ${trainingData.length} training content matches`);
+        console.log('Content types found:', trainingData.map(item => item.content_type).join(', '));
         
         // Process and separate training content into qa_matches and file_content
         trainingData.forEach(item => {
+          console.log(`Processing item of type ${item.content_type}, similarity: ${item.similarity.toFixed(2)}, category: ${item.category}`);
+          
           // Check content_type to determine whether it's a QA pair or file content
           if (item.content_type === 'qa' && includeQA) {
             // Extract question and answer from the content if it's in Q&A format
             const qaMatch = extractQAPair(item.content);
             if (qaMatch) {
+              console.log(`Adding QA match: Q: ${qaMatch.question.substring(0, 30)}...`);
               result.qa_matches.push({
                 id: item.content_id,
                 question: qaMatch.question,
@@ -80,6 +86,7 @@ serve(async (req) => {
             }
           } else if (includeFiles) {
             // Treat as file content for all other content types
+            console.log(`Adding file content: ${item.content.substring(0, 30)}...`);
             result.file_content.push({
               id: item.content_id,
               source: item.content_type,
@@ -138,6 +145,7 @@ serve(async (req) => {
     }
     
     // Return the combined results
+    console.log(`Returning: ${result.qa_matches.length} QA matches, ${result.file_content.length} file content items, ${result.property_listings.length} property listings`);
     return new Response(
       JSON.stringify(result),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -160,7 +168,7 @@ serve(async (req) => {
 // Helper function to extract question and answer from content
 function extractQAPair(content) {
   // Check if content is in Q&A format
-  if (content.startsWith('Q:') && content.includes('\nA:')) {
+  if (content && content.startsWith('Q:') && content.includes('\nA:')) {
     const parts = content.split('\nA:');
     if (parts.length >= 2) {
       return {

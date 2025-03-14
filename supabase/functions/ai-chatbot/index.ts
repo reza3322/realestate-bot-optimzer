@@ -42,6 +42,20 @@ serve(async (req) => {
     console.log(`Is agency question: ${isAgencyQuestion}, Response source: ${responseSource}`);
     console.log(`Previous messages count: ${previousMessages.length}`);
     
+    // Enhanced logging for debugging training data issues
+    if (trainingResults) {
+      console.log(`Training results provided: QA matches: ${trainingResults.qaMatches?.length || 0}, File content: ${trainingResults.fileContent?.length || 0}`);
+      
+      // Log first few training matches to help debug
+      if (trainingResults.qaMatches && trainingResults.qaMatches.length > 0) {
+        console.log(`First QA match: Q: "${trainingResults.qaMatches[0].question?.substring(0, 50)}...", A: "${trainingResults.qaMatches[0].answer?.substring(0, 50)}..."`);
+      }
+      
+      if (trainingResults.fileContent && trainingResults.fileContent.length > 0) {
+        console.log(`First file content: "${trainingResults.fileContent[0].text?.substring(0, 100)}..."`);
+      }
+    }
+    
     if (isAgencyQuestion) {
       console.log('🏢 AGENCY QUESTION DETECTED IN AI FUNCTION');
       
