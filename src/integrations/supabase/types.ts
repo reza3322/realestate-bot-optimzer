@@ -256,6 +256,45 @@ export type Database = {
         }
         Relationships: []
       }
+      chatbot_training_files_uploads: {
+        Row: {
+          category: string | null
+          content_type: string
+          created_at: string | null
+          extracted_text: string
+          id: string
+          priority: number | null
+          processing_status: string | null
+          source_file: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          category?: string | null
+          content_type: string
+          created_at?: string | null
+          extracted_text: string
+          id?: string
+          priority?: number | null
+          processing_status?: string | null
+          source_file: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          category?: string | null
+          content_type?: string
+          created_at?: string | null
+          extracted_text?: string
+          id?: string
+          priority?: number | null
+          processing_status?: string | null
+          source_file?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       integrations: {
         Row: {
           active: boolean | null
@@ -663,6 +702,20 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: string
       }
+      search_all_training_content: {
+        Args: {
+          user_id_param: string
+          query_text: string
+        }
+        Returns: {
+          content_id: string
+          content_type: string
+          content: string
+          category: string
+          priority: number
+          similarity: number
+        }[]
+      }
       search_properties_by_style: {
         Args: {
           user_id_param: string
@@ -686,6 +739,20 @@ export type Database = {
           terrace: number
           has_pool: boolean
           relevance: number
+        }[]
+      }
+      search_training_data: {
+        Args: {
+          user_id_param: string
+          query_text: string
+        }
+        Returns: {
+          id: string
+          question: string
+          answer: string
+          category: string
+          priority: number
+          similarity: number
         }[]
       }
     }

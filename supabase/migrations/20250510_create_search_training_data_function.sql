@@ -1,3 +1,4 @@
+
 -- Function to search training data with similarity matching
 CREATE OR REPLACE FUNCTION search_training_data(user_id_param UUID, query_text TEXT)
 RETURNS TABLE (
