@@ -1,198 +1,163 @@
 
-import { ChatMessage, Property, TrainingContent } from './types';
 import { supabase } from '@/lib/supabase';
+import { ChatMessage, Property, TrainingContent } from './types';
 
-// Filter and limit context based on relevance
-export const truncateContext = (context: string, maxLength: number = 4000): string => {
-  if (context.length <= maxLength) return context;
-  return context.substring(0, maxLength) + '...';
+// Function to format a property recommendation for display in chat
+export const formatPropertyRecommendations = (properties: Property[]): string => {
+  if (!properties || properties.length === 0) {
+    return "I couldn't find any properties matching your criteria at the moment.";
+  }
+
+  let response = "Based on your preferences, here are some properties you might be interested in:\n\n";
+
+  properties.forEach((property, index) => {
+    response += `**${property.title}**\n`;
+    if (property.price) response += `Price: $${property.price.toLocaleString()}\n`;
+    if (property.bedrooms) response += `Bedrooms: ${property.bedrooms}\n`;
+    if (property.bathrooms) response += `Bathrooms: ${property.bathrooms}\n`;
+    if (property.city && property.state) response += `Location: ${property.city}, ${property.state}\n`;
+    if (property.description) response += `Description: ${property.description.substring(0, 100)}...\n`;
+    if (property.url) response += `[View Property](${property.url})\n`;
+    
+    if (index < properties.length - 1) response += "\n---\n\n";
+  });
+
+  return response;
 };
 
-// Search for relevant training content and property data
-export const searchTrainingAndProperties = async (
-  query: string, 
+// Function to parse and format search results from Supabase
+export const formatSearchResults = (results: any): string => {
+  if (!results || !results.length) {
+    return "I don't have specific information about that in my knowledge base. Is there something else I can help with?";
+  }
+
+  // Initialize the response
+  let response = "Based on the information I have:\n\n";
+
+  // Process each result
+  results.forEach((item: any) => {
+    if (item.question && item.answer) {
+      // This is a Q&A pair
+      response += `Q: ${item.question}\n`;
+      response += `A: ${item.answer}\n\n`;
+    } else if (item.extracted_text) {
+      // This is extracted content from a file or webpage
+      const source = item.source_file ? `Source: ${item.source_file}\n` : '';
+      response += `${source}${item.extracted_text}\n\n`;
+    }
+  });
+
+  return response.trim();
+};
+
+// Test function for chatbot response retrieval
+export const testChatbotResponse = async (
+  message: string,
   userId: string
-): Promise<{ trainingContent: string; propertyData: Property[] }> => {
+): Promise<{ content: string }> => {
   try {
+    // Call the Supabase function to retrieve training data
+    const { data, error } = await supabase
+      .from('chatbot_training_files')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('content_type', 'qa_pair')
+      .order('created_at', { ascending: false })
+      .limit(5);
+
+    if (error) {
+      console.error("Error fetching training data:", error);
+      return {
+        content: "I'm sorry, I encountered an error retrieving information. Please try again later."
+      };
+    }
+
+    // Format the response
+    const responseContent = formatSearchResults(data);
+    return { content: responseContent };
+  } catch (err) {
+    console.error("Exception in testChatbotResponse:", err);
+    return {
+      content: "I'm sorry, I encountered an unexpected error. Please try again later."
+    };
+  }
+};
+
+// Function to search training content via edge function
+export const searchTrainingContent = async (
+  message: string,
+  userId: string
+): Promise<string> => {
+  try {
+    console.log(`Searching training content for: "${message.substring(0, 30)}..."`);
+    
+    // Call the edge function to search training data
     const { data, error } = await supabase.functions.invoke('search-training-data', {
       body: {
-        query,
-        userId,
+        query: message,
+        userId: userId,
         includeQA: true,
-        includeFiles: true,
-        includeProperties: true
+        includeFiles: true
       }
     });
-
+    
     if (error) {
-      console.error('Error fetching training data:', error);
-      return { trainingContent: '', propertyData: [] };
-    }
-
-    console.log('Training data search results:', data);
-
-    // Process Q&A matches
-    const qaContent = data.qa_matches?.map((item: any) => 
-      `Q: ${item.question}\nA: ${item.answer}`
-    ).join('\n\n') || '';
-
-    // Process file content
-    const fileContent = data.file_content?.map((item: any) => 
-      `${item.extracted_text}`
-    ).join('\n\n') || '';
-
-    // Combine all content sources with proper labels
-    let combinedContent = '';
-    
-    if (qaContent) {
-      combinedContent += `### Q&A CONTENT ###\n${qaContent}\n\n`;
+      console.error("Error searching training content:", error);
+      return "I'm having trouble accessing my knowledge base. Let me try to help based on what I generally know.";
     }
     
-    if (fileContent) {
-      combinedContent += `### DOCUMENT CONTENT ###\n${fileContent}\n\n`;
-    }
-
-    // Process property listings and format them for the AI
-    const propertyListings = data.property_listings || [];
+    console.log("Training content search results:", data);
     
-    // Map property data to a more usable format
-    const formattedProperties = propertyListings.map((property: any) => ({
-      id: property.id,
-      title: property.title,
-      description: property.description,
-      price: property.price,
-      bedrooms: property.bedrooms,
-      bathrooms: property.bathrooms,
-      location: `${property.city || ''}, ${property.state || ''}`.trim(),
-      status: property.status,
-      url: property.url,
-      livingArea: property.living_area,
-      plotArea: property.plot_area,
-      garageArea: property.garage_area,
-      terrace: property.terrace,
-      hasPool: property.has_pool
-    }));
-
-    return { 
-      trainingContent: truncateContext(combinedContent),
-      propertyData: formattedProperties
-    };
-  } catch (error) {
-    console.error('Exception searching training data:', error);
-    return { trainingContent: '', propertyData: [] };
+    // Process results from various sources
+    const qaResults = data?.qa_matches || [];
+    const fileResults = data?.file_content || [];
+    
+    // Combine all relevant results
+    const allResults = [...qaResults, ...fileResults];
+    
+    if (allResults.length === 0) {
+      return "I don't have specific information about that in my knowledge base. Is there something else I can help with?";
+    }
+    
+    // Format the combined results
+    return formatSearchResults(allResults);
+  } catch (err) {
+    console.error("Exception in searchTrainingContent:", err);
+    return "I'm sorry, I encountered an unexpected error while searching my knowledge base.";
   }
 };
 
-// Search for property listings specifically (used for direct property search)
+// Function to search properties via edge function
 export const searchProperties = async (
-  userId: string, 
-  searchParams: any
+  message: string,
+  userId: string,
+  searchParams = {}
 ): Promise<Property[]> => {
   try {
-    console.log('Searching properties with params:', searchParams);
+    console.log(`Searching properties for: "${message.substring(0, 30)}..." with params:`, searchParams);
     
+    // Call the edge function to search properties
     const { data, error } = await supabase.functions.invoke('search-properties', {
       body: {
-        userId,
-        searchParams
+        userId: userId,
+        searchParams: {
+          ...searchParams,
+          query: message
+        }
       }
     });
-
+    
     if (error) {
-      console.error('Error searching properties:', error);
+      console.error("Error searching properties:", error);
       return [];
     }
-
-    console.log('Property search results:', data);
     
-    // Format the property data
-    const properties = (data.properties || []).map((property: any) => ({
-      id: property.id,
-      title: property.title,
-      description: property.description,
-      price: property.price,
-      bedrooms: property.bedrooms ? Number(property.bedrooms) : undefined,
-      bathrooms: property.bathrooms ? Number(property.bathrooms) : undefined,
-      location: `${property.city || ''}, ${property.state || ''}`.trim(),
-      status: property.status,
-      url: property.url,
-      livingArea: property.living_area ? Number(property.living_area) : undefined,
-      plotArea: property.plot_area ? Number(property.plot_area) : undefined,
-      garageArea: property.garage_area ? Number(property.garage_area) : undefined,
-      terrace: property.terrace ? Number(property.terrace) : undefined,
-      hasPool: property.has_pool
-    }));
-
-    return properties;
-  } catch (error) {
-    console.error('Exception searching properties:', error);
+    console.log("Properties search results:", data);
+    
+    // Return the properties
+    return data?.properties || [];
+  } catch (err) {
+    console.error("Exception in searchProperties:", err);
     return [];
-  }
-};
-
-// Generate a system prompt based on user settings, training data, and property data
-export const generateSystemPrompt = (
-  trainingContent: string,
-  propertyData: Property[]
-): string => {
-  // Base system prompt
-  let systemPrompt = `You are an AI assistant for a real estate business. Your goal is to provide helpful, accurate information about the business, its properties, and services. 
-  
-  If you are asked about specific properties, you should share relevant information about them based on the property data provided. 
-  If you don't know the answer to a question, admit that you don't know rather than making up information.
-  
-  Keep your responses concise and professional. Use a conversational, helpful tone that's appropriate for a real estate business.`;
-
-  // Add training content if available
-  if (trainingContent) {
-    systemPrompt += `\n\n### TRAINING CONTENT ###\nUse the following content to answer questions about the business, its services, and policies:\n\n${trainingContent}`;
-  }
-
-  // Add property data if available
-  if (propertyData && propertyData.length > 0) {
-    systemPrompt += `\n\n### PROPERTY LISTINGS ###\nHere are details about available properties that you can reference when answering questions:\n\n`;
-    
-    propertyData.forEach((property, index) => {
-      systemPrompt += `Property ${index + 1}:\n`;
-      systemPrompt += `- Title: ${property.title || 'N/A'}\n`;
-      systemPrompt += `- Price: ${property.price ? `$${property.price.toLocaleString()}` : 'N/A'}\n`;
-      systemPrompt += `- Bedrooms: ${property.bedrooms || 'N/A'}\n`;
-      systemPrompt += `- Bathrooms: ${property.bathrooms || 'N/A'}\n`;
-      if (property.livingArea) systemPrompt += `- Living Area: ${property.livingArea} sq ft\n`;
-      if (property.plotArea) systemPrompt += `- Plot Area: ${property.plotArea} sq ft\n`;
-      if (property.location) systemPrompt += `- Location: ${property.location}\n`;
-      if (property.description) systemPrompt += `- Description: ${property.description}\n`;
-      if (property.url) systemPrompt += `- URL: ${property.url}\n`;
-      systemPrompt += '\n';
-    });
-  }
-
-  return systemPrompt;
-};
-
-// Process and store the conversation
-export const saveConversation = async (
-  userId: string, 
-  visitorId: string,
-  conversationId: string,
-  message: string, 
-  response: string
-): Promise<void> => {
-  try {
-    const { error } = await supabase
-      .from('chatbot_conversations')
-      .insert({
-        user_id: userId,
-        visitor_id: visitorId,
-        conversation_id: conversationId,
-        message: message,
-        response: response
-      });
-
-    if (error) {
-      console.error('Error saving conversation:', error);
-    }
-  } catch (error) {
-    console.error('Exception saving conversation:', error);
   }
 };

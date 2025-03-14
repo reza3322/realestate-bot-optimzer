@@ -1,72 +1,74 @@
 
 import { useState } from 'react';
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { supabase } from '@/lib/supabase';
+import { Label } from "@/components/ui/label";
 
 interface QACreatorProps {
   userId: string;
-  onQACreated?: () => void;
+  onSubmitSuccess?: () => void;
 }
 
-const QACreator = ({ userId, onQACreated }: QACreatorProps) => {
-  const [question, setQuestion] = useState("");
-  const [answer, setAnswer] = useState("");
-  const [category, setCategory] = useState("General");
-  const [priority, setPriority] = useState("3");
+const QACreator = ({ userId, onSubmitSuccess }: QACreatorProps) => {
+  const [question, setQuestion] = useState('');
+  const [answer, setAnswer] = useState('');
+  const [category, setCategory] = useState('General');
+  const [priority, setPriority] = useState('3');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!question.trim() || !answer.trim()) {
-      toast.error("Please provide both a question and an answer");
+      toast.error('Please provide both a question and an answer');
       return;
     }
     
     setIsSubmitting(true);
     
     try {
-      // Insert into chatbot_training_files with content_type 'qa_pair'
+      // Save Q&A pair to the chatbot_training_files table
       const { error } = await supabase
         .from('chatbot_training_files')
-        .insert({
-          user_id: userId,
-          question: question.trim(),
-          answer: answer.trim(),
-          category,
-          priority: parseInt(priority),
-          content_type: 'qa_pair',
-          extracted_text: answer.trim(), // Keep extracted_text for compatibility
-          source_file: 'Manual Entry'
-        });
+        .insert([
+          {
+            user_id: userId,
+            question: question.trim(),
+            answer: answer.trim(),
+            category: category,
+            priority: parseInt(priority),
+            content_type: 'qa_pair',
+            source_file: 'Manual Entry',
+            extracted_text: `${question.trim()}\n\n${answer.trim()}`
+          }
+        ]);
       
       if (error) {
-        console.error('Error creating Q&A:', error);
-        toast.error(`Error creating Q&A: ${error.message}`);
+        console.error('Error saving Q&A:', error);
+        toast.error('Failed to save Q&A pair');
         return;
       }
       
-      toast.success("Q&A pair added successfully!");
+      toast.success('Q&A pair saved successfully');
       
       // Reset form
-      setQuestion("");
-      setAnswer("");
-      setCategory("General");
-      setPriority("3");
+      setQuestion('');
+      setAnswer('');
+      setCategory('General');
+      setPriority('3');
       
-      // Trigger refresh callback
-      if (onQACreated) {
-        onQACreated();
+      // Notify parent component if callback provided
+      if (onSubmitSuccess) {
+        onSubmitSuccess();
       }
     } catch (error) {
-      console.error('Exception creating Q&A:', error);
-      toast.error("Failed to create Q&A pair. Please try again.");
+      console.error('Exception saving Q&A:', error);
+      toast.error('An unexpected error occurred');
     } finally {
       setIsSubmitting(false);
     }
@@ -75,15 +77,18 @@ const QACreator = ({ userId, onQACreated }: QACreatorProps) => {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Add Training Q&A</CardTitle>
+        <CardTitle>Add Q&A Pair</CardTitle>
+        <CardDescription>
+          Create a question and answer pair to train your chatbot with specific knowledge
+        </CardDescription>
       </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit}>
+        <CardContent className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="question">Question</Label>
-            <Input 
-              id="question" 
-              placeholder="e.g., What properties do you have in Marbella?" 
+            <Input
+              id="question"
+              placeholder="Enter a question your users might ask"
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
               required
@@ -92,13 +97,13 @@ const QACreator = ({ userId, onQACreated }: QACreatorProps) => {
           
           <div className="space-y-2">
             <Label htmlFor="answer">Answer</Label>
-            <Textarea 
-              id="answer" 
-              placeholder="e.g., We have several luxury villas in Marbella, ranging from 2 to 5 bedrooms with prices starting at €1.5 million." 
+            <Textarea
+              id="answer"
+              placeholder="Provide the answer to this question"
               value={answer}
               onChange={(e) => setAnswer(e.target.value)}
+              rows={4}
               required
-              rows={5}
             />
           </div>
           
@@ -106,7 +111,7 @@ const QACreator = ({ userId, onQACreated }: QACreatorProps) => {
             <div className="space-y-2">
               <Label htmlFor="category">Category</Label>
               <Select value={category} onValueChange={setCategory}>
-                <SelectTrigger>
+                <SelectTrigger id="category">
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
@@ -124,7 +129,7 @@ const QACreator = ({ userId, onQACreated }: QACreatorProps) => {
             <div className="space-y-2">
               <Label htmlFor="priority">Priority</Label>
               <Select value={priority} onValueChange={setPriority}>
-                <SelectTrigger>
+                <SelectTrigger id="priority">
                   <SelectValue placeholder="Select priority" />
                 </SelectTrigger>
                 <SelectContent>
@@ -137,12 +142,13 @@ const QACreator = ({ userId, onQACreated }: QACreatorProps) => {
               </Select>
             </div>
           </div>
-          
-          <Button type="submit" className="w-full" disabled={isSubmitting}>
-            {isSubmitting ? "Adding..." : "Add Q&A Pair"}
+        </CardContent>
+        <CardFooter>
+          <Button type="submit" disabled={isSubmitting}>
+            {isSubmitting ? 'Saving...' : 'Save Q&A Pair'}
           </Button>
-        </form>
-      </CardContent>
+        </CardFooter>
+      </form>
     </Card>
   );
 };

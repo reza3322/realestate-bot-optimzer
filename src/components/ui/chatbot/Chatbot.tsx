@@ -1,13 +1,14 @@
-
-import { useState, useRef, useEffect } from 'react';
-import { cn } from '@/lib/utils';
+import { useState, useEffect, useRef } from 'react';
+import { v4 as uuidv4 } from 'uuid';
+import { Paperclip, Send } from 'lucide-react';
+import { ChatMessage } from './types';
 import ChatHeader from './ChatHeader';
-import ChatMessage from './ChatMessage';
 import ChatInput from './ChatInput';
 import TypingIndicator from './TypingIndicator';
-import { getChatStyles } from './chatStyles';
-import { Message, ChatTheme, LanguageCode, ChatStylesType, VisitorInfo, PropertyRecommendation } from './types';
-import { testChatbotResponse, formatPropertyRecommendations } from './responseHandlers';
+import ChatMessage from './ChatMessage';
+import { supabase } from '@/lib/supabase';
+import { testChatbotResponse, formatPropertyRecommendations, searchTrainingContent, searchProperties } from './responseHandlers';
+import { generateChatStyles } from './chatStyles';
 
 const DEFAULT_TRANSLATIONS = {
   en: {
@@ -91,7 +92,7 @@ const Chatbot = ({
   const [visitorInfo, setVisitorInfo] = useState<VisitorInfo>({});
   const [propertyRecommendations, setPropertyRecommendations] = useState<PropertyRecommendation[]>([]);
 
-  const styles: ChatTheme = getChatStyles(theme, variation, primaryColor);
+  const styles: ChatTheme = generateChatStyles(theme, variation, primaryColor);
   
   const chatStyles: ChatStylesType = {
     botBubble: styles.botBubble,

@@ -1,105 +1,42 @@
 
-export interface Message {
-  role: 'user' | 'bot';
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
   content: string;
+  timestamp?: number;
 }
 
-export interface ChatTheme {
-  container: string;
-  header: {
-    container: string;
-    font: string;
-  };
-  inputContainer: string;
-  font: string;
-  botBubble: string;
-  userBubble: string;
-  botIcon: string;
-  userIcon: string;
-  customColor?: string;
-}
-
-export interface ChatStylesType {
-  botBubble: string;
-  userBubble: string;
-  botIcon: string;
-  userIcon: string;
-  font: string;
-  container?: string;
-  header?: {
-    container: string;
-    font: string;
-  };
-  inputContainer?: string;
-}
-
-export type LanguageCode = 'en' | 'es' | 'fr' | 'de' | 'pt' | string;
-
-export interface ChatbotSettings {
-  primaryColor: string;
-  theme: string;
-  variation: string;
-  botIcon: string;
-  fontFamily: string;
-  fontSize: number;
-  botName: string;
-  welcomeMessage: string;
-  placeholderText: string;
-  enabled: boolean;
-  position: string;
-  buttonText: string;
-  buttonIcon: string;
-  buttonSize: string;
-  buttonColor: string;
-  buttonTextColor: string;
-  buttonStyle: string;
-  buttonPosition: string;
-  language: LanguageCode;
-}
-
-export interface VisitorInfo {
-  name?: string;
-  email?: string;
-  phone?: string;
-  propertyInterest?: string;
-  budget?: string;
-  [key: string]: any;
-}
-
-export interface PropertyRecommendation {
+export interface Property {
+  id: string;
   title: string;
-  price: number | string;
-  location: string;
-  features: string[];
-  highlight?: string;
-  url?: string;
-  id?: string;
-  livingArea?: number;
-  plotArea?: number;
-  garageArea?: number;
-  terrace?: number;
-  hasPool?: boolean;
-}
-
-export interface ChatbotResponse {
-  response: string;
-  suggestedFollowUp?: string;
-  source?: 'ai' | 'training';
-  conversationId?: string;
-  leadInfo?: VisitorInfo;
-  error?: string;
-  isVerified?: boolean;
-  propertyRecommendations?: PropertyRecommendation[];
-}
-
-export interface PropertySearchParams {
-  type?: string;
-  location?: string;
-  minPrice?: number;
-  maxPrice?: number;
+  description?: string;
+  price?: number;
   bedrooms?: number;
-  keywords?: string[];
-  style?: string;
-  maxResults?: number;
-  hasPool?: boolean;
+  bathrooms?: number;
+  city?: string;
+  state?: string;
+  url?: string;
+  images?: string[];
+  status?: string;
+}
+
+export interface TrainingContent {
+  id: string;
+  content_type: 'qa_pair' | 'file' | 'web_crawl';
+  question?: string;
+  answer?: string;
+  extracted_text?: string;
+  source_file?: string;
+  category?: string;
+  priority?: number;
+}
+
+export interface ChatbotProps {
+  theme?: 'default' | 'modern' | 'minimal';
+  variation?: 'default' | 'blue' | 'green' | 'purple';
+  fontSize?: number;
+  botName?: string;
+  welcomeMessage?: string;
+  userId?: string;
+  visitorInfo?: Record<string, any>;
 }
