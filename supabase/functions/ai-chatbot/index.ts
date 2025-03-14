@@ -56,6 +56,7 @@ serve(async (req) => {
       }
     }
     
+    // Log and validate training context for agency questions
     if (isAgencyQuestion) {
       console.log('🏢 AGENCY QUESTION DETECTED IN AI FUNCTION');
       
@@ -102,7 +103,7 @@ serve(async (req) => {
       console.log('🏢 Handling agency question, prioritizing training data');
       
       // Add specific agency instructions for this type of question
-      systemContent += `\n\nThis is a question about our agency. ONLY use the provided training data to answer this question. DO NOT make up information about the agency. If no training data is available, politely explain that you don't have that specific information.`;
+      systemContent += `\n\nIMPORTANT: This is a question about our agency. ONLY use the provided training data to answer this question. DO NOT make up information about the agency. If no training data is available, politely explain that you don't have that specific information.`;
       
       // Include any training context at the top of the prompt
       if (trainingContext) {
@@ -151,6 +152,13 @@ serve(async (req) => {
     
     // Add the current user message
     messages.push({ role: "user", content: message });
+    
+    // 🔍 Debug: Log the final data being sent to OpenAI
+    console.log('🔍 Training Data Sent to OpenAI:', JSON.stringify({
+      qaMatches: trainingResults.qaMatches?.length || 0,
+      fileContent: trainingResults.fileContent?.length || 0
+    }, null, 2));
+    console.log('🔍 Training Context Sent to OpenAI:', trainingContext.substring(0, 500));
     
     // Call OpenAI API with increased temperature for more dynamic responses
     // and increased max_tokens to allow for fuller responses

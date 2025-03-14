@@ -229,6 +229,12 @@ export const testChatbotResponse = async (
       console.log('📚 Prepared training context for OpenAI:', trainingContext.substring(0, 200) + '...');
     }
     
+    // 🔍 Debug: Log the final data being sent to OpenAI
+    console.log('🔍 Final data sent to OpenAI:');
+    console.log(`Training Context: ${trainingContext ? trainingContext.substring(0, 300) + '...' : 'None'}`);
+    console.log(`Training Results Count: QA=${trainingResults.qaMatches.length}, Files=${trainingResults.fileContent.length}`);
+    console.log(`IsAgencyQuestion flag: ${isAgencyOrFaqIntent}`);
+    
     // Step 7: Send the message, intent, and any found data to the OpenAI API 
     const aiResponse = await fetch('https://ckgaqkbsnrvccctqxsqv.supabase.co/functions/v1/ai-chatbot', {
       method: 'POST',

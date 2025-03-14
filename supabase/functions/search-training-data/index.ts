@@ -59,8 +59,11 @@ serve(async (req) => {
         { user_id_param: userId, query_text: query }
       );
       
+      // 🔍 Debugging: Log the response from Supabase
+      console.log(`🔍 Training Data Response from Supabase for user ${userId}:`, JSON.stringify(trainingData, null, 2));
+      
       if (trainingError) {
-        console.error('Error searching all training content:', trainingError);
+        console.error('❌ Error searching all training content:', trainingError);
       } else if (trainingData && trainingData.length > 0) {
         console.log(`Found ${trainingData.length} training content matches`);
         console.log('Content types found:', trainingData.map(item => item.content_type).join(', '));
