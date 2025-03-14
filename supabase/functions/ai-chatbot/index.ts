@@ -74,7 +74,7 @@ serve(async (req) => {
       }
     }
     
-    // Format previous messages for OpenAI
+    // Format previous messages for OpenAI - ensure we map 'bot' to 'assistant'
     const formattedPreviousMessages = previousMessages.map(msg => ({
       role: msg.role === 'user' ? 'user' : 'assistant',
       content: msg.content
