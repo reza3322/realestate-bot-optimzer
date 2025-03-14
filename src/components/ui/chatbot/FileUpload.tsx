@@ -1,226 +1,248 @@
 
-import { useState } from 'react';
-import { Upload, FileText, AlertCircle } from 'lucide-react';
+import { useState, useRef, ChangeEvent } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { toast } from 'sonner';
-import { Progress } from "@/components/ui/progress";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { supabase } from '@/lib/supabase';
+import { AlertCircle, FilePlus, Upload, X } from "lucide-react";
+import { Card, CardContent, CardFooter } from "@/components/ui/card";
+import { toast } from "sonner";
+import { supabase } from "@/lib/supabase";
 
-interface FileUploadProps {
+export interface FileUploadProps {
   userId: string;
-  onFileProcessed?: () => void;
+  onUploadComplete?: (success: boolean) => void;
 }
 
-const FileUpload = ({ userId, onFileProcessed }: FileUploadProps) => {
-  const [file, setFile] = useState<File | null>(null);
+const FileUpload = ({ userId, onUploadComplete }: FileUploadProps) => {
+  const [files, setFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [processingStatus, setProcessingStatus] = useState<string | null>(null);
-  const [priority, setPriority] = useState("3");
-  const [category, setCategory] = useState("File Import");
+  const [progress, setProgress] = useState(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      const selectedFile = e.target.files[0];
-      
-      // Check for valid file types
-      const validTypes = [
-        'application/pdf', 
-        'application/msword', 
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'text/plain',
-        'text/html',
-        'text/markdown'
-      ];
-      
-      if (!validTypes.includes(selectedFile.type)) {
-        toast.error('Invalid file type. Please upload a PDF, Word document, or text file.');
-        return;
-      }
-      
-      setFile(selectedFile);
+  const resetFileInput = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
     }
   };
 
-  const uploadAndProcessFile = async () => {
-    if (!file) {
-      toast.error('Please select a file to upload');
-      return;
-    }
-    
-    setIsUploading(true);
-    setUploadProgress(0);
-    setProcessingStatus('Uploading file...');
-    
-    try {
-      // Upload file to Supabase Storage
-      const timestamp = Date.now();
-      const fileName = `${timestamp}_${file.name.replace(/\s+/g, '_')}`;
-      const filePath = `${userId}/${fileName}`;
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const filesArray = Array.from(e.target.files);
       
-      // Upload to the 'chatbot_training_files' bucket
-      const { error: uploadError, data: uploadData } = await supabase.storage
+      // Filter for accepted file types
+      const acceptedFiles = filesArray.filter(file => {
+        const fileType = file.type.toLowerCase();
+        const extension = file.name.split('.').pop()?.toLowerCase() || '';
+        
+        if (fileType === 'application/pdf' || 
+            fileType === 'text/plain' || 
+            extension === 'pdf' || 
+            extension === 'txt') {
+          return true;
+        }
+        
+        toast.error(`File type not supported: ${file.name}`);
+        return false;
+      });
+      
+      setFiles(acceptedFiles);
+    }
+  };
+
+  const uploadFile = async (file: File) => {
+    // Create a unique file path
+    const timestamp = new Date().getTime();
+    const filePath = `${userId}/${timestamp}_${file.name}`;
+
+    try {
+      // Upload file to storage
+      const { data: uploadData, error: uploadError } = await supabase.storage
         .from('chatbot_training_files')
         .upload(filePath, file, {
           cacheControl: '3600',
           upsert: false
         });
-      
+
       if (uploadError) {
-        console.error('Error uploading file:', uploadError);
-        toast.error(`Failed to upload file: ${uploadError.message}`);
-        setIsUploading(false);
-        return;
+        throw uploadError;
       }
-      
-      setUploadProgress(50);
-      setProcessingStatus('Processing file content...');
-      
-      // Get the public URL for the uploaded file
-      const { data: { publicUrl } } = supabase.storage
-        .from('chatbot_training_files')
-        .getPublicUrl(filePath);
-      
-      // Process the file content using the edge function
-      const { data: processResult, error: processError } = await supabase.functions.invoke('process-pdf-content', {
+
+      console.log("File uploaded successfully:", uploadData);
+
+      // Now process the file content
+      const result = await supabase.functions.invoke('process-pdf-content', {
         body: {
-          filePath,
-          userId,
+          filePath: filePath,
+          userId: userId,
           fileName: file.name,
-          priority: parseInt(priority),
-          contentType: file.type
+          priority: 5 // Default priority
         }
       });
-      
-      if (processError) {
-        console.error('Error processing file:', processError);
-        toast.error(`Failed to process file: ${processError.message}`);
-        setIsUploading(false);
-        return;
+
+      if (!result.data.success) {
+        throw new Error(result.data.error || 'Failed to process file content');
       }
-      
-      setUploadProgress(100);
-      setProcessingStatus('File processed successfully!');
-      
-      toast.success('File uploaded and processed successfully!');
-      
-      // Reset form
-      setFile(null);
-      setPriority("3");
-      setCategory("File Import");
-      const fileInput = document.getElementById('file-upload') as HTMLInputElement;
-      if (fileInput) fileInput.value = '';
-      
-      // Trigger refresh callback
-      if (onFileProcessed) {
-        onFileProcessed();
-      }
+
+      return true;
     } catch (error) {
-      console.error('Exception uploading/processing file:', error);
-      toast.error('An unexpected error occurred. Please try again.');
-    } finally {
-      setIsUploading(false);
-      setProcessingStatus(null);
+      console.error('Error uploading file:', error);
+      toast.error(`Failed to upload ${file.name}: ${error.message || 'Unknown error'}`);
+      return false;
     }
   };
 
+  const handleUpload = async () => {
+    if (files.length === 0) {
+      toast.error("Please select files to upload");
+      return;
+    }
+
+    setIsUploading(true);
+    setProgress(0);
+
+    let successCount = 0;
+    const totalFiles = files.length;
+
+    for (let i = 0; i < totalFiles; i++) {
+      const success = await uploadFile(files[i]);
+      if (success) {
+        successCount++;
+      }
+      setProgress(Math.round(((i + 1) / totalFiles) * 100));
+    }
+
+    setIsUploading(false);
+    setFiles([]);
+    resetFileInput();
+
+    if (successCount > 0) {
+      toast.success(
+        successCount === totalFiles
+          ? "All files uploaded successfully"
+          : `${successCount} of ${totalFiles} files uploaded successfully`
+      );
+      if (onUploadComplete) {
+        onUploadComplete(true);
+      }
+    } else {
+      toast.error("Failed to upload any files");
+      if (onUploadComplete) {
+        onUploadComplete(false);
+      }
+    }
+  };
+
+  const removeFile = (index: number) => {
+    const newFiles = [...files];
+    newFiles.splice(index, 1);
+    setFiles(newFiles);
+  };
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Upload Training Document</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-4">
-          <Alert>
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
-              Upload PDF, Word documents, or text files to train your chatbot.
-              The content will be extracted and used to answer user questions.
-            </AlertDescription>
-          </Alert>
-          
-          <div className="space-y-2">
-            <Label htmlFor="file-upload">Select Document</Label>
-            <Input 
-              id="file-upload" 
-              type="file" 
-              accept=".pdf,.doc,.docx,.txt,.md,.html"
-              onChange={handleFileChange}
-              disabled={isUploading}
-            />
-          </div>
-          
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="category">Category</Label>
-              <Select 
-                value={category} 
-                onValueChange={setCategory}
-                disabled={isUploading}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="File Import">File Import</SelectItem>
-                  <SelectItem value="Properties">Properties</SelectItem>
-                  <SelectItem value="Services">Services</SelectItem>
-                  <SelectItem value="Documentation">Documentation</SelectItem>
-                  <SelectItem value="Knowledge Base">Knowledge Base</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="priority">Priority</Label>
-              <Select 
-                value={priority} 
-                onValueChange={setPriority}
-                disabled={isUploading}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select priority" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="1">Low (1)</SelectItem>
-                  <SelectItem value="2">Medium-Low (2)</SelectItem>
-                  <SelectItem value="3">Medium (3)</SelectItem>
-                  <SelectItem value="4">Medium-High (4)</SelectItem>
-                  <SelectItem value="5">High (5)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          
-          {isUploading && (
-            <div className="space-y-2">
-              <Progress value={uploadProgress} />
-              <p className="text-sm text-center text-muted-foreground">{processingStatus}</p>
-            </div>
-          )}
-          
-          <Button 
-            className="w-full"
-            onClick={uploadAndProcessFile}
-            disabled={!file || isUploading}
+    <div className="space-y-4">
+      <div>
+        <Label htmlFor="file-upload">Upload PDF or Text Files</Label>
+        <div className="mt-1 flex items-center gap-2">
+          <Input
+            id="file-upload"
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept=".pdf,.txt,application/pdf,text/plain"
+            onChange={handleFileChange}
+            disabled={isUploading}
+            className="flex-1"
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isUploading}
           >
-            {isUploading ? (
-              'Processing...'
-            ) : (
-              <>
-                <FileText className="mr-2 h-4 w-4" />
-                {file ? 'Upload and Process Document' : 'Select a Document First'}
-              </>
-            )}
+            <FilePlus className="mr-2 h-4 w-4" />
+            Browse Files
           </Button>
         </div>
-      </CardContent>
-    </Card>
+        <p className="text-sm text-muted-foreground mt-1">
+          Upload PDF or text files to train your chatbot with your specific content.
+        </p>
+      </div>
+
+      {files.length > 0 && (
+        <div className="space-y-2">
+          <Label>Selected Files:</Label>
+          <div className="border rounded-md p-2 space-y-2">
+            {files.map((file, index) => (
+              <div
+                key={index}
+                className="flex items-center justify-between bg-secondary/20 p-2 rounded"
+              >
+                <span className="text-sm truncate max-w-[240px]">
+                  {file.name}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => removeFile(index)}
+                  disabled={isUploading}
+                >
+                  <X className="h-4 w-4 text-destructive" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {isUploading && (
+        <div className="space-y-2">
+          <div className="flex justify-between text-sm">
+            <span>Uploading...</span>
+            <span>{progress}%</span>
+          </div>
+          <div className="w-full bg-secondary h-2 rounded-full">
+            <div
+              className="bg-primary h-2 rounded-full transition-all duration-300"
+              style={{ width: `${progress}%` }}
+            ></div>
+          </div>
+        </div>
+      )}
+
+      <div className="flex justify-end">
+        <Button
+          onClick={handleUpload}
+          disabled={files.length === 0 || isUploading}
+        >
+          <Upload className="mr-2 h-4 w-4" />
+          Upload {files.length > 0 ? `(${files.length})` : ""}
+        </Button>
+      </div>
+
+      <Card className="mt-4 border-dashed border-muted">
+        <CardContent className="pt-4">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
+            <div>
+              <h4 className="font-semibold text-sm">Training Files</h4>
+              <p className="text-sm text-muted-foreground">
+                For best results, upload documents containing information about:
+              </p>
+              <ul className="text-sm text-muted-foreground mt-2 space-y-1 list-disc pl-4">
+                <li>Your business services and offerings</li>
+                <li>Frequently asked questions</li>
+                <li>Property details and descriptions</li>
+                <li>Pricing information</li>
+                <li>Process documents and guides</li>
+              </ul>
+            </div>
+          </div>
+        </CardContent>
+        <CardFooter className="bg-muted/20 text-xs text-muted-foreground">
+          Supported file types: PDF, TXT
+        </CardFooter>
+      </Card>
+    </div>
   );
 };
 

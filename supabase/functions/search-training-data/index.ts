@@ -34,13 +34,14 @@ serve(async (req) => {
 
     // 1. Search for Q&A matches if requested
     if (includeQA) {
-      const { data: qaData, error: qaError } = await supabase.rpc(
-        'search_training_data',
-        { 
-          user_id_param: userId,
-          query_text: query
-        }
-      );
+      const { data: qaData, error: qaError } = await supabase
+        .from('chatbot_training_files')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('content_type', 'qa_pair')
+        .not('question', 'is', null)
+        .order('priority', { ascending: false })
+        .limit(maxResults);
 
       if (qaError) {
         console.error("Error searching Q&A training data:", qaError);
@@ -57,6 +58,7 @@ serve(async (req) => {
         .select('*')
         .eq('user_id', userId)
         .eq('content_type', 'file')
+        .order('created_at', { ascending: false })
         .limit(maxResults);
 
       if (fileError) {
@@ -69,14 +71,13 @@ serve(async (req) => {
 
     // 3. Search for property listings if requested
     if (includeProperties) {
-      const { data: propertyData, error: propertyError } = await supabase.rpc(
-        'search_properties',
-        { 
-          user_id_param: userId,
-          query_text: query,
-          max_results: maxResults
-        }
-      );
+      const { data: propertyData, error: propertyError } = await supabase
+        .from('properties')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(maxResults);
 
       if (propertyError) {
         console.error("Error searching properties:", propertyError);

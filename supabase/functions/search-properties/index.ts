@@ -38,11 +38,37 @@ serve(async (req) => {
     } = searchParams;
 
     // Build query
-    let query = supabase.rpc('search_properties', {
-      user_id_param: userId,
-      query_text: location || type || style || '',
-      max_results: maxResults
-    });
+    let query = supabase
+      .from('properties')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('status', 'active');
+    
+    // Add filters if they exist
+    if (location) {
+      query = query.or(`city.ilike.%${location}%,state.ilike.%${location}%`);
+    }
+    
+    if (type) {
+      query = query.eq('type', type);
+    }
+    
+    if (minPrice) {
+      query = query.gte('price', minPrice);
+    }
+    
+    if (maxPrice) {
+      query = query.lte('price', maxPrice);
+    }
+    
+    if (bedrooms) {
+      query = query.gte('bedrooms', bedrooms);
+    }
+    
+    // Add ordering and limit
+    query = query.order('featured', { ascending: false })
+                .order('price', { ascending: false })
+                .limit(maxResults);
 
     // Fetch properties
     const { data, error } = await query;
@@ -63,26 +89,9 @@ serve(async (req) => {
 
     console.log(`Found ${data?.length || 0} matching properties`);
     
-    // Apply additional filters client-side
-    let filteredProperties = data || [];
-    
-    if (minPrice) {
-      filteredProperties = filteredProperties.filter(p => (p.price >= minPrice));
-    }
-    
-    if (maxPrice) {
-      filteredProperties = filteredProperties.filter(p => (p.price <= maxPrice));
-    }
-    
-    if (bedrooms) {
-      filteredProperties = filteredProperties.filter(p => (p.bedrooms >= bedrooms));
-    }
-
-    console.log(`Returning ${filteredProperties.length} properties after filters`);
-
     // Return properties
     return new Response(
-      JSON.stringify({ properties: filteredProperties }),
+      JSON.stringify({ properties: data || [] }),
       { 
         headers: { 
           ...corsHeaders,

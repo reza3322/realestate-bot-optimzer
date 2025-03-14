@@ -6,7 +6,7 @@ import { AlertCircle } from "lucide-react";
 import FileUpload from "./FileUpload";
 import WebsiteCrawler from "./WebsiteCrawler";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { TrainingContentManager } from "./TrainingContentManager";
+import TrainingContentManager from "./TrainingContentManager";
 
 interface ChatbotTrainingProps {
   userId: string;
@@ -48,7 +48,10 @@ const ChatbotTraining = ({ userId, userPlan = "starter", isPremiumFeature }: Cha
           </TabsList>
           
           <TabsContent value="upload" className="pt-4">
-            <FileUpload userId={userId} onUploadComplete={handleUploadComplete} />
+            <FileUpload 
+              userId={userId} 
+              onUploadComplete={handleUploadComplete} 
+            />
           </TabsContent>
           
           <TabsContent value="crawl" className="pt-4">
@@ -61,8 +64,7 @@ const ChatbotTraining = ({ userId, userPlan = "starter", isPremiumFeature }: Cha
           
           <TabsContent value="manage" className="pt-4">
             <TrainingContentManager 
-              userId={userId} 
-              onContentUpdate={() => setContentUpdated(prev => !prev)} 
+              userId={userId}
             />
           </TabsContent>
         </Tabs>

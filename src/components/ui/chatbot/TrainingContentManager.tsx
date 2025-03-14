@@ -14,6 +14,7 @@ import { supabase } from '@/lib/supabase';
 
 interface TrainingContentManagerProps {
   userId: string;
+  onContentUpdate?: () => void;
 }
 
 interface TrainingItem {
@@ -35,7 +36,7 @@ const priorityLabels = {
   5: 'High'
 };
 
-const TrainingContentManager = ({ userId }: TrainingContentManagerProps) => {
+const TrainingContentManager = ({ userId, onContentUpdate }: TrainingContentManagerProps) => {
   const [trainingData, setTrainingData] = useState<TrainingItem[]>([]);
   const [editingItem, setEditingItem] = useState<TrainingItem | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -88,6 +89,9 @@ const TrainingContentManager = ({ userId }: TrainingContentManagerProps) => {
       
       toast.success('Item deleted successfully');
       setTrainingData(trainingData.filter(item => item.id !== id));
+      if (onContentUpdate) {
+        onContentUpdate();
+      }
     } catch (error) {
       console.error('Exception deleting item:', error);
       toast.error('An unexpected error occurred while deleting the item');
@@ -102,15 +106,24 @@ const TrainingContentManager = ({ userId }: TrainingContentManagerProps) => {
     if (!editingItem) return;
     
     try {
+      // Prepare update data based on content type
+      const updateData: any = {
+        category: editingItem.category,
+        priority: editingItem.priority
+      };
+      
+      // Add specific fields based on content type
+      if (editingItem.content_type === 'qa_pair') {
+        updateData.question = editingItem.question;
+        updateData.answer = editingItem.answer;
+      } else if (editingItem.content_type === 'file' || editingItem.content_type === 'web_crawl') {
+        // For files and web crawls, allow updating extracted_text
+        updateData.extracted_text = editingItem.extracted_text;
+      }
+      
       const { error } = await supabase
         .from('chatbot_training_files')
-        .update({
-          question: editingItem.question,
-          answer: editingItem.answer,
-          extracted_text: editingItem.extracted_text || editingItem.answer, // Set extracted_text to answer for compatibility
-          category: editingItem.category,
-          priority: editingItem.priority
-        })
+        .update(updateData)
         .eq('id', editingItem.id);
       
       if (error) {
@@ -127,6 +140,9 @@ const TrainingContentManager = ({ userId }: TrainingContentManagerProps) => {
       ));
       
       setEditingItem(null);
+      if (onContentUpdate) {
+        onContentUpdate();
+      }
     } catch (error) {
       console.error('Exception updating item:', error);
       toast.error('An unexpected error occurred while updating the item');
@@ -304,25 +320,119 @@ const TrainingContentManager = ({ userId }: TrainingContentManagerProps) => {
     return files.map(file => (
       <Card key={file.id} className="mb-4">
         <CardContent className="pt-4">
-          <div className="flex justify-between items-start mb-2">
-            <div className="font-medium text-lg">{file.source_file}</div>
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              onClick={() => handleDelete(file.id)}
-            >
-              <Trash2 className="h-4 w-4 text-destructive" />
-            </Button>
-          </div>
-          
-          <div className="text-muted-foreground mt-2 line-clamp-3">{file.extracted_text}</div>
-          
-          <div className="flex justify-between items-center mt-4">
-            <Badge variant="outline">{file.category || 'Document'}</Badge>
-            <Badge variant="secondary">
-              Priority: {priorityLabels[file.priority as keyof typeof priorityLabels] || 'Medium'}
-            </Badge>
-          </div>
+          {editingItem && editingItem.id === file.id ? (
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor={`edit-source-${file.id}`}>Source File</Label>
+                <Input 
+                  id={`edit-source-${file.id}`}
+                  value={editingItem.source_file || ''}
+                  readOnly
+                />
+              </div>
+              
+              <div>
+                <Label htmlFor={`edit-text-${file.id}`}>Extracted Text</Label>
+                <Textarea 
+                  id={`edit-text-${file.id}`}
+                  value={editingItem.extracted_text || ''}
+                  onChange={(e) => setEditingItem({...editingItem, extracted_text: e.target.value})}
+                  rows={8}
+                />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor={`edit-category-${file.id}`}>Category</Label>
+                  <Select 
+                    value={editingItem.category} 
+                    onValueChange={(val) => setEditingItem({...editingItem, category: val})}
+                  >
+                    <SelectTrigger id={`edit-category-${file.id}`}>
+                      <SelectValue placeholder="Select category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="File Import">File Import</SelectItem>
+                      <SelectItem value="Properties">Properties</SelectItem>
+                      <SelectItem value="Services">Services</SelectItem>
+                      <SelectItem value="Location">Location</SelectItem>
+                      <SelectItem value="Process">Process</SelectItem>
+                      <SelectItem value="Pricing">Pricing</SelectItem>
+                      <SelectItem value="FAQ">FAQ</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div>
+                  <Label htmlFor={`edit-priority-${file.id}`}>Priority</Label>
+                  <Select 
+                    value={editingItem.priority.toString()} 
+                    onValueChange={(val) => setEditingItem({...editingItem, priority: parseInt(val)})}
+                  >
+                    <SelectTrigger id={`edit-priority-${file.id}`}>
+                      <SelectValue placeholder="Select priority" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1">Low (1)</SelectItem>
+                      <SelectItem value="2">Medium-Low (2)</SelectItem>
+                      <SelectItem value="3">Medium (3)</SelectItem>
+                      <SelectItem value="4">Medium-High (4)</SelectItem>
+                      <SelectItem value="5">High (5)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              
+              <div className="flex justify-end space-x-2">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => setEditingItem(null)}
+                >
+                  <X className="mr-2 h-4 w-4" />
+                  Cancel
+                </Button>
+                <Button 
+                  size="sm" 
+                  onClick={handleSave}
+                >
+                  <Save className="mr-2 h-4 w-4" />
+                  Save
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <div className="flex justify-between items-start mb-2">
+                <div className="font-medium text-lg">{file.source_file}</div>
+                <div className="flex space-x-1">
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={() => handleEdit(file)}
+                  >
+                    <Edit className="h-4 w-4" />
+                  </Button>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={() => handleDelete(file.id)}
+                  >
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
+                </div>
+              </div>
+              
+              <div className="text-muted-foreground mt-2 line-clamp-3">{file.extracted_text}</div>
+              
+              <div className="flex justify-between items-center mt-4">
+                <Badge variant="outline">{file.category || 'Document'}</Badge>
+                <Badge variant="secondary">
+                  Priority: {priorityLabels[file.priority as keyof typeof priorityLabels] || 'Medium'}
+                </Badge>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
     ));
@@ -350,25 +460,119 @@ const TrainingContentManager = ({ userId }: TrainingContentManagerProps) => {
     return webContent.map(item => (
       <Card key={item.id} className="mb-4">
         <CardContent className="pt-4">
-          <div className="flex justify-between items-start mb-2">
-            <div className="font-medium text-lg">{item.source_file}</div>
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              onClick={() => handleDelete(item.id)}
-            >
-              <Trash2 className="h-4 w-4 text-destructive" />
-            </Button>
-          </div>
-          
-          <div className="text-muted-foreground mt-2 line-clamp-3">{item.extracted_text}</div>
-          
-          <div className="flex justify-between items-center mt-4">
-            <Badge variant="outline">{item.category || 'Web Page'}</Badge>
-            <Badge variant="secondary">
-              Priority: {priorityLabels[item.priority as keyof typeof priorityLabels] || 'Medium'}
-            </Badge>
-          </div>
+          {editingItem && editingItem.id === item.id ? (
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor={`edit-source-${item.id}`}>Source URL</Label>
+                <Input 
+                  id={`edit-source-${item.id}`}
+                  value={editingItem.source_file || ''}
+                  readOnly
+                />
+              </div>
+              
+              <div>
+                <Label htmlFor={`edit-text-${item.id}`}>Extracted Text</Label>
+                <Textarea 
+                  id={`edit-text-${item.id}`}
+                  value={editingItem.extracted_text || ''}
+                  onChange={(e) => setEditingItem({...editingItem, extracted_text: e.target.value})}
+                  rows={8}
+                />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor={`edit-category-${item.id}`}>Category</Label>
+                  <Select 
+                    value={editingItem.category} 
+                    onValueChange={(val) => setEditingItem({...editingItem, category: val})}
+                  >
+                    <SelectTrigger id={`edit-category-${item.id}`}>
+                      <SelectValue placeholder="Select category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Web Crawler">Web Crawler</SelectItem>
+                      <SelectItem value="Properties">Properties</SelectItem>
+                      <SelectItem value="Services">Services</SelectItem>
+                      <SelectItem value="Location">Location</SelectItem>
+                      <SelectItem value="Process">Process</SelectItem>
+                      <SelectItem value="Pricing">Pricing</SelectItem>
+                      <SelectItem value="FAQ">FAQ</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div>
+                  <Label htmlFor={`edit-priority-${item.id}`}>Priority</Label>
+                  <Select 
+                    value={editingItem.priority.toString()} 
+                    onValueChange={(val) => setEditingItem({...editingItem, priority: parseInt(val)})}
+                  >
+                    <SelectTrigger id={`edit-priority-${item.id}`}>
+                      <SelectValue placeholder="Select priority" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1">Low (1)</SelectItem>
+                      <SelectItem value="2">Medium-Low (2)</SelectItem>
+                      <SelectItem value="3">Medium (3)</SelectItem>
+                      <SelectItem value="4">Medium-High (4)</SelectItem>
+                      <SelectItem value="5">High (5)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              
+              <div className="flex justify-end space-x-2">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => setEditingItem(null)}
+                >
+                  <X className="mr-2 h-4 w-4" />
+                  Cancel
+                </Button>
+                <Button 
+                  size="sm" 
+                  onClick={handleSave}
+                >
+                  <Save className="mr-2 h-4 w-4" />
+                  Save
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <div className="flex justify-between items-start mb-2">
+                <div className="font-medium text-lg">{item.source_file}</div>
+                <div className="flex space-x-1">
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={() => handleEdit(item)}
+                  >
+                    <Edit className="h-4 w-4" />
+                  </Button>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={() => handleDelete(item.id)}
+                  >
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
+                </div>
+              </div>
+              
+              <div className="text-muted-foreground mt-2 line-clamp-3">{item.extracted_text}</div>
+              
+              <div className="flex justify-between items-center mt-4">
+                <Badge variant="outline">{item.category || 'Web Page'}</Badge>
+                <Badge variant="secondary">
+                  Priority: {priorityLabels[item.priority as keyof typeof priorityLabels] || 'Medium'}
+                </Badge>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
     ));
