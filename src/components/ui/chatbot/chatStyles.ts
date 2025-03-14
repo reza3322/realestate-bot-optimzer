@@ -1,4 +1,3 @@
-
 import { ChatTheme } from './types';
 
 // Get base theme styles
@@ -75,7 +74,6 @@ const applyColorVariation = (theme: ChatTheme, variation: string): ChatTheme => 
       break;
     case 'default':
     default:
-      // For default, we'll ensure the header has a blue tint
       if (!updatedTheme.header.container.includes('bg-blue')) {
         updatedTheme.header.container = updatedTheme.header.container.replace('bg-gray-100', 'bg-blue-100').replace('bg-gray-700', 'bg-blue-900');
       }
@@ -114,13 +112,10 @@ export const applyFontStyle = (theme: ChatTheme, fontStyle: string): ChatTheme =
 
 // Get base styling based on theme & variation
 export const getChatStyles = (theme: string, variation: string, primaryColor?: string): ChatTheme => {
-  // First, get the base theme styles
   const baseTheme = getThemeStyles(theme);
   
-  // Apply color variation
   const coloredTheme = applyColorVariation(baseTheme, variation);
   
-  // Apply custom color if provided
   if (primaryColor && primaryColor.trim() !== '') {
     console.log('Applying custom primary color:', primaryColor);
     return {
@@ -135,3 +130,6 @@ export const getChatStyles = (theme: string, variation: string, primaryColor?: s
   
   return coloredTheme;
 };
+
+// Added for backward compatibility
+export const generateChatStyles = getChatStyles;

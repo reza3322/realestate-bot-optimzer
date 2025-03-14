@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -15,12 +15,9 @@ import { generateChatbotScript } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { testChatbotResponse } from '@/components/ui/chatbot/responseHandlers';
 import ChatbotDemo from '@/components/ui/ChatbotDemo';
+import { ChatbotSettingsProps } from '@/components/ui/chatbot/types';
 
-interface ChatbotSettingsProps {
-  userId: string;
-}
-
-const ChatbotSettings = ({ userId }: ChatbotSettingsProps) => {
+const ChatbotSettings = ({ userId, userPlan, isPremiumFeature }: ChatbotSettingsProps) => {
   const [settings, setSettings] = useState<any>(null);
   const [themeColor, setThemeColor] = useState<string>('#000000');
   const [primaryColor, setPrimaryColor] = useState<string>('#000000');
@@ -59,7 +56,6 @@ const ChatbotSettings = ({ userId }: ChatbotSettingsProps) => {
       
       setSettings(data);
       
-      // Initialize state from settings data
       setThemeColor(data?.settings?.themeColor || '#000000');
       setPrimaryColor(data?.settings?.primaryColor || '#000000');
       setSecondaryColor(data?.settings?.secondaryColor || '#000000');

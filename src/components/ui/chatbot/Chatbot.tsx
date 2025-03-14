@@ -1,14 +1,16 @@
+
 import { useState, useEffect, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { Paperclip, Send } from 'lucide-react';
-import { ChatMessage } from './types';
+import { ChatMessage as ChatMessageType, Message, VisitorInfo, PropertyRecommendation, ChatTheme, ChatStylesType, LanguageCode } from './types';
 import ChatHeader from './ChatHeader';
 import ChatInput from './ChatInput';
 import TypingIndicator from './TypingIndicator';
-import ChatMessage from './ChatMessage';
+import ChatMessageComponent from './ChatMessage';
 import { supabase } from '@/lib/supabase';
 import { testChatbotResponse, formatPropertyRecommendations, searchTrainingContent, searchProperties } from './responseHandlers';
-import { generateChatStyles } from './chatStyles';
+import { getChatStyles, generateChatStyles } from './chatStyles';
+import { cn } from '@/lib/utils';
 
 const DEFAULT_TRANSLATIONS = {
   en: {
@@ -38,26 +40,6 @@ const DEFAULT_TRANSLATIONS = {
   }
 };
 
-interface ChatbotProps {
-  apiKey?: string;
-  className?: string;
-  theme?: 'default' | 'modern' | 'minimal';
-  variation?: 'default' | 'blue' | 'green' | 'purple';
-  fontStyle?: 'default' | 'serif' | 'mono';
-  botName?: string;
-  welcomeMessage?: string;
-  placeholderText?: string;
-  maxHeight?: string;
-  onSendMessage?: (message: string) => void;
-  userId?: string;
-  useRealAPI?: boolean;
-  botIconName?: string;
-  primaryColor?: string;
-  language?: LanguageCode;
-  buttonStyle?: React.CSSProperties;
-  fontSize?: number;
-}
-
 const Chatbot = ({
   className,
   theme = 'default',
@@ -72,7 +54,7 @@ const Chatbot = ({
   useRealAPI = false,
   botIconName = 'bot',
   primaryColor,
-  language = 'en',
+  language = 'en' as LanguageCode,
   buttonStyle,
   fontSize = 16
 }: ChatbotProps) => {
@@ -92,7 +74,7 @@ const Chatbot = ({
   const [visitorInfo, setVisitorInfo] = useState<VisitorInfo>({});
   const [propertyRecommendations, setPropertyRecommendations] = useState<PropertyRecommendation[]>([]);
 
-  const styles: ChatTheme = generateChatStyles(theme, variation, primaryColor);
+  const styles = generateChatStyles(theme, variation, primaryColor);
   
   const chatStyles: ChatStylesType = {
     botBubble: styles.botBubble,
@@ -101,7 +83,7 @@ const Chatbot = ({
     userIcon: styles.userIcon,
     font: styles.font,
     container: styles.container,
-    header: styles.header,
+    header: styles.header.container,
     inputContainer: styles.inputContainer
   };
 
@@ -141,51 +123,14 @@ const Chatbot = ({
     console.log(`Chatbot mode: ${isLandingPageMode ? 'Landing Page Demo' : 'User Chatbot'}`);
     
     try {
-      const result = await testChatbotResponse(
-        message, 
-        userId, 
-        visitorInfo, 
-        conversationId,
-        messages
-      );
+      const result = await testChatbotResponse(message, userId);
       
       if (result.error) {
         console.error('Chatbot error:', result.error);
         setError(`Error: ${result.error}`);
       } else {
-        // Store property recommendations if available
-        if (result.propertyRecommendations && result.propertyRecommendations.length > 0) {
-          setPropertyRecommendations(result.propertyRecommendations);
-          
-          // If the response doesn't already include formatted property listings,
-          // format them and append to the response
-          if (!result.response.includes('🏡') && !result.response.includes('View Listing')) {
-            const formattedRecommendations = formatPropertyRecommendations(
-              result.propertyRecommendations,
-              3 // Limit to 3 properties
-            );
-            
-            // Add formatted recommendations to the response
-            if (formattedRecommendations) {
-              result.response = `${result.response}\n\n${formattedRecommendations}`;
-            }
-          }
-        }
-        
         // Add the response to messages
-        setMessages(prev => [...prev, { role: 'bot', content: result.response }]);
-        setResponseSource(result.source || null);
-        
-        if (result.conversationId && !conversationId) {
-          setConversationId(result.conversationId);
-        }
-        
-        if (result.leadInfo) {
-          setVisitorInfo(prev => ({
-            ...prev,
-            ...result.leadInfo
-          }));
-        }
+        setMessages(prev => [...prev, { role: 'bot', content: result.content }]);
       }
     } catch (err) {
       console.error('Chatbot exception:', err);
@@ -233,7 +178,7 @@ const Chatbot = ({
     )}>
       <ChatHeader 
         botName={botName}
-        headerStyle={styles.header}
+        headerStyle={styles.header.container}
         fontStyle={styles.font}
         apiKeyStatus={useRealAPI ? "set" : "not-set"}
         botIconName={botIconName}
@@ -245,7 +190,7 @@ const Chatbot = ({
         style={{ height: `calc(100% - 120px)` }}
       >
         {messages.map((message, index) => (
-          <ChatMessage 
+          <ChatMessageComponent 
             key={index}
             message={message}
             index={index}
