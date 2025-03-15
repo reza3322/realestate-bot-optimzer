@@ -1,3 +1,4 @@
+
 import { Message, PropertyRecommendation, VisitorInfo, ChatbotResponse } from './types';
 
 /**
@@ -176,6 +177,8 @@ export const testChatbotResponse = async (
       
       console.log('🔍 Request payload:', JSON.stringify(searchPayload));
       
+      // FORCED DATABASE SEARCH: Always search before generating any response
+      console.log('⚠️ FORCED DATABASE SEARCH: Ensuring training data is always searched first');
       const searchResponse = await fetch(searchTrainingUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -186,9 +189,12 @@ export const testChatbotResponse = async (
       console.log(`⏱️ SEARCH CALL COMPLETED at ${new Date().toISOString()} (took ${searchEndTime - searchStartTime}ms)`);
       console.log('🔍 Search API status:', searchResponse.status);
       
+      // More detailed error handling to help debug issues
       if (!searchResponse.ok) {
         const errorText = await searchResponse.text();
         console.error(`❌ Search API returned ${searchResponse.status}: ${errorText}`);
+        console.error(`❌ Search API endpoint: ${searchTrainingUrl}`);
+        console.error(`❌ Search API payload: ${JSON.stringify(searchPayload, null, 2)}`);
         throw new Error(`Search API returned ${searchResponse.status}: ${errorText}`);
       }
 
@@ -225,6 +231,15 @@ export const testChatbotResponse = async (
     } catch (searchError) {
       console.error('🔴 Error in training data search:', searchError);
       console.error('🔴 Stack trace:', searchError.stack);
+      
+      // SAFETY FALLBACK: If the search fails, return a fallback message instead of proceeding
+      console.error('🔴 CRITICAL ERROR: Training data search failed, returning fallback response');
+      return {
+        response: "I'm having trouble accessing my knowledge base at the moment. Please try your question again in a moment.",
+        source: 'error',
+        conversationId: conversationId || `conv_${Date.now()}`,
+        propertyRecommendations: []
+      };
     }
     
     // Step 4: Determine if we have valid training data to base response on
