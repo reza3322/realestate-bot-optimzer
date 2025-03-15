@@ -1,4 +1,3 @@
-
 import { Message, PropertyRecommendation, VisitorInfo, ChatbotResponse } from './types';
 
 /**
@@ -18,16 +17,46 @@ export const testChatbotResponse = async (
   
   try {
     // Step 1: First, do quick check for agency-related keywords
+    // EXPANDED: Using a more comprehensive list of agency-related keywords
     const lowerMessage = message.toLowerCase();
     const agencyKeywords = [
-      'agency', 'company', 'firm', 'business', 'office', 
-      'about you', 'your name', 'who are you', 'your website', 
-      'your location', 'your address', 'contact information', 
-      'how can i contact', 'tell me about your', 'what is your',
-      'where are you'
+      // Basic agency keywords
+      'agency', 'company', 'firm', 'business', 'office', 'realtor', 'broker',
+      
+      // Questions about identity
+      'about you', 'your name', 'who are you', 'tell me about', 'what is your',
+      'who is', 'your website', 'your team', 'your agents', 'your staff',
+      
+      // Location-related
+      'your location', 'your address', 'where are you', 'where is your office',
+      'your office location', 'located', 'based',
+      
+      // Contact info
+      'contact information', 'how can i contact', 'phone', 'email', 'reach you',
+      
+      // Services
+      'your service', 'do you offer', 'can you help', 'what do you do',
+      'services provided', 'your expertise', 'your specialty', 'specialize',
+      
+      // Experience and background
+      'how long', 'experience', 'years in business', 'established', 'founded',
+      'when did you start', 'history', 'your background',
+      
+      // Fees and commissions
+      'fee', 'commission', 'charge', 'cost', 'pricing', 'rate',
+      
+      // Credentials and qualifications
+      'licensed', 'certified', 'qualification', 'credentials', 'accredited'
     ];
     
-    const isObviousAgencyQuestion = agencyKeywords.some(keyword => lowerMessage.includes(keyword));
+    // Check if any agency keyword is found in the message
+    const isObviousAgencyQuestion = agencyKeywords.some(keyword => {
+      const keywordFound = lowerMessage.includes(keyword);
+      if (keywordFound) {
+        console.log(`🏢 DETECTED AGENCY KEYWORD "${keyword}" in message: "${message}"`);
+      }
+      return keywordFound;
+    });
     
     // If it's an obvious agency question, set intent directly and log it
     let intentData;
@@ -39,8 +68,12 @@ export const testChatbotResponse = async (
         intent: 'agency_info',
         should_search_training: true,
         should_search_properties: false,
-        confidence: 0.95
+        confidence: 0.95,
+        detected_via: 'keyword_matching'
       };
+      
+      // Additional logging to help debug
+      console.log('🔍 AGENCY INTENT SET BY KEYWORD MATCHING:', intentData);
     } else {
       // Otherwise, use the intent classification API
       console.log('Calling intent analysis API...');
@@ -70,13 +103,29 @@ export const testChatbotResponse = async (
         console.log('Intent analysis response:', intentData);
       } catch (intentError) {
         console.error('Failed to get intent analysis:', intentError);
-        // If intent analysis fails, assume it could be an agency question and force training search
-        intentData = {
-          intent: 'general_query',
-          should_search_training: true, // Always search training on error
-          should_search_properties: false,
-          confidence: 0.5
-        };
+        // If intent analysis fails, check for basic keywords manually as fallback
+        const basicKeywords = ['agency', 'company', 'office', 'about you', 'who are you'];
+        const isBasicAgencyQuestion = basicKeywords.some(keyword => lowerMessage.includes(keyword));
+        
+        if (isBasicAgencyQuestion) {
+          console.log('⚠️ Intent API failed but detected basic agency question keywords');
+          intentData = {
+            intent: 'agency_info',
+            should_search_training: true,
+            should_search_properties: false,
+            confidence: 0.8,
+            detected_via: 'fallback_keywords'
+          };
+        } else {
+          // Otherwise use general query as fallback
+          intentData = {
+            intent: 'general_query',
+            should_search_training: true, // Always search training on error
+            should_search_properties: false,
+            confidence: 0.5,
+            detected_via: 'error_fallback'
+          };
+        }
       }
     }
     
@@ -120,7 +169,9 @@ export const testChatbotResponse = async (
         includeQA: true,
         includeFiles: true,  
         includeProperties: shouldSearchProperties,
-        previousMessages: previousMessages
+        previousMessages: previousMessages,
+        // Add explicit flag for agency questions to prioritize training data
+        isAgencyQuestion: isObviousAgencyQuestion || intentData.intent === 'agency_info'
       };
       
       console.log('🔍 Request payload:', JSON.stringify(searchPayload));
@@ -315,7 +366,14 @@ export const testChatbotResponse = async (
           intentClassification: intentData.intent, // Pass the intent classification
           responseSource: responseSource, // Pass the determined source to help OpenAI prioritize
           trainingContext: trainingContext, // Pass the formatted training context
-          isAgencyQuestion: isAgencyOrFaqIntent || isObviousAgencyQuestion // Explicitly flag agency questions
+          isAgencyQuestion: isAgencyOrFaqIntent || isObviousAgencyQuestion, // Explicitly flag agency questions
+          // Add debugging info for OpenAI
+          debugInfo: {
+            keywordMatched: isObviousAgencyQuestion,
+            intent: intentData.intent,
+            intentSource: intentData.detected_via || 'api',
+            hasTrainingData: trainingResults.qaMatches.length > 0 || trainingResults.fileContent.length > 0
+          }
         })
       });
 
