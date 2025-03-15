@@ -28,7 +28,9 @@ serve(async (req) => {
       intentClassification,
       responseSource = 'ai',
       trainingContext = '',
-      isAgencyQuestion = false
+      isAgencyQuestion = false,
+      strictMode = false,
+      debugInfo = {}
     } = await req.json();
     
     if (!message) {
@@ -41,6 +43,7 @@ serve(async (req) => {
     console.log(`AI chatbot processing - User ID: ${userId}, Intent: ${intentClassification}`);
     console.log(`Is agency question: ${isAgencyQuestion}, Response source: ${responseSource}`);
     console.log(`Previous messages count: ${previousMessages.length}`);
+    console.log(`Strict mode: ${strictMode}, Debug info:`, debugInfo);
     
     // Enhanced logging for debugging training data issues
     if (trainingResults) {
@@ -95,8 +98,17 @@ serve(async (req) => {
       content: msg.content
     }));
     
-    // Create a system prompt that includes agency information and instructions
-    let systemContent = `You are an AI assistant for a real estate agency. Respond in a helpful, friendly manner.`;
+    // Create a system prompt that includes agency information and strict instructions
+    let systemContent = trainingContext || `You are an AI assistant for a real estate agency. Respond in a helpful, friendly manner.`;
+    
+    // If strict mode is enabled (default now), add strong instructions about ONLY using provided data
+    if (strictMode) {
+      systemContent = `You are an AI assistant for a real estate agency.
+Your ONLY source of truth is the agency's training data and property listings provided below.
+DO NOT make up ANY information about properties, the agency, or real estate topics.
+If you don't have the information in the provided data, say: "I don't have that information."
+`;
+    }
     
     // Check if we're dealing with an agency question - if so, prioritize training data
     if (isAgencyQuestion) {
@@ -117,7 +129,8 @@ serve(async (req) => {
 - If you don't know something, say so rather than making up information.
 - Keep responses concise and easy to understand.
 - Be friendly and conversational in tone.
-- ALWAYS refer to previous messages in the conversation when relevant.`;
+- ALWAYS refer to previous messages in the conversation when relevant.
+- NEVER invent or make up property details.`;
       
       // Include training context if available
       if (trainingContext) {
@@ -134,6 +147,12 @@ serve(async (req) => {
           systemContent += `, Features: ${property.features.join(', ')}`;
         }
       });
+      
+      // Add additional instructions about ONLY referring to these properties
+      systemContent += `\n\nIMPORTANT: ONLY mention these specific properties. DO NOT make up or invent any other properties.`;
+    } else if (intentClassification === 'property_search' || message.toLowerCase().includes('property') || message.toLowerCase().includes('house')) {
+      // If user is asking about properties but none were found
+      systemContent += `\n\nIMPORTANT: No property listings were found that match the user's query. DO NOT make up any property details. Instead, suggest that the user provide more details about what they're looking for or offer to take their contact information.`;
     }
     
     // Log the system content for debugging
@@ -158,7 +177,7 @@ serve(async (req) => {
       qaMatches: trainingResults.qaMatches?.length || 0,
       fileContent: trainingResults.fileContent?.length || 0
     }, null, 2));
-    console.log('🔍 Training Context Sent to OpenAI:', trainingContext.substring(0, 500));
+    console.log('🔍 Training Context Sent to OpenAI:', systemContent.substring(0, 500));
     
     // Call OpenAI API with increased temperature for more dynamic responses
     // and increased max_tokens to allow for fuller responses
@@ -190,7 +209,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         response: aiResponse,
-        source: finalResponseSource,
+        source: finalResponseSource || responseSource || 'training', // Default to training source
         conversationId: conversationId || `conv_${Date.now()}`,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

@@ -131,7 +131,7 @@ export const testChatbotResponse = async (
     
     console.log('Intent analysis:', intentData);
     
-    // Step 2: ALWAYS search training data for EVERY query - this is critical for principle #1
+    // Step 2: PRINCIPLE #1 - ALWAYS search training data for EVERY query
     // Determine search strategy based on intent
     const shouldSearchTraining = true; // ALWAYS search training data first for ALL queries
     const shouldSearchProperties = intentData.should_search_properties || 
@@ -150,7 +150,7 @@ export const testChatbotResponse = async (
     let propertyRecommendations: PropertyRecommendation[] = [];
     let responseSource = null; // Default to null until we determine source
     
-    // Step 3: ALWAYS fetch training data for ALL queries (principle #1)
+    // Step 3: PRINCIPLE #1 - ALWAYS fetch training data for ALL queries
     console.log('🔍 STARTING TRAINING DATA SEARCH for message:', message);
     console.log('🔍 Making request to search-training-data endpoint with userId:', userId);
     
@@ -301,7 +301,7 @@ export const testChatbotResponse = async (
       }
     }
 
-    // Step 7: If no training data for general questions - PRINCIPLE #3
+    // Step 7: PRINCIPLE #3 - If no training data for general questions - say "I don't have that information"
     if (!hasGoodTrainingMatches && !propertyRecommendations.length) {
       console.log('⚠️ NO TRAINING DATA OR PROPERTIES - USING FALLBACK RESPONSE');
       return {
@@ -312,30 +312,40 @@ export const testChatbotResponse = async (
       };
     }
     
-    // Step 8: Generate OpenAI prompt
+    // Step 8: Generate OpenAI prompt with strict instructions
     // Prepare more detailed context from training data to help OpenAI
     let trainingContext = '';
+    
+    // Create a system prompt that enforces training data usage as the ONLY source of truth
+    let systemContent = `
+You are an AI assistant for a real estate agency.
+Your ONLY source of truth is the agency's training data and property database. 
+DO NOT make up any information. 
+If you don't find the answer in the training data or property listings, say: 
+"I don't have that information, but I can assist you in other ways."
+`;
+    
     if (trainingResults.qaMatches.length > 0 || trainingResults.fileContent.length > 0) {
       if (trainingResults.qaMatches.length > 0) {
-        trainingContext += 'Relevant agency information from our knowledge base:\n\n';
+        systemContent += '\n\n📚 **Agency Q&A:**\n';
         trainingResults.qaMatches.forEach((match, index) => {
-          trainingContext += `Q: ${match.question}\nA: ${match.answer}\n\n`;
+          systemContent += `Q: ${match.question}\nA: ${match.answer}\n\n`;
         });
       }
       
       if (trainingResults.fileContent.length > 0) {
-        trainingContext += 'Additional information from our website and documents:\n\n';
+        systemContent += '\n\n📜 **Additional Agency Information:**\n';
         trainingResults.fileContent.forEach((content) => {
-          trainingContext += `Source: ${content.source || 'Website'}\nCategory: ${content.category || 'General'}\nContent: ${content.text.substring(0, 800)}...\n\n`;
+          systemContent += `Source: ${content.source || 'Website'}\nCategory: ${content.category || 'General'}\nContent: ${content.text.substring(0, 500)}...\n\n`;
         });
       }
       
-      console.log('📚 Prepared training context for OpenAI:', trainingContext.substring(0, 200) + '...');
+      console.log('📚 Prepared training context for OpenAI:', systemContent.substring(0, 200) + '...');
     }
     
     // 🔍 Debug: Log the final data being sent to OpenAI
     console.log('🔍 Final data sent to OpenAI:');
-    console.log(`Training Context: ${trainingContext ? trainingContext.substring(0, 300) + '...' : 'None'}`);
+    console.log(`Training Context: ${systemContent ? systemContent.substring(0, 300) + '...' : 'None'}`);
     console.log(`Training Results Count: QA=${trainingResults.qaMatches.length}, Files=${trainingResults.fileContent.length}`);
     console.log(`IsAgencyQuestion flag: ${isObviousAgencyQuestion || intentData.intent === 'agency_info'}`);
     
@@ -343,7 +353,7 @@ export const testChatbotResponse = async (
     console.log('🔍 Making request to ai-chatbot endpoint with data');
     
     try {
-      // MODIFIED: Add strict instructions about ONLY using provided data
+      // PRINCIPLE #4: Add strict instructions about ONLY using provided data
       const aiResponse = await fetch('https://ckgaqkbsnrvccctqxsqv.supabase.co/functions/v1/ai-chatbot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -357,7 +367,7 @@ export const testChatbotResponse = async (
           propertyRecommendations: propertyRecommendations,
           intentClassification: intentData.intent, // Pass the intent classification
           responseSource: responseSource, // Pass the determined source to help OpenAI prioritize
-          trainingContext: trainingContext, // Pass the formatted training context
+          trainingContext: systemContent, // Pass the formatted training context with strict instructions
           isAgencyQuestion: isObviousAgencyQuestion || intentData.intent === 'agency_info', // Explicitly flag agency questions
           // Add strict instruction to ONLY use provided data
           strictMode: true, // PRINCIPLE #4: Prevent made-up answers
@@ -366,7 +376,12 @@ export const testChatbotResponse = async (
             keywordMatched: isObviousAgencyQuestion,
             intent: intentData.intent,
             intentSource: intentData.detected_via || 'api',
-            hasTrainingData: trainingResults.qaMatches.length > 0 || trainingResults.fileContent.length > 0
+            hasTrainingData: trainingResults.qaMatches.length > 0 || trainingResults.fileContent.length > 0,
+            totalResults: {
+              qa: trainingResults.qaMatches.length,
+              files: trainingResults.fileContent.length,
+              properties: propertyRecommendations.length
+            }
           }
         })
       });
