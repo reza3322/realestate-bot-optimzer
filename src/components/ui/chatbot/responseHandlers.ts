@@ -1,3 +1,4 @@
+
 import { Message, PropertyRecommendation, VisitorInfo, ChatbotResponse } from './types';
 
 /**
@@ -15,32 +16,17 @@ export const testChatbotResponse = async (
   console.log(`Previous messages count: ${previousMessages.length}`);
   
   try {
-    // Step 1: First, analyze the intent using OpenAI to determine search strategy
-    // Check for obvious agency-related questions with simple pattern matching first
+    // Step 1: First, do quick check for agency-related keywords
     const lowerMessage = message.toLowerCase();
-    const isObviousAgencyQuestion = 
-      lowerMessage.includes('agency') || 
-      lowerMessage.includes('company') || 
-      lowerMessage.includes('firm') ||
-      lowerMessage.includes('business') ||
-      lowerMessage.includes('office') ||
-      lowerMessage.includes('about you') ||
-      lowerMessage.includes('your name') ||
-      lowerMessage.includes('who are you') ||
-      lowerMessage.includes('your website') ||
-      lowerMessage.includes('your location') ||
-      lowerMessage.includes('your address') ||
-      lowerMessage.includes('contact information') ||
-      lowerMessage.includes('how can i contact') || 
-      lowerMessage.includes('tell me about your') ||
-      lowerMessage.includes('what is your') ||
-      lowerMessage.includes('where are you') ||
-      lowerMessage.includes('your team') ||
-      lowerMessage.includes('your services') ||
-      lowerMessage.includes('your experience') ||
-      lowerMessage.includes('how long have you') ||
-      lowerMessage.includes('your hours') ||
-      lowerMessage.includes('when are you');
+    const agencyKeywords = [
+      'agency', 'company', 'firm', 'business', 'office', 
+      'about you', 'your name', 'who are you', 'your website', 
+      'your location', 'your address', 'contact information', 
+      'how can i contact', 'tell me about your', 'what is your',
+      'where are you'
+    ];
+    
+    const isObviousAgencyQuestion = agencyKeywords.some(keyword => lowerMessage.includes(keyword));
     
     // If it's an obvious agency question, set intent directly
     let intentData;
@@ -56,24 +42,40 @@ export const testChatbotResponse = async (
     } else {
       // Otherwise, use the intent classification API
       console.log('Calling intent analysis API...');
-      const intentAnalysis = await fetch('https://ckgaqkbsnrvccctqxsqv.supabase.co/functions/v1/analyze-intent', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: message,
-          userId: userId,
-          conversationId: conversationId,
-          previousMessages: previousMessages
-        })
-      });
+      
+      try {
+        console.log('🔍 Making request to analyze-intent endpoint with message:', message);
+        const intentAnalysis = await fetch('https://ckgaqkbsnrvccctqxsqv.supabase.co/functions/v1/analyze-intent', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: message,
+            userId: userId,
+            conversationId: conversationId,
+            previousMessages: previousMessages
+          })
+        });
 
-      if (!intentAnalysis.ok) {
-        console.error(`Intent analysis API returned ${intentAnalysis.status}: ${await intentAnalysis.text()}`);
-        throw new Error(`Intent analysis API returned ${intentAnalysis.status}`);
+        console.log('🔍 Intent analysis response status:', intentAnalysis.status);
+        
+        if (!intentAnalysis.ok) {
+          const errorText = await intentAnalysis.text();
+          console.error(`Intent analysis API returned ${intentAnalysis.status}: ${errorText}`);
+          throw new Error(`Intent analysis API returned ${intentAnalysis.status}: ${errorText}`);
+        }
+
+        intentData = await intentAnalysis.json();
+        console.log('Intent analysis response:', intentData);
+      } catch (intentError) {
+        console.error('Failed to get intent analysis:', intentError);
+        // If intent analysis fails, assume it could be an agency question and force training search
+        intentData = {
+          intent: 'general_query',
+          should_search_training: true, // Always search training on error
+          should_search_properties: false,
+          confidence: 0.5
+        };
       }
-
-      intentData = await intentAnalysis.json();
-      console.log('Intent analysis response:', intentData);
     }
     
     console.log('Intent analysis:', intentData);
@@ -88,10 +90,10 @@ export const testChatbotResponse = async (
                                 intentData.intent === 'general_query';
                                 
     // Force training search for agency/faq questions regardless of intent analysis result
-    const finalShouldSearchTraining = shouldSearchTraining || isAgencyOrFaqIntent;
+    const finalShouldSearchTraining = shouldSearchTraining || isAgencyOrFaqIntent || isObviousAgencyQuestion;
     
     console.log(`Search strategy - Training: ${finalShouldSearchTraining}, Properties: ${shouldSearchProperties}`);
-    console.log(`Intent: ${intentData.intent}, Is Agency/FAQ: ${isAgencyOrFaqIntent}`);
+    console.log(`Intent: ${intentData.intent}, Is Agency/FAQ: ${isAgencyOrFaqIntent}, Is Obvious Agency: ${isObviousAgencyQuestion}`);
     
     // Initialize result containers
     const trainingResults = {
@@ -101,7 +103,7 @@ export const testChatbotResponse = async (
     let propertyRecommendations: PropertyRecommendation[] = [];
     let responseSource = 'ai'; // Default source
     
-    // Step 3: ALWAYS fetch training data first for any intent - this is critical for agency info
+    // Step 3: ALWAYS fetch training data for any intent - this is critical for agency info
     console.log('🔍 STARTING TRAINING DATA SEARCH for message:', message);
     console.log('🔍 Making request to search-training-data endpoint with userId:', userId);
     
@@ -143,7 +145,7 @@ export const testChatbotResponse = async (
       // IMPORTANT: Log detailed training results to debug agency-related issues
       console.log('🔍 Training search results:', JSON.stringify(searchResults, null, 2));
       
-      if (isAgencyOrFaqIntent) {
+      if (isAgencyOrFaqIntent || isObviousAgencyQuestion) {
         console.log('🏢 Agency-related question detected, QA matches:', 
                    searchResults.qa_matches?.length || 0, 
                    'File content:', 
@@ -175,13 +177,15 @@ export const testChatbotResponse = async (
     }
     
     // Check if we found good training matches - LOWER the threshold for agency questions
+    const similarityThreshold = isAgencyOrFaqIntent || isObviousAgencyQuestion ? 0.1 : 0.15;
+    
     const hasGoodTrainingMatches = (trainingResults.qaMatches.length > 0 && 
-                                   trainingResults.qaMatches[0].similarity > 0.15) || 
+                                   trainingResults.qaMatches[0].similarity > similarityThreshold) || 
                                   (trainingResults.fileContent.length > 0 && 
-                                   trainingResults.fileContent[0].similarity > 0.15);
+                                   trainingResults.fileContent[0].similarity > similarityThreshold);
     
     // For agency questions, force using training data even with lower similarities
-    const forceTrainingDataForAgency = isAgencyOrFaqIntent && 
+    const forceTrainingDataForAgency = (isAgencyOrFaqIntent || isObviousAgencyQuestion) && 
                                       (trainingResults.qaMatches.length > 0 || 
                                        trainingResults.fileContent.length > 0);
     
@@ -258,11 +262,31 @@ export const testChatbotResponse = async (
       console.log('📚 Prepared training context for OpenAI:', trainingContext.substring(0, 200) + '...');
     }
     
+    // Special handling for agency questions
+    if (isObviousAgencyQuestion || intentData.intent === 'agency_info') {
+      console.log('⭐️ DETECTED AGENCY QUESTION - Special handling enabled');
+      
+      // For obvious agency questions, if we have training data, use it directly
+      if (hasTrainingData) {
+        if (trainingResults.qaMatches.length > 0) {
+          console.log('⭐️ USING DIRECT QA MATCH FOR AGENCY QUESTION');
+          
+          // Return the best match directly
+          return {
+            response: trainingResults.qaMatches[0].answer,
+            source: 'training',
+            conversationId: conversationId,
+            propertyRecommendations: []
+          };
+        }
+      }
+    }
+    
     // 🔍 Debug: Log the final data being sent to OpenAI
     console.log('🔍 Final data sent to OpenAI:');
     console.log(`Training Context: ${trainingContext ? trainingContext.substring(0, 300) + '...' : 'None'}`);
     console.log(`Training Results Count: QA=${trainingResults.qaMatches.length}, Files=${trainingResults.fileContent.length}`);
-    console.log(`IsAgencyQuestion flag: ${isAgencyOrFaqIntent}`);
+    console.log(`IsAgencyQuestion flag: ${isAgencyOrFaqIntent || isObviousAgencyQuestion}`);
     
     // Step 7: Send the message, intent, and any found data to the OpenAI API 
     console.log('🔍 Making request to ai-chatbot endpoint with data');
@@ -282,7 +306,7 @@ export const testChatbotResponse = async (
           intentClassification: intentData.intent, // Pass the intent classification
           responseSource: responseSource, // Pass the determined source to help OpenAI prioritize
           trainingContext: trainingContext, // Pass the formatted training context
-          isAgencyQuestion: isAgencyOrFaqIntent // Explicitly flag agency questions
+          isAgencyQuestion: isAgencyOrFaqIntent || isObviousAgencyQuestion // Explicitly flag agency questions
         })
       });
 

@@ -90,6 +90,18 @@ serve(async (req) => {
       );
     }
     
+    // Check if this is potentially an agency-related question
+    const lowerQuery = query.toLowerCase();
+    const agencyKeywords = [
+      'agency', 'company', 'firm', 'about you', 'your name', 'who are you',
+      'business', 'office', 'location', 'address', 'contact', 'tell me about'
+    ];
+    
+    const isAgencyQuestion = agencyKeywords.some(keyword => lowerQuery.includes(keyword));
+    if (isAgencyQuestion) {
+      console.log('🏢 AGENCY QUESTION DETECTED IN SEARCH FUNCTION:', query);
+    }
+    
     // Extract keywords from the query for better matching
     const keywords = extractKeywords(query);
     console.log(`🔤 Extracted keywords: ${keywords.join(', ')}`);
@@ -130,15 +142,38 @@ serve(async (req) => {
           console.error('❌ Error details:', JSON.stringify(trainingError, null, 2));
         } else if (trainingData && trainingData.length > 0) {
           console.log(`📊 Found ${trainingData.length} training content matches`);
-          console.log('📊 Content types found:', trainingData.map(item => item.content_type).join(', '));
+          console.log('📊 Content types found:', trainingData.map((item: any) => item.content_type).join(', '));
           
           // Log sample results for debugging
           if (trainingData.length > 0) {
             console.log('📊 First result sample:', JSON.stringify(trainingData[0], null, 2));
           }
           
+          // Give boost to agency questions if this is an agency-related query
+          const trainingWithBoost = isAgencyQuestion ? 
+            trainingData.map((item: any) => {
+              // Check if content is related to agency
+              const isAgencyContent = 
+                (item.category && ['agency', 'company', 'about us', 'contact'].some(term => 
+                  item.category.toLowerCase().includes(term))) ||
+                (item.content && agencyKeywords.some(term => 
+                  item.content.toLowerCase().includes(term)));
+                
+              // Apply boost to similarity score for agency content
+              if (isAgencyContent) {
+                console.log(`⭐️ Boosting agency-related content: ${item.content_type}, similarity from ${item.similarity} to ${item.similarity * 1.5}`);
+                return { 
+                  ...item, 
+                  similarity: Math.min(1.0, item.similarity * 1.5),  // Boost but cap at 1.0
+                  boosted: true
+                };
+              }
+              return item;
+            }).sort((a: any, b: any) => b.similarity - a.similarity)
+            : trainingData;
+          
           // Process and separate training content into qa_matches and file_content
-          trainingData.forEach(item => {
+          trainingWithBoost.forEach((item: any) => {
             console.log(`⚙️ Processing item of type ${item.content_type}, similarity: ${item.similarity.toFixed(2)}, category: ${item.category || 'uncategorized'}`);
             
             // Check content_type to determine whether it's a QA pair or file content
@@ -153,7 +188,8 @@ serve(async (req) => {
                   answer: qaMatch.answer,
                   category: item.category,
                   priority: item.priority,
-                  similarity: item.similarity
+                  similarity: item.similarity,
+                  boosted: item.boosted
                 });
               } else {
                 console.log(`❌ Failed to extract QA pair from content: ${item.content.substring(0, 50)}...`);
@@ -167,7 +203,8 @@ serve(async (req) => {
                 category: item.category,
                 text: item.content,
                 priority: item.priority,
-                similarity: item.similarity
+                similarity: item.similarity,
+                boosted: item.boosted
               });
             }
           });
@@ -203,7 +240,7 @@ serve(async (req) => {
         } else if (propertyData && propertyData.length > 0) {
           console.log(`📊 Found ${propertyData.length} property matches`);
           
-          result.property_listings = propertyData.map(property => ({
+          result.property_listings = propertyData.map((property: any) => ({
             id: property.id,
             title: property.title || `Property in ${property.city || 'Exclusive Location'}`,
             price: property.price,
@@ -250,7 +287,7 @@ serve(async (req) => {
 });
 
 // Helper function to extract question and answer from content
-function extractQAPair(content) {
+function extractQAPair(content: string) {
   // Check if content is in Q&A format
   if (!content) {
     console.log('❌ Content is null or undefined in extractQAPair');
@@ -272,7 +309,7 @@ function extractQAPair(content) {
 }
 
 // Helper function to extract meaningful keywords from a query
-function extractKeywords(query) {
+function extractKeywords(query: string) {
   // Remove common stop words and punctuation
   const stopWords = ['i', 'me', 'my', 'myself', 'we', 'our', 'ours', 'ourselves', 'you', 'your', 'yours',
                     'yourself', 'yourselves', 'he', 'him', 'his', 'himself', 'she', 'her', 'hers',
@@ -298,7 +335,7 @@ function extractKeywords(query) {
 }
 
 // Helper function to extract property-related keywords
-function extractPropertyKeywords(query) {
+function extractPropertyKeywords(query: string) {
   const propertyTerms = [
     'property', 'house', 'home', 'apartment', 'condo', 'villa', 'townhouse', 'land', 'real estate',
     'buy', 'rent', 'lease', 'price', 'cost', 'bedroom', 'bathroom', 'kitchen', 'living', 'room',

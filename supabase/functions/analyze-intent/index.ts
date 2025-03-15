@@ -19,15 +19,22 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
+  console.log('🚀 ANALYZE-INTENT FUNCTION CALLED - ENTRY POINT');
+  console.log('🔑 Function URL:', req.url);
+  console.log('📋 Request method:', req.method);
+  
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
+    console.log('🔄 Handling CORS preflight request');
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
     const { message, userId, conversationId, previousMessages = [] } = await req.json();
+    console.log('📝 Analyzing intent for message:', message);
     
     if (!message) {
+      console.error('❌ Missing required parameter: message');
       return new Response(
         JSON.stringify({ error: "Message is required" }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -35,59 +42,60 @@ serve(async (req) => {
     }
 
     // First, do a simple rule-based check for common agency-related queries
-    // This ensures we catch obvious agency questions without relying on AI
+    // IMPORTANT: This ensures we catch agency questions without relying on AI
     const lowerMessage = message.toLowerCase();
-    const isAgencyQuestion = 
-      lowerMessage.includes('agency') || 
-      lowerMessage.includes('company') || 
-      lowerMessage.includes('firm') ||
-      lowerMessage.includes('business') ||
-      lowerMessage.includes('office') ||
-      lowerMessage.includes('about you') ||
-      lowerMessage.includes('your name') ||
-      lowerMessage.includes('who are you') ||
-      lowerMessage.includes('your website') ||
-      lowerMessage.includes('your location') ||
-      lowerMessage.includes('your address') ||
-      lowerMessage.includes('contact information') ||
-      lowerMessage.includes('how can i contact');
+    
+    // Expanded list of keywords for detecting agency questions
+    const agencyKeywords = [
+      'agency', 'company', 'firm', 'business', 'office', 
+      'about you', 'your name', 'who are you', 'your website', 
+      'your location', 'your address', 'contact information', 
+      'how can i contact', 'tell me about your', 'what is your', 
+      'where are you', 'your team', 'your services', 'your experience',
+      'how long have you', 'your hours', 'when are you', 'founded',
+      'established', 'how many agents', 'how many people', 'specialists',
+      'what do you specialize', 'your specialty', 'work with',
+      'commission', 'fee', 'charge', 'cost of your service',
+      'license', 'certified', 'accredited', 'credentials',
+      'family owned', 'independent', 'franchise', 'broker',
+      'agent', 'realtor', 'award', 'recognition', 'reputation',
+      'history', 'tell me more', 'brand', 'your brand'
+    ];
+      
+    const isAgencyQuestion = agencyKeywords.some(keyword => lowerMessage.includes(keyword));
       
     if (isAgencyQuestion) {
-      console.log('Direct agency question detected through keyword matching');
+      console.log('🏢 DIRECT AGENCY QUESTION DETECTED through keyword matching:', message);
+      console.log('✅ Setting intent to agency_info with high confidence');
       return new Response(
         JSON.stringify({
           intent: 'agency_info',
           should_search_training: true,
           should_search_properties: false,
-          confidence: 0.95
+          confidence: 0.95,
+          detected_via: 'keyword_match'
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
     
     // Next, check for obvious property-related queries
-    const isPropertyQuestion = 
-      lowerMessage.includes('property') || 
-      lowerMessage.includes('house') || 
-      lowerMessage.includes('apartment') ||
-      lowerMessage.includes('villa') ||
-      lowerMessage.includes('condo') ||
-      lowerMessage.includes('bedroom') ||
-      lowerMessage.includes('bathroom') ||
-      lowerMessage.includes('price') ||
-      lowerMessage.includes('cost') ||
-      lowerMessage.includes('buy') ||
-      lowerMessage.includes('rent') ||
-      lowerMessage.includes('sell');
+    const propertyKeywords = [
+      'property', 'house', 'apartment', 'villa', 'condo',
+      'bedroom', 'bathroom', 'price', 'cost', 'buy', 'rent', 'sell'
+    ];
+      
+    const isPropertyQuestion = propertyKeywords.some(keyword => lowerMessage.includes(keyword));
       
     if (isPropertyQuestion) {
-      console.log('Direct property question detected through keyword matching');
+      console.log('🏠 DIRECT PROPERTY QUESTION detected through keyword matching:', message);
       return new Response(
         JSON.stringify({
           intent: 'property_search',
-          should_search_training: true, // Still search training but prioritize properties
+          should_search_training: true,
           should_search_properties: true,
-          confidence: 0.9
+          confidence: 0.9,
+          detected_via: 'keyword_match'
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -95,6 +103,7 @@ serve(async (req) => {
 
     // For more complex queries, use OpenAI to classify the intent
     if (openai) {
+      console.log('🤖 Using OpenAI to classify intent for complex query');
       // System prompt to analyze user's intent
       const systemPrompt = `You are an AI assistant for a real estate agency, analyzing customer queries to determine their intent.
 
@@ -132,6 +141,7 @@ IMPORTANT: For agency_info AND faq intents, ALWAYS set "should_search_training" 
       }
 
       // Call OpenAI API to analyze intent
+      console.log('🔍 Calling OpenAI to analyze intent');
       const completion = await openai.createChatCompletion({
         model: "gpt-3.5-turbo",
         messages: [
@@ -183,20 +193,24 @@ IMPORTANT: For agency_info AND faq intents, ALWAYS set "should_search_training" 
         // Force should_search_training to true for agency_info and faq intents
         if (functionCallResult.intent === 'agency_info' || functionCallResult.intent === 'faq') {
           functionCallResult.should_search_training = true;
+          functionCallResult.detected_via = 'openai';
         }
         
         // Log the result for debugging
-        console.log('OpenAI intent classification:', functionCallResult);
+        console.log('✅ OpenAI intent classification:', functionCallResult);
         
         return new Response(
           JSON.stringify(functionCallResult),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
+      } else {
+        console.log('⚠️ OpenAI did not return a function call result, falling back to rule-based classification');
       }
     }
 
     // Fallback to a simple rule-based approach if OpenAI is unavailable
     // or if the function call failed
+    console.log('⚠️ Using fallback rule-based intent classification');
     const lowerCaseMessage = message.toLowerCase();
     
     // Default fallback classification
@@ -206,25 +220,28 @@ IMPORTANT: For agency_info AND faq intents, ALWAYS set "should_search_training" 
       should_search_properties: lowerCaseMessage.includes('property') || 
                               lowerCaseMessage.includes('house') || 
                               lowerCaseMessage.includes('apartment'),
-      confidence: 0.7
+      confidence: 0.7,
+      detected_via: 'fallback'
     };
     
-    console.log('Fallback intent classification:', fallbackResult);
+    console.log('✅ Fallback intent classification:', fallbackResult);
     
     return new Response(
       JSON.stringify(fallbackResult),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
-    console.error('Error in intent analysis:', error);
+    console.error('❌ Error in intent analysis:', error);
+    console.error('❌ Stack trace:', error.stack);
     
     return new Response(
       JSON.stringify({ 
         error: error.message,
         intent: 'general_query',
-        should_search_training: true,
+        should_search_training: true, // Always search training in case of error
         should_search_properties: false,
-        confidence: 0.5
+        confidence: 0.5,
+        detected_via: 'error_fallback'
       }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
