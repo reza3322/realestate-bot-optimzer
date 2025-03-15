@@ -64,36 +64,103 @@ const Chatbot = ({
   const [conversationId, setConversationId] = useState<string | undefined>(undefined);
   const [visitorInfo, setVisitorInfo] = useState<VisitorInfo>({});
   const [propertyRecommendations, setPropertyRecommendations] = useState<PropertyRecommendation[]>([]);
+  const [isConversationLoaded, setIsConversationLoaded] = useState<boolean>(false);
 
   const chatStyles = getChatStyles(theme, variation, primaryColor);
   
-  // Generate a stable conversation key for this user
+  // Generate stable storage keys for this conversation
   const conversationStorageKey = `chatConversation_${userId}`;
   const conversationIdStorageKey = `chatConversationId_${userId}`;
   
-  // Restore conversation from localStorage on initial load
-  useEffect(() => {
-    const savedConversation = localStorage.getItem(conversationStorageKey);
-    const savedConversationId = localStorage.getItem(conversationIdStorageKey);
-    
-    if (savedConversation) {
-      try {
-        const parsedMessages = JSON.parse(savedConversation) as Message[];
-        // Only restore if there are more messages than just the welcome
-        if (parsedMessages.length > 1) {
-          console.log(`Restoring previous conversation with ${parsedMessages.length} messages`);
-          setMessages(parsedMessages);
-        }
-      } catch (e) {
-        console.error('Error restoring conversation:', e);
+  // Load previous conversation history from the API if available
+  const fetchConversationHistory = async (convId: string, uid: string) => {
+    try {
+      console.log(`Fetching conversation history for ID: ${convId}, User ID: ${uid}`);
+      const response = await fetch('https://ckgaqkbsnrvccctqxsqv.supabase.co/functions/v1/get-conversation-history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          conversationId: convId,
+          userId: uid,
+          limit: 20
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch conversation history: ${response.status}`);
       }
+      
+      const data = await response.json();
+      console.log(`Received conversation history:`, data);
+      
+      if (data.messages && data.messages.length > 0) {
+        // Convert the backend format to our Message format
+        const formattedMessages: Message[] = [];
+        
+        // Add welcome message first
+        formattedMessages.push({ role: 'bot', content: defaultWelcomeMessage });
+        
+        // Add the conversation history
+        data.messages.forEach((item: any) => {
+          formattedMessages.push({ role: 'user', content: item.message });
+          formattedMessages.push({ role: 'bot', content: item.response });
+        });
+        
+        console.log(`Loaded ${formattedMessages.length} messages from history`);
+        setMessages(formattedMessages);
+      }
+      
+      return true;
+    } catch (err) {
+      console.error('Error fetching conversation history:', err);
+      return false;
     }
+  };
+  
+  // Restore conversation from localStorage and API on initial load
+  useEffect(() => {
+    const loadConversation = async () => {
+      // Try to get saved conversation ID first
+      const savedConversationId = localStorage.getItem(conversationIdStorageKey);
+      
+      if (savedConversationId) {
+        console.log(`Found saved conversation ID: ${savedConversationId}`);
+        setConversationId(savedConversationId);
+        
+        // Fetch the conversation history from the API
+        const success = await fetchConversationHistory(savedConversationId, userId);
+        
+        // If API fetch failed, try local storage as fallback
+        if (!success) {
+          console.log('API fetch failed, trying localStorage fallback');
+          const savedConversation = localStorage.getItem(conversationStorageKey);
+          if (savedConversation) {
+            try {
+              const parsedMessages = JSON.parse(savedConversation) as Message[];
+              // Only restore if there are more messages than just the welcome
+              if (parsedMessages.length > 1) {
+                console.log(`Restoring ${parsedMessages.length} messages from localStorage`);
+                setMessages(parsedMessages);
+              }
+            } catch (e) {
+              console.error('Error parsing saved conversation:', e);
+            }
+          }
+        }
+      } else {
+        console.log('No saved conversation ID found');
+        // Generate a new conversation ID
+        const newConversationId = 'conv_' + Date.now().toString();
+        setConversationId(newConversationId);
+        console.log(`Generated new conversation ID: ${newConversationId}`);
+        localStorage.setItem(conversationIdStorageKey, newConversationId);
+      }
+      
+      setIsConversationLoaded(true);
+    };
     
-    if (savedConversationId) {
-      setConversationId(savedConversationId);
-      console.log(`Restored conversation ID: ${savedConversationId}`);
-    }
-  }, [userId, conversationStorageKey, conversationIdStorageKey]);
+    loadConversation();
+  }, [userId, conversationStorageKey, conversationIdStorageKey, defaultWelcomeMessage]);
   
   // Update welcome message if it changes
   useEffect(() => {
@@ -124,17 +191,17 @@ const Chatbot = ({
   
   // Save conversation to localStorage whenever it changes
   useEffect(() => {
-    // Don't save if it's just the welcome message
-    if (messages.length > 1) {
+    // Don't save if it's just the welcome message or if we're still loading
+    if (messages.length > 1 && isConversationLoaded) {
       localStorage.setItem(conversationStorageKey, JSON.stringify(messages));
-      console.log(`Saved conversation with ${messages.length} messages`);
+      console.log(`Saved conversation with ${messages.length} messages to localStorage`);
     }
     
-    if (conversationId) {
+    if (conversationId && isConversationLoaded) {
       localStorage.setItem(conversationIdStorageKey, conversationId);
-      console.log(`Saved conversation ID: ${conversationId}`);
+      console.log(`Saved conversation ID: ${conversationId} to localStorage`);
     }
-  }, [messages, conversationId, conversationStorageKey, conversationIdStorageKey]);
+  }, [messages, conversationId, isConversationLoaded, conversationStorageKey, conversationIdStorageKey]);
 
   const handleSendMessage = async (message: string) => {
     // Add user message to the UI immediately
@@ -157,7 +224,7 @@ const Chatbot = ({
       // Get all previous messages except the initial welcome
       const previousMsgs = newMessages.filter(msg => 
         !(msg.role === 'bot' && msg.content === defaultWelcomeMessage) 
-      );
+      ).slice(0, -1); // Remove the message we just sent
       
       // Log if we're dealing with an agency question for debugging
       const lowerMessage = message.toLowerCase();
@@ -173,13 +240,19 @@ const Chatbot = ({
         console.log('WITH CONVERSATION HISTORY:', JSON.stringify(previousMsgs, null, 2));
       }
       
-      // Call the API - ensure we're working with valid Message objects
+      // Ensure we have a valid conversation ID
+      const currentConversationId = conversationId || ('conv_' + Date.now().toString());
+      if (!conversationId) {
+        setConversationId(currentConversationId);
+      }
+      
+      // Call the API with all context
       const result = await testChatbotResponse(
         message, 
         userId, 
         visitorInfo, 
-        conversationId,
-        previousMsgs.slice(0, -1) // Don't include the message we just sent
+        currentConversationId,
+        previousMsgs 
       ) as ChatbotResponse;
       
       if (result.error) {
@@ -187,7 +260,7 @@ const Chatbot = ({
         setError(`Error: ${result.error}`);
       } else {
         // Handle conversation ID
-        if (result.conversationId && !conversationId) {
+        if (result.conversationId && (!conversationId || result.conversationId !== conversationId)) {
           console.log(`Setting conversation ID: ${result.conversationId}`);
           setConversationId(result.conversationId);
         }

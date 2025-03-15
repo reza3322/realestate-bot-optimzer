@@ -30,7 +30,7 @@ serve(async (req) => {
     let reqBody;
     try {
       reqBody = await req.json();
-      console.log('📦 Request body parsed successfully');
+      console.log('📦 Request body parsed successfully:', JSON.stringify(reqBody));
     } catch (parseError) {
       console.error('❌ Error parsing request body:', parseError);
       return new Response(
@@ -102,16 +102,6 @@ serve(async (req) => {
       console.log('🏢 AGENCY QUESTION DETECTED IN SEARCH FUNCTION:', query);
     }
     
-    // Extract keywords from the query for better matching
-    const keywords = extractKeywords(query);
-    console.log(`🔤 Extracted keywords: ${keywords.join(', ')}`);
-    
-    // Extract property-related keywords if looking for properties
-    const propertyKeywords = includeProperties ? extractPropertyKeywords(query) : [];
-    if (propertyKeywords.length > 0) {
-      console.log(`🏠 Property-related keywords: ${propertyKeywords.join(', ')}`);
-    }
-    
     // Initialize response object
     const result = {
       qa_matches: [],
@@ -119,39 +109,92 @@ serve(async (req) => {
       property_listings: []
     };
     
-    // Search all training data regardless of content_type
+    // DIRECT DATABASE QUERY: Query the chatbot_training_files table directly to check if there's data
+    console.log('🔍 DIRECT CHECK: Querying chatbot_training_files for user_id:', userId);
+    try {
+      const { data: trainingFilesCheck, error: checkError } = await supabase
+        .from('chatbot_training_files')
+        .select('id, question, answer, category')
+        .eq('user_id', userId)
+        .limit(5);
+      
+      console.log('📊 DIRECT CHECK RESULT:', JSON.stringify(trainingFilesCheck || [], null, 2));
+      if (checkError) {
+        console.error('❌ Error in direct check:', checkError);
+      } else {
+        console.log(`📊 DIRECT CHECK found ${trainingFilesCheck?.length || 0} training files`);
+      }
+    } catch (checkError) {
+      console.error('❌ Exception in direct check:', checkError);
+    }
+    
+    // Search all training data 
     if (includeQA || includeFiles) {
       console.log('🔍 Searching for all training content types');
-      console.log('🔍 Calling Supabase RPC: search_all_training_content');
-      console.log('🔍 Parameters:', { user_id_param: userId, query_text: query });
       
       try {
+        console.log(`⏳ Starting direct query to chatbot_training_files - ${new Date().toISOString()}`);
+        
+        // First try direct database query as a fallback
+        const { data: directQueryData, error: directQueryError } = await supabase
+          .from('chatbot_training_files')
+          .select('*')
+          .eq('user_id', userId)
+          .order('priority', { ascending: false })
+          .limit(10);
+        
+        if (directQueryError) {
+          console.error('❌ Error in direct query:', directQueryError);
+        } else if (directQueryData && directQueryData.length > 0) {
+          console.log(`📊 Direct query found ${directQueryData.length} training items`);
+          
+          // Process the direct query results
+          directQueryData.forEach((item) => {
+            if (item.question && item.answer) {
+              result.qa_matches.push({
+                id: item.id,
+                question: item.question,
+                answer: item.answer,
+                category: item.category,
+                priority: item.priority,
+                similarity: 0.8, // Default high similarity for direct matches
+                source: 'direct_query'
+              });
+            } else if (item.extracted_text) {
+              result.file_content.push({
+                id: item.id,
+                source: item.content_type || 'text',
+                category: item.category,
+                text: item.extracted_text,
+                priority: item.priority,
+                similarity: 0.7, // Default similarity
+                source: 'direct_query'
+              });
+            }
+          });
+        }
+        
+        // Also try the RPC function if available
         console.log(`⏳ Starting Supabase RPC call - ${new Date().toISOString()}`);
-        // Use the search_all_training_content function which now combines all content types
+        // Use the search_all_training_content function 
         const { data: trainingData, error: trainingError } = await supabase.rpc(
           'search_all_training_content',
           { user_id_param: userId, query_text: query }
         );
         console.log(`✅ Supabase RPC call completed - ${new Date().toISOString()}`);
         
-        // 🔍 Debugging: Log the response from Supabase in detail
+        // Log the response from Supabase in detail
         console.log(`🔍 Training Data Response from Supabase for user ${userId}:`, JSON.stringify(trainingData || 'null', null, 2));
         
         if (trainingError) {
           console.error('❌ Error searching all training content:', trainingError);
           console.error('❌ Error details:', JSON.stringify(trainingError, null, 2));
         } else if (trainingData && trainingData.length > 0) {
-          console.log(`📊 Found ${trainingData.length} training content matches`);
-          console.log('📊 Content types found:', trainingData.map((item: any) => item.content_type).join(', '));
-          
-          // Log sample results for debugging
-          if (trainingData.length > 0) {
-            console.log('📊 First result sample:', JSON.stringify(trainingData[0], null, 2));
-          }
+          console.log(`📊 Found ${trainingData.length} training content matches from RPC`);
           
           // Give boost to agency questions if this is an agency-related query
           const trainingWithBoost = isAgencyQuestion ? 
-            trainingData.map((item: any) => {
+            trainingData.map((item) => {
               // Check if content is related to agency
               const isAgencyContent = 
                 (item.category && ['agency', 'company', 'about us', 'contact'].some(term => 
@@ -169,11 +212,11 @@ serve(async (req) => {
                 };
               }
               return item;
-            }).sort((a: any, b: any) => b.similarity - a.similarity)
+            }).sort((a, b) => b.similarity - a.similarity)
             : trainingData;
           
           // Process and separate training content into qa_matches and file_content
-          trainingWithBoost.forEach((item: any) => {
+          trainingWithBoost.forEach((item) => {
             console.log(`⚙️ Processing item of type ${item.content_type}, similarity: ${item.similarity.toFixed(2)}, category: ${item.category || 'uncategorized'}`);
             
             // Check content_type to determine whether it's a QA pair or file content
@@ -189,7 +232,8 @@ serve(async (req) => {
                   category: item.category,
                   priority: item.priority,
                   similarity: item.similarity,
-                  boosted: item.boosted
+                  boosted: item.boosted,
+                  source: 'rpc'
                 });
               } else {
                 console.log(`❌ Failed to extract QA pair from content: ${item.content.substring(0, 50)}...`);
@@ -204,14 +248,13 @@ serve(async (req) => {
                 text: item.content,
                 priority: item.priority,
                 similarity: item.similarity,
-                boosted: item.boosted
+                boosted: item.boosted,
+                source: 'rpc'
               });
             }
           });
-          
-          console.log(`✅ Processed ${result.qa_matches.length} QA matches and ${result.file_content.length} file content items`);
         } else {
-          console.log('⚠️ No training content matches found');
+          console.log('⚠️ No training content matches found from RPC');
         }
       } catch (supabaseError) {
         console.error('❌ Exception in Supabase RPC call:', supabaseError);
@@ -223,14 +266,13 @@ serve(async (req) => {
     if (includeProperties) {
       try {
         console.log('🔍 Searching for property listings');
-        console.log('🔍 Calling Supabase RPC: search_properties');
         
-        // Use the search_properties function we created
+        // Use the search_properties function
         const { data: propertyData, error: propertyError } = await supabase.rpc(
           'search_properties',
           { 
             user_id_param: userId, 
-            query_text: propertyKeywords.length > 0 ? propertyKeywords.join(' ') : query,
+            query_text: query,
             max_results: 3 
           }
         );
@@ -240,7 +282,7 @@ serve(async (req) => {
         } else if (propertyData && propertyData.length > 0) {
           console.log(`📊 Found ${propertyData.length} property matches`);
           
-          result.property_listings = propertyData.map((property: any) => ({
+          result.property_listings = propertyData.map((property) => ({
             id: property.id,
             title: property.title || `Property in ${property.city || 'Exclusive Location'}`,
             price: property.price,
@@ -287,7 +329,7 @@ serve(async (req) => {
 });
 
 // Helper function to extract question and answer from content
-function extractQAPair(content: string) {
+function extractQAPair(content) {
   // Check if content is in Q&A format
   if (!content) {
     console.log('❌ Content is null or undefined in extractQAPair');
@@ -308,44 +350,3 @@ function extractQAPair(content: string) {
   return null;
 }
 
-// Helper function to extract meaningful keywords from a query
-function extractKeywords(query: string) {
-  // Remove common stop words and punctuation
-  const stopWords = ['i', 'me', 'my', 'myself', 'we', 'our', 'ours', 'ourselves', 'you', 'your', 'yours',
-                    'yourself', 'yourselves', 'he', 'him', 'his', 'himself', 'she', 'her', 'hers',
-                    'herself', 'it', 'its', 'itself', 'they', 'them', 'their', 'theirs', 'themselves',
-                    'what', 'which', 'who', 'whom', 'this', 'that', 'these', 'those', 'am', 'is', 'are',
-                    'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'having', 'do', 'does',
-                    'did', 'doing', 'a', 'an', 'the', 'and', 'but', 'if', 'or', 'because', 'as', 'until',
-                    'while', 'of', 'at', 'by', 'for', 'with', 'about', 'against', 'between', 'into',
-                    'through', 'during', 'before', 'after', 'above', 'below', 'to', 'from', 'up', 'down',
-                    'in', 'out', 'on', 'off', 'over', 'under', 'again', 'further', 'then', 'once', 'here',
-                    'there', 'when', 'where', 'why', 'how', 'all', 'any', 'both', 'each', 'few', 'more',
-                    'most', 'other', 'some', 'such', 'no', 'nor', 'not', 'only', 'own', 'same', 'so',
-                    'than', 'too', 'very', 'can', 'will', 'just', 'don', 'should', 'now', 'would', 'could'];
-  
-  // Normalize and split
-  const words = query.toLowerCase()
-                    .replace(/[^\w\s]/g, '')
-                    .split(/\s+/)
-                    .filter(word => word.length > 2 && !stopWords.includes(word));
-  
-  // Return unique words
-  return [...new Set(words)];
-}
-
-// Helper function to extract property-related keywords
-function extractPropertyKeywords(query: string) {
-  const propertyTerms = [
-    'property', 'house', 'home', 'apartment', 'condo', 'villa', 'townhouse', 'land', 'real estate',
-    'buy', 'rent', 'lease', 'price', 'cost', 'bedroom', 'bathroom', 'kitchen', 'living', 'room',
-    'garden', 'yard', 'garage', 'parking', 'basement', 'attic', 'floor', 'ceiling', 'roof',
-    'pool', 'spa', 'jacuzzi', 'beach', 'ocean', 'sea', 'lake', 'river', 'mountain', 'view',
-    'urban', 'suburban', 'rural', 'downtown', 'uptown', 'city', 'town', 'village',
-    'square meters', 'square feet', 'acres', 'hectares', 'location'
-  ];
-  
-  // Find property terms in the query
-  const lowerQuery = query.toLowerCase();
-  return propertyTerms.filter(term => lowerQuery.includes(term));
-}

@@ -1,5 +1,6 @@
 
 
+
 [functions.create-chatbot-settings]
 verify_jwt = false
 
@@ -46,5 +47,8 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.get-conversation-history]
+verify_jwt = false
+
+[functions.analyze-intent]
 verify_jwt = false
 

@@ -14,6 +14,7 @@ export const testChatbotResponse = async (
   console.log(`Processing chatbot response for user: ${userId}`);
   console.log(`Current message: "${message}"`);
   console.log(`Previous messages count: ${previousMessages.length}`);
+  console.log(`Conversation ID: ${conversationId || 'New conversation'}`);
   
   try {
     // Step 1: First, do quick check for agency-related keywords
@@ -28,11 +29,12 @@ export const testChatbotResponse = async (
     
     const isObviousAgencyQuestion = agencyKeywords.some(keyword => lowerMessage.includes(keyword));
     
-    // If it's an obvious agency question, set intent directly
+    // If it's an obvious agency question, set intent directly and log it
     let intentData;
     
     if (isObviousAgencyQuestion) {
       console.log('🏢 DETECTED AGENCY QUESTION via direct keyword matching:', message);
+      console.log('WITH CONVERSATION HISTORY:', JSON.stringify(previousMessages, null, 2));
       intentData = {
         intent: 'agency_info',
         should_search_training: true,
@@ -117,7 +119,7 @@ export const testChatbotResponse = async (
         conversationId: conversationId,
         includeQA: true,
         includeFiles: true,  
-        includeProperties: false,
+        includeProperties: shouldSearchProperties,
         previousMessages: previousMessages
       };
       
@@ -153,7 +155,7 @@ export const testChatbotResponse = async (
         
         // Log the actual content for debugging
         if (searchResults.qa_matches?.length > 0) {
-          searchResults.qa_matches.forEach((match: any, index: number) => {
+          searchResults.qa_matches.forEach((match, index) => {
             console.log(`QA Match ${index + 1} (similarity: ${match.similarity?.toFixed(2) || 'N/A'}):`, 
                        `Q: ${match.question || 'No question'}`, 
                        `A: ${match.answer || 'No answer'}`);
@@ -161,7 +163,7 @@ export const testChatbotResponse = async (
         }
         
         if (searchResults.file_content?.length > 0) {
-          searchResults.file_content.forEach((content: any, index: number) => {
+          searchResults.file_content.forEach((content, index) => {
             console.log(`File Content ${index + 1} (similarity: ${content.similarity?.toFixed(2) || 'N/A'}):`, 
                        content.text?.substring(0, 100) + '...' || 'No text');
           });
@@ -171,6 +173,9 @@ export const testChatbotResponse = async (
       // Update training results
       trainingResults.qaMatches = searchResults.qa_matches || [];
       trainingResults.fileContent = searchResults.file_content || [];
+      
+      // Update property recommendations from the same search if available
+      propertyRecommendations = searchResults.property_listings || [];
       
     } catch (searchError) {
       console.error('🔴 Error in training data search:', searchError);
@@ -197,9 +202,9 @@ export const testChatbotResponse = async (
       responseSource = 'training';
     }
     
-    // Step 4: Fetch property data if needed and if we're not dealing with a clear agency/FAQ question
-    if (shouldSearchProperties && (responseSource !== 'training' || intentData.intent === 'property_search')) {
-      console.log('Searching property data based on intent analysis...');
+    // Step 4: If we didn't get property data and need it, fetch it separately
+    if (shouldSearchProperties && propertyRecommendations.length === 0 && (responseSource !== 'training' || intentData.intent === 'property_search')) {
+      console.log('Searching property data separately...');
       try {
         const propertyResponse = await fetch('https://ckgaqkbsnrvccctqxsqv.supabase.co/functions/v1/search-training-data', {
           method: 'POST',
@@ -236,50 +241,54 @@ export const testChatbotResponse = async (
       }
     }
     
-    // Step 5: Check if we have any user-specific data to use
-    const hasTrainingData = trainingResults.qaMatches.length > 0 || trainingResults.fileContent.length > 0;
-    const hasPropertyData = propertyRecommendations.length > 0;
+    // Step 5: Special handling for agency questions
+    if (isObviousAgencyQuestion || intentData.intent === 'agency_info') {
+      console.log('⭐️ DETECTED AGENCY QUESTION - Special handling enabled');
+      
+      // For obvious agency questions, if we have training data, use it directly
+      if (trainingResults.qaMatches.length > 0) {
+        console.log('⭐️ USING DIRECT QA MATCH FOR AGENCY QUESTION');
+        
+        // Return the best match directly
+        return {
+          response: trainingResults.qaMatches[0].answer,
+          source: 'training',
+          conversationId: conversationId || `conv_${Date.now()}`,
+          propertyRecommendations: []
+        };
+      } else if (trainingResults.fileContent.length > 0) {
+        console.log('⭐️ USING DIRECT FILE CONTENT FOR AGENCY QUESTION');
+        
+        // Get agency details from the file content
+        const agencyContent = trainingResults.fileContent[0].text;
+        return {
+          response: `Based on our information: ${agencyContent.substring(0, 500)}`,
+          source: 'training',
+          conversationId: conversationId || `conv_${Date.now()}`,
+          propertyRecommendations: []
+        };
+      }
+    }
     
-    console.log(`Found training data: ${hasTrainingData}, property data: ${hasPropertyData}, intent: ${intentData.intent}`);
-    
-    // Step 6: Prepare more detailed context from training data to help OpenAI
+    // Step 6: Generate OpenAI prompt
+    // Prepare more detailed context from training data to help OpenAI
     let trainingContext = '';
-    if (hasTrainingData) {
+    if (trainingResults.qaMatches.length > 0 || trainingResults.fileContent.length > 0) {
       if (trainingResults.qaMatches.length > 0) {
         trainingContext += 'Relevant agency information from our knowledge base:\n\n';
-        trainingResults.qaMatches.forEach((match: any, index: number) => {
+        trainingResults.qaMatches.forEach((match, index) => {
           trainingContext += `Q: ${match.question}\nA: ${match.answer}\n\n`;
         });
       }
       
       if (trainingResults.fileContent.length > 0) {
         trainingContext += 'Additional information from our website and documents:\n\n';
-        trainingResults.fileContent.forEach((content: any) => {
+        trainingResults.fileContent.forEach((content) => {
           trainingContext += `Source: ${content.source || 'Website'}\nCategory: ${content.category || 'General'}\nContent: ${content.text.substring(0, 800)}...\n\n`;
         });
       }
       
       console.log('📚 Prepared training context for OpenAI:', trainingContext.substring(0, 200) + '...');
-    }
-    
-    // Special handling for agency questions
-    if (isObviousAgencyQuestion || intentData.intent === 'agency_info') {
-      console.log('⭐️ DETECTED AGENCY QUESTION - Special handling enabled');
-      
-      // For obvious agency questions, if we have training data, use it directly
-      if (hasTrainingData) {
-        if (trainingResults.qaMatches.length > 0) {
-          console.log('⭐️ USING DIRECT QA MATCH FOR AGENCY QUESTION');
-          
-          // Return the best match directly
-          return {
-            response: trainingResults.qaMatches[0].answer,
-            source: 'training',
-            conversationId: conversationId,
-            propertyRecommendations: []
-          };
-        }
-      }
     }
     
     // 🔍 Debug: Log the final data being sent to OpenAI
@@ -299,7 +308,7 @@ export const testChatbotResponse = async (
           message: message,
           userId: userId,
           visitorInfo: visitorInfo,
-          conversationId: conversationId,
+          conversationId: conversationId || `conv_${Date.now()}`, // Generate a new ID if none exists
           previousMessages: previousMessages,
           trainingResults: trainingResults,  // Always pass training results to the AI
           propertyRecommendations: propertyRecommendations,
@@ -326,7 +335,7 @@ export const testChatbotResponse = async (
         response: aiData.response,
         source: aiData.source || responseSource,
         leadInfo: aiData.leadInfo,
-        conversationId: aiData.conversationId || conversationId,
+        conversationId: aiData.conversationId || conversationId || `conv_${Date.now()}`,
         propertyRecommendations: propertyRecommendations
       };
     } catch (aiError) {
@@ -338,7 +347,7 @@ export const testChatbotResponse = async (
     return {
       response: "I'm sorry, I encountered an error processing your request. Please try again in a moment.",
       error: error instanceof Error ? error.message : String(error),
-      conversationId: conversationId
+      conversationId: conversationId || `conv_${Date.now()}`
     };
   }
 };
