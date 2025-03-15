@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '@/components/layout/Navbar';
@@ -44,40 +45,64 @@ const Dashboard = () => {
     const setupRealtimeSubscriptions = async () => {
       if (!user) return;
 
+      console.log("Setting up realtime subscriptions for user:", user.id);
+
+      // Setup subscription for leads table
       leadsSubscription = supabase
         .channel('leads-changes')
         .on('postgres_changes', 
-          { event: '*', schema: 'public', table: 'leads', filter: `user_id=eq.${user.id}` },
-          () => fetchStats(user.id)
+          { event: '*', schema: 'public', table: 'leads' },
+          (payload) => {
+            console.log("Leads change detected:", payload);
+            fetchStats(user.id);
+          }
         )
-        .subscribe();
+        .subscribe((status) => {
+          console.log("Leads subscription status:", status);
+        });
 
+      // Setup subscription for chatbot_conversations table
       conversationsSubscription = supabase
         .channel('conversations-changes')
         .on('postgres_changes', 
-          { event: '*', schema: 'public', table: 'chatbot_conversations', filter: `user_id=eq.${user.id}` },
-          () => {
+          { event: '*', schema: 'public', table: 'chatbot_conversations' },
+          (payload) => {
+            console.log("Conversation change detected:", payload);
             fetchStats(user.id);
             fetchActivities(user.id);
           }
         )
-        .subscribe();
+        .subscribe((status) => {
+          console.log("Conversations subscription status:", status);
+        });
 
+      // Setup subscription for properties table
       propertiesSubscription = supabase
         .channel('properties-changes')
         .on('postgres_changes', 
-          { event: '*', schema: 'public', table: 'properties', filter: `user_id=eq.${user.id}` },
-          () => fetchStats(user.id)
+          { event: '*', schema: 'public', table: 'properties' },
+          (payload) => {
+            console.log("Property change detected:", payload);
+            fetchStats(user.id);
+          }
         )
-        .subscribe();
+        .subscribe((status) => {
+          console.log("Properties subscription status:", status);
+        });
         
+      // Setup subscription for chatbot_training_files table  
       trainingDataSubscription = supabase
         .channel('training-data-changes')
         .on('postgres_changes', 
-          { event: '*', schema: 'public', table: 'chatbot_training_data', filter: `user_id=eq.${user.id}` },
-          () => fetchActivities(user.id)
+          { event: '*', schema: 'public', table: 'chatbot_training_files' },
+          (payload) => {
+            console.log("Training data change detected:", payload);
+            fetchActivities(user.id);
+          }
         )
-        .subscribe();
+        .subscribe((status) => {
+          console.log("Training data subscription status:", status);
+        });
     };
 
     if (user) {
@@ -85,6 +110,7 @@ const Dashboard = () => {
     }
 
     return () => {
+      console.log("Cleaning up realtime subscriptions");
       if (leadsSubscription) supabase.removeChannel(leadsSubscription);
       if (conversationsSubscription) supabase.removeChannel(conversationsSubscription);
       if (propertiesSubscription) supabase.removeChannel(propertiesSubscription);
