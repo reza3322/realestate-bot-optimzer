@@ -1,3 +1,4 @@
+
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.0";
@@ -16,13 +17,22 @@ const corsHeaders = {
 // CRITICAL DEBUGGING OUTPUT: Log when the function loads
 console.log('🚀 SEARCH-TRAINING-DATA FUNCTION LOADED AND READY');
 console.log('👉 Listening for requests on this edge function');
+console.log('📋 Environment variables available:', Object.keys(Deno.env.toObject()));
+console.log('📋 Debug mode enabled:', Deno.env.get('DEBUG') || 'false');
 
 serve(async (req) => {
   // CRITICAL DEBUGGING OUTPUT: Log EVERY incoming request in detail
   console.log('🚨 INCOMING REQUEST TO SEARCH-TRAINING-DATA');
   console.log('🔑 Request URL:', req.url);
   console.log('📋 Request method:', req.method);
-  console.log('🔍 Request headers:', JSON.stringify(Object.fromEntries(req.headers.entries())));
+  console.log('🔍 Request headers:', JSON.stringify(Object.fromEntries(req.headers.entries()), null, 2));
+  
+  try {
+    const requestId = crypto.randomUUID();
+    console.log(`🔍 Request ID: ${requestId} - Processing request started`);
+  } catch (e) {
+    console.log('Error generating request ID:', e);
+  }
   
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -130,6 +140,7 @@ serve(async (req) => {
       console.log('📊 DIRECT CHECK RESULT COUNT:', trainingFilesCheck?.length || 0);
       if (checkError) {
         console.error('❌ Error in direct check:', checkError);
+        console.error('❌ Error details:', JSON.stringify(checkError, null, 2));
       } else {
         console.log(`📊 DIRECT CHECK found ${trainingFilesCheck?.length || 0} training files`);
         // Log the first few results to debug
@@ -143,10 +154,13 @@ serve(async (req) => {
               content_type: item.content_type
             }))
           );
+        } else {
+          console.log('📊 NO TRAINING DATA FOUND for this user');
         }
       }
     } catch (checkError) {
       console.error('❌ Exception in direct check:', checkError);
+      console.error('❌ Stack trace:', checkError.stack);
     }
     
     // Search all training data 
@@ -163,6 +177,7 @@ serve(async (req) => {
         // Query for QA pairs
         let qaData = [];
         if (includeQA) {
+          console.log('🔍 Querying for QA pairs...');
           const { data: qaQueryData, error: qaQueryError } = await supabase
             .from('chatbot_training_files')
             .select(directQuerySelect)
@@ -174,15 +189,19 @@ serve(async (req) => {
             
           if (qaQueryError) {
             console.error('❌ Error in QA direct query:', qaQueryError);
+            console.error('❌ Error details:', JSON.stringify(qaQueryError, null, 2));
           } else if (qaQueryData && qaQueryData.length > 0) {
             console.log(`📊 Direct query found ${qaQueryData.length} QA items`);
             qaData = qaQueryData;
+          } else {
+            console.log('⚠️ No QA pairs found');
           }
         }
         
         // Query for extracted text
         let fileData = [];
         if (includeFiles) {
+          console.log('🔍 Querying for file content...');
           const { data: fileQueryData, error: fileQueryError } = await supabase
             .from('chatbot_training_files')
             .select(directQuerySelect)
@@ -194,9 +213,12 @@ serve(async (req) => {
             
           if (fileQueryError) {
             console.error('❌ Error in file content direct query:', fileQueryError);
+            console.error('❌ Error details:', JSON.stringify(fileQueryError, null, 2));
           } else if (fileQueryData && fileQueryData.length > 0) {
             console.log(`📊 Direct query found ${fileQueryData.length} file content items`);
             fileData = fileQueryData;
+          } else {
+            console.log('⚠️ No file content found');
           }
         }
         
@@ -400,6 +422,7 @@ serve(async (req) => {
         
         if (propertyError) {
           console.error('❌ Error searching properties:', propertyError);
+          console.error('❌ Error details:', JSON.stringify(propertyError, null, 2));
         } else if (propertyData && propertyData.length > 0) {
           console.log(`📊 Found ${propertyData.length} property matches`);
           
@@ -424,14 +447,23 @@ serve(async (req) => {
         }
       } catch (error) {
         console.error('❌ Error processing property search:', error);
+        console.error('❌ Stack trace:', error.stack);
       }
     }
     
     // Return the combined results - Add additional CORS headers to ensure proper handling
     console.log(`🏁 Returning results with status 200 and CORS headers`);
+    console.log('📊 Final result counts:', {
+      qa_matches: result.qa_matches.length,
+      file_content: result.file_content.length,
+      property_listings: result.property_listings.length
+    });
+    
+    const responseBody = JSON.stringify(result);
+    console.log(`📦 Response body size: ${responseBody.length} bytes`);
     
     return new Response(
-      JSON.stringify(result),
+      responseBody,
       { 
         status: 200,
         headers: { 

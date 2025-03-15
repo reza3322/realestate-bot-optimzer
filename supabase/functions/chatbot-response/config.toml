@@ -3,5 +3,21 @@
 project_id = "ckgaqkbsnrvccctqxsqv"
 base_path = "."
 
+# Enable detailed logging for debugging
+log_level = "debug"
+# Always log traces for debugging
+trace_propagation = true
+verify_jwt = false
+http_port = 54321
+allow_xhr = true
+
 [global.env]
 OPENAI_API_KEY = "{{OPENAI_API_KEY}}"
+DEBUG = "true"
+FUNCTION_DEBUG = "true"
+
+# Make sure CORS is enabled for the function
+[global.headers]
+Access-Control-Allow-Origin = "*"
+Access-Control-Allow-Headers = "authorization, x-client-info, apikey, content-type"
+Access-Control-Allow-Methods = "GET, POST, OPTIONS"
