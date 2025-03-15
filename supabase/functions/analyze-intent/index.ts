@@ -53,7 +53,7 @@ serve(async (req) => {
       );
     }
 
-    // Validate userId is present (but don't require UUID format)
+    // Accept any userId (authenticated or public)
     if (!body.userId) {
       console.error("❌ Missing required field: userId");
       return new Response(
@@ -65,7 +65,7 @@ serve(async (req) => {
       );
     }
 
-    // Log if public user
+    // Check if it's a public user (non-UUID format) or authenticated user (UUID format)
     const isPublicUser = !body.userId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
     if (isPublicUser) {
       console.log(`🔍 Processing request for public user: ${body.userId}`);
