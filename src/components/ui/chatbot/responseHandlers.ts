@@ -1,3 +1,4 @@
+
 import { Message, PropertyRecommendation, VisitorInfo, ChatbotResponse } from './types';
 
 /**
@@ -81,7 +82,7 @@ export const testChatbotResponse = async (
       try {
         console.log('🔍 Making request to analyze-intent endpoint with message:', message);
         
-        // Add detailed logging for analyze-intent request
+        // CRITICAL FIX: Add full URL with https protocol to ensure the function is called
         const intentAnalysisUrl = 'https://ckgaqkbsnrvccctqxsqv.supabase.co/functions/v1/analyze-intent';
         console.log('🔍 Intent analysis URL:', intentAnalysisUrl);
         
