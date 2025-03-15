@@ -104,3 +104,9 @@ CREATE POLICY "Service access to demo user conversations"
   ON public.chatbot_conversations
   FOR SELECT
   USING (user_id = 'demo-user');
+
+-- Add public access policy for chatbot_training_files
+CREATE POLICY "Public access to training files for search"
+  ON public.chatbot_training_files
+  FOR SELECT
+  USING (true);
