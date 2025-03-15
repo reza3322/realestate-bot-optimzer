@@ -1,3 +1,4 @@
+
 import { Message, PropertyRecommendation, VisitorInfo, ChatbotResponse } from './types';
 
 /**
@@ -74,8 +75,9 @@ export const testChatbotResponse = async (
       // Additional logging to help debug
       console.log('🔍 AGENCY INTENT SET BY KEYWORD MATCHING:', intentData);
     } else {
-      // Otherwise, use the intent classification API
-      console.log('⏳ STARTING INTENT ANALYSIS API CALL...');
+      // Debug Edge Function connectivity - CRITICAL SECTION!
+      console.log('⚠️ CALLING ANALYZE-INTENT - EXPLICIT DEBUG LOG');
+      console.log('🔍 Calling analyze-intent with message:', message);
       
       try {
         console.log('🔍 Making request to analyze-intent endpoint with message:', message);
@@ -93,11 +95,14 @@ export const testChatbotResponse = async (
         
         console.log('🔍 Intent analysis payload:', JSON.stringify(intentPayload, null, 2));
         
+        // Disable any caching
         const intentAnalysis = await fetch(intentAnalysisUrl, {
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',
-            'Cache-Control': 'no-cache, no-store, must-revalidate'
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0'
           },
           body: JSON.stringify(intentPayload)
         });
@@ -163,7 +168,9 @@ export const testChatbotResponse = async (
     let responseSource = null; // Default to null until we determine source
     
     // Step 3: ALWAYS fetch training data first for any intent - this is critical for agency info
+    console.log('⚠️ CALLING SEARCH-TRAINING-DATA - EXPLICIT DEBUG LOG');
     console.log('⏳ STARTING SEARCH TRAINING DATA CALL...');
+    console.log('🔍 STARTING TRAINING DATA SEARCH for message:', message);
     
     // ENHANCED DEBUGGING: Log everything before the search call
     console.log("🔍 PREPARING TO FETCH TRAINING DATA...");
@@ -225,7 +232,6 @@ export const testChatbotResponse = async (
           console.log('Request body size:', JSON.stringify(searchPayload).length, 'bytes');
           
           // CRITICALLY IMPORTANT: This is the actual fetch call that needs to work
-          // DIRECT FETCH CALL WITH SIMPLER OPTIONS FOR TESTING
           console.log('🔍 EXECUTING FETCH to search-training-data NOW');
           searchResponse = await fetch(uniqueUrl, {
             method: 'POST',
