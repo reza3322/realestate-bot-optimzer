@@ -1,3 +1,4 @@
+
 (function() {
   // Get the user ID from the script tag
   const scriptTag = document.currentScript;
@@ -339,7 +340,11 @@
       showTypingIndicator();
       input.value = '';
       
-      // Call the chatbot API
+      // Check if this is an agency-related question for consistent handling
+      const isAgencyQuestion = isAgencyRelatedQuestion(message);
+      console.log(`Is agency question: ${isAgencyQuestion}`);
+      
+      // Call the chatbot-response function (which now implements the same logic as the dashboard)
       fetch('https://ckgaqkbsnrvccctqxsqv.supabase.co/functions/v1/chatbot-response', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -349,7 +354,8 @@
           visitorInfo: {
             visitorId
           },
-          conversationId
+          conversationId,
+          isAgencyQuestion // Add the flag to ensure consistent handling
         })
       })
       .then(response => response.json())
@@ -380,6 +386,11 @@
           );
           
           addMessage('bot', processedResponse);
+          
+          // Log response source for debugging
+          if (data.source) {
+            console.log(`Response source: ${data.source}`);
+          }
         }
       })
       .catch(error => {
@@ -388,6 +399,18 @@
         addMessage('bot', 'Sorry, I encountered an error. Please try again later.');
       });
     }
+  }
+  
+  // Helper function to check if a message is about the agency
+  function isAgencyRelatedQuestion(message) {
+    const lowerMessage = message.toLowerCase();
+    const agencyKeywords = [
+      'agency', 'company', 'firm', 'business', 'office', 'realtor', 'broker',
+      'name', 'who are you', 'about you', 'your team', 'your agents',
+      'location', 'address', 'where are you', 'contact', 'phone', 'email'
+    ];
+    
+    return agencyKeywords.some(keyword => lowerMessage.includes(keyword));
   }
   
   input.addEventListener('keypress', event => {
