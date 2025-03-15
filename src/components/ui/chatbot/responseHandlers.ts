@@ -16,6 +16,10 @@ export const testChatbotResponse = async (
   console.log(`🔍 Conversation ID: ${conversationId || 'New conversation'}`);
   
   try {
+    // Ensure we have a valid userId, falling back to 'public_user' or 'demo-user' if not provided
+    const effectiveUserId = userId || 'public_user';
+    console.log(`🔍 Using effective user ID: ${effectiveUserId}`);
+    
     // Step 1: First, do quick check for agency-related keywords
     const lowerMessage = message.toLowerCase();
     const agencyKeywords = [
@@ -70,7 +74,7 @@ export const testChatbotResponse = async (
       
       const intentPayload = {
         message: message,
-        userId: userId || 'public_user', // Always provide a userId, use 'public_user' as fallback
+        userId: effectiveUserId, // Use our effective user ID
         conversationId: conversationId,
         previousMessages: previousMessages,
         visitorInfo: visitorInfo
@@ -135,7 +139,7 @@ export const testChatbotResponse = async (
     console.log('⚠️ CALLING SEARCH-TRAINING-DATA - CRITICAL SECTION');
     console.log('⏳ STARTING SEARCH TRAINING DATA CALL...');
     console.log('🔍 STARTING TRAINING DATA SEARCH for message:', message);
-    console.log('🔍 USING USER ID:', userId);
+    console.log('🔍 USING USER ID:', effectiveUserId);
     
     // ENHANCED DEBUGGING: Log everything before the search call
     console.log("🔍 PREPARING TO FETCH TRAINING DATA...");
@@ -146,7 +150,7 @@ export const testChatbotResponse = async (
     
     const searchPayload = {
       query: message,
-      userId: userId, // CRITICAL: Always use the provided userId - this is the business owner's ID
+      userId: effectiveUserId, // Use our effective user ID
       conversationId: conversationId,
       includeQA: true,
       includeFiles: true,  
@@ -208,7 +212,7 @@ export const testChatbotResponse = async (
       
       // Update training results
       trainingResults.qaMatches = searchResults.qa_matches || [];
-      trainingResults.fileContent = searchResults.file_content || [];
+      trainingResults.fileContent = searchResults.fileContent || [];
       
       // Update property recommendations from the same search if available
       propertyRecommendations = searchResults.property_listings || [];
@@ -252,7 +256,7 @@ export const testChatbotResponse = async (
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             query: message,
-            userId: userId,
+            userId: effectiveUserId,
             conversationId: conversationId,
             previousMessages: previousMessages
           })
@@ -375,7 +379,7 @@ If you don't find the answer in the training data or property listings, say:
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: message,
-          userId: userId,
+          userId: effectiveUserId,
           visitorInfo: visitorInfo,
           conversationId: conversationId || `conv_${Date.now()}`, // Generate a new ID if none exists
           previousMessages: previousMessages,

@@ -31,24 +31,30 @@ serve(async (req) => {
     
     console.log(`📝 Fetching conversation history for conversation: ${conversationId}, user: ${userId}, limit: ${limit}`);
 
-    if (!conversationId || !userId) {
-      console.error('❌ Missing required parameters: conversationId or userId is missing');
+    if (!conversationId) {
+      console.error('❌ Missing required parameter: conversationId is missing');
       return new Response(
-        JSON.stringify({ error: 'Conversation ID and user ID are required' }),
+        JSON.stringify({ error: 'Conversation ID is required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Get conversation history without requiring authentication
-    // This is safe because we're still checking that the conversation belongs to the specified user
-    console.log('⏳ Querying database for conversation history');
-    const { data: messages, error } = await supabaseClient
+    // Get conversation history without requiring authentication - userId is optional
+    // This allows both authenticated users and public users to access conversation history
+    let query = supabaseClient
       .from('chatbot_conversations')
       .select('id, message, response, created_at, visitor_id')
       .eq('conversation_id', conversationId)
-      .eq('user_id', userId)
       .order('created_at', { ascending: true })
       .limit(limit);
+    
+    // If userId is provided, filter by user_id as well
+    if (userId) {
+      query = query.eq('user_id', userId);
+    }
+    
+    console.log('⏳ Querying database for conversation history');
+    const { data: messages, error } = await query;
     
     if (error) {
       console.error('❌ Error fetching conversation history:', error);
