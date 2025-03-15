@@ -95,6 +95,21 @@ serve(async (req) => {
       console.log(`🔍 Searching for training data for user: ${userIdToQuery}`);
       console.log(`🔍 Query: "${requestData.query}"`);
       
+      // Try direct query to chatbot_training_files table first for better debugging
+      console.log("🔍 DEBUG: Performing direct query to chatbot_training_files table");
+      const { data: directData, error: directError } = await supabase
+        .from('chatbot_training_files')
+        .select('*')
+        .eq('user_id', userIdToQuery)
+        .limit(5);
+        
+      if (directError) {
+        console.error("❌ Direct query error:", directError);
+      } else {
+        console.log(`🔍 DEBUG: Found ${directData?.length || 0} records in direct table query`);
+        console.log("🔍 DEBUG: Sample data:", JSON.stringify(directData?.slice(0, 2), null, 2));
+      }
+      
       // Use the search_all_training_content function for more comprehensive results
       const { data, error } = await supabase
         .rpc('search_all_training_content', {

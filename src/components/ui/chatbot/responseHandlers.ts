@@ -21,6 +21,7 @@ export const testChatbotResponse = async (
     const agencyKeywords = [
       // Basic agency keywords
       'agency', 'company', 'firm', 'business', 'office', 'realtor', 'broker',
+      'name', 'who are you', 'about you',
       
       // Questions about identity
       'about you', 'your name', 'who are you', 'tell me about', 'what is your',
@@ -464,4 +465,3 @@ export const formatPropertyRecommendations = (properties: PropertyRecommendation
 
   return result;
 };
-
