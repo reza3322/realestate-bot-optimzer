@@ -13,12 +13,14 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
 };
 
+// CRITICAL DEBUGGING OUTPUT: Log when the function loads
 console.log('🚀 SEARCH-TRAINING-DATA FUNCTION LOADED AND READY');
+console.log('👉 Listening for requests on this edge function');
 
 serve(async (req) => {
-  // Universal logging for every request
-  console.log('🚀 SEARCH-TRAINING-DATA FUNCTION CALLED - ENTRY POINT');
-  console.log('🔑 Function URL:', req.url);
+  // CRITICAL DEBUGGING OUTPUT: Log EVERY incoming request in detail
+  console.log('🚨 INCOMING REQUEST TO SEARCH-TRAINING-DATA');
+  console.log('🔑 Request URL:', req.url);
   console.log('📋 Request method:', req.method);
   console.log('🔍 Request headers:', JSON.stringify(Object.fromEntries(req.headers.entries())));
   

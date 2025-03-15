@@ -1,3 +1,4 @@
+
 import { Message, PropertyRecommendation, VisitorInfo, ChatbotResponse } from './types';
 
 /**
@@ -152,51 +153,45 @@ export const testChatbotResponse = async (
     
     // Step 3: ALWAYS fetch training data first for any intent - this is critical for agency info
     console.log('Searching training data regardless of intent...');
-    const searchResponse = await fetch('https://ckgaqkbsnrvccctqxsqv.supabase.co/functions/v1/search-training-data', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        
-    // Step 3: PRINCIPLE #1 - ALWAYS fetch training data for ALL queries
-    console.log('🔍 STARTING TRAINING DATA SEARCH for message:', message);
-    console.log('🔍 Making request to search-training-data endpoint with userId:', userId);
+    
+    // ENHANCED DEBUGGING: Log everything before the search call
+    console.log("🔍 PREPARING TO FETCH TRAINING DATA...");
+    
+    // CRITICAL FIX: Use full URL with https protocol to ensure the function is called
+    const searchTrainingUrl = 'https://ckgaqkbsnrvccctqxsqv.supabase.co/functions/v1/search-training-data';
+    console.log('🔍 FULL Request URL:', searchTrainingUrl);
+    
+    const searchPayload = {
+      query: message,
+      userId: userId,
+      conversationId: conversationId,
+      includeQA: true,
+      includeFiles: true,  
+      includeProperties: shouldSearchProperties,
+      previousMessages: previousMessages,
+      // Add explicit flag for agency questions to prioritize training data
+      isAgencyQuestion: isObviousAgencyQuestion || intentData.intent === 'agency_info'
+    };
+    
+    console.log('🔍 SEARCH PAYLOAD:', JSON.stringify(searchPayload, null, 2));
     
     // ENHANCED LOGGING: Add timing for the search-training-data call
     const searchStartTime = Date.now();
     console.log(`⏱️ SEARCH CALL STARTED at ${new Date().toISOString()}`);
     
     try {
-      // CRITICAL FIX: Use full URL with https protocol to ensure the function is called
-      const searchTrainingUrl = 'https://ckgaqkbsnrvccctqxsqv.supabase.co/functions/v1/search-training-data';
-      console.log('🔍 FULL Request URL:', searchTrainingUrl);
-      
-      const searchPayload = {
->>>>>>> 576f6940a87890c3e70ed9ecfeb70877d554423d
-        query: message,
-        userId: userId,
-        conversationId: conversationId,
-        includeQA: true,
-        includeFiles: true,  
-        includeProperties: shouldSearchProperties,
-        previousMessages: previousMessages,
-        // Add explicit flag for agency questions to prioritize training data
-        isAgencyQuestion: isObviousAgencyQuestion || intentData.intent === 'agency_info'
-      };
-      
-      console.log('🔍 Request payload:', JSON.stringify(searchPayload));
-      
       // FORCED DATABASE SEARCH: Always search before generating any response
       console.log('⚠️ FORCED DATABASE SEARCH: Ensuring training data is always searched first');
       
       // Add retry mechanism to ensure the search-training-data function is called
       let searchResponse = null;
       let retryCount = 0;
-      const maxRetries = 4; // Increased number of retries
+      const maxRetries = 5; // Increased number of retries
       
       // Direct fetch with explicit error handling
       while (retryCount <= maxRetries) {
         try {
-          console.log(`🔄 DIRECT FETCH: Attempt ${retryCount + 1} to call search-training-data function`);
+          console.log(`🔄 ATTEMPT ${retryCount + 1} TO CALL SEARCH-TRAINING-DATA FUNCTION`);
           
           // Add unique timestamp to prevent caching
           const uniqueId = Math.random().toString(36).substring(2, 15);
@@ -205,6 +200,18 @@ export const testChatbotResponse = async (
           
           console.log(`Using URL with cache busting: ${uniqueUrl}`);
           
+          // PRE-REQUEST VALIDATION: Log the full request configuration
+          console.log('Request headers:', {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0',
+            'Pragma': 'no-cache',
+            'Expires': '0',
+            'X-Request-ID': uniqueId
+          });
+          console.log('Request method:', 'POST');
+          console.log('Request body size:', JSON.stringify(searchPayload).length, 'bytes');
+          
+          // CRITICALLY IMPORTANT: This is the actual fetch call that needs to work
           searchResponse = await fetch(uniqueUrl, {
             method: 'POST',
             headers: { 
@@ -223,6 +230,7 @@ export const testChatbotResponse = async (
           
           console.log(`Response status: ${searchResponse.status}, ok: ${searchResponse.ok}`);
           
+          // If successful, break out of retry loop
           if (searchResponse.ok) {
             console.log(`✅ SUCCESS: Called search-training-data on attempt ${retryCount + 1}`);
             break;
@@ -239,7 +247,7 @@ export const testChatbotResponse = async (
             retryCount++;
             
             if (retryCount <= maxRetries) {
-              const delay = 1000 * retryCount; // Increased backoff
+              const delay = 1000 * Math.pow(2, retryCount); // Exponential backoff
               console.log(`🔄 Retrying in ${delay}ms... (${retryCount}/${maxRetries})`);
               await new Promise(resolve => setTimeout(resolve, delay));
             }
@@ -250,7 +258,7 @@ export const testChatbotResponse = async (
           retryCount++;
           
           if (retryCount <= maxRetries) {
-            const delay = 1000 * retryCount; // Increasing backoff
+            const delay = 1000 * Math.pow(2, retryCount); // Exponential backoff
             console.log(`🔄 Retrying after network error in ${delay}ms... (${retryCount}/${maxRetries})`);
             await new Promise(resolve => setTimeout(resolve, delay));
           }
@@ -268,12 +276,10 @@ export const testChatbotResponse = async (
       
       // Parse the search results
       const searchResults = await searchResponse.json();
-      console.log('🔍 Training search results received:', 
+      console.log('🔍 RECEIVED TRAINING DATA:', JSON.stringify(searchResults, null, 2));
+      console.log('Training search results received:', 
                  `QA matches: ${searchResults.qa_matches?.length || 0}`, 
                  `File content: ${searchResults.file_content?.length || 0}`);
-      
-      // IMPORTANT: Log detailed training results to debug agency-related issues
-      console.log('🔍 Training search results:', JSON.stringify(searchResults, null, 2));
       
       // Update training results
       trainingResults.qaMatches = searchResults.qa_matches || [];
@@ -298,7 +304,7 @@ export const testChatbotResponse = async (
       }
       
     } catch (searchError) {
-      console.error('🔴 Error in training data search:', searchError);
+      console.error('🔴 ERROR IN TRAINING DATA SEARCH:', searchError);
       console.error('🔴 Stack trace:', searchError.stack);
       
       // SAFETY FALLBACK: If the search fails, return a fallback message instead of proceeding
@@ -450,8 +456,8 @@ If you don't find the answer in the training data or property listings, say:
     }
     
     // 🔍 Debug: Log the final data being sent to OpenAI
-    console.log('🔍 Final data sent to OpenAI:');
-    console.log(`Training Context: ${systemContent ? systemContent.substring(0, 300) + '...' : 'None'}`);
+    console.log('🔍 FINAL DATA SENT TO OPENAI:');
+    console.log(`Training Context: ${systemContent ? systemContent.substring(0, 500) + '...' : 'None'}`);
     console.log(`Training Results Count: QA=${trainingResults.qaMatches.length}, Files=${trainingResults.fileContent.length}`);
     console.log(`IsAgencyQuestion flag: ${isObviousAgencyQuestion || intentData.intent === 'agency_info'}`);
     
