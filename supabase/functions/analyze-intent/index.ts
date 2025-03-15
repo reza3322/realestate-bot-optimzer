@@ -50,16 +50,8 @@ serve(async (req) => {
       );
     }
 
-    if (!body.userId) {
-      console.error("❌ Missing required field: userId");
-      return new Response(
-        JSON.stringify({ error: "Missing required field: userId" }),
-        { 
-          status: 400, 
-          headers: { ...corsHeaders, "Content-Type": "application/json" } 
-        }
-      );
-    }
+    // Unlike search-training-data, we don't need UUID validation here
+    // The analyze-intent function works with any userId string
 
     // Normalize message for intent detection
     const normalizedMessage = body.message.toLowerCase().trim();

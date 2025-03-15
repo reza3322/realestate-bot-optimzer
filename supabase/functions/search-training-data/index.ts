@@ -60,10 +60,11 @@ serve(async (req) => {
     
     // Check if userId is a valid UUID or a public user marker
     let results = [];
+    const isPublicUser = !requestData.userId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
     
-    if (requestData.userId === 'public_user' || requestData.userId === 'demo-user' || !requestData.userId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
+    if (isPublicUser) {
       // For public users, use a direct query without userId filtering
-      console.log(`🔍 Handling public user request`);
+      console.log(`🔍 Handling public user request for: ${requestData.userId}`);
       
       // Get public training data (simple query)
       const { data: publicData, error: publicError } = await supabase
