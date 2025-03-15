@@ -150,6 +150,13 @@ export const testChatbotResponse = async (
     let propertyRecommendations: PropertyRecommendation[] = [];
     let responseSource = null; // Default to null until we determine source
     
+    // Step 3: ALWAYS fetch training data first for any intent - this is critical for agency info
+    console.log('Searching training data regardless of intent...');
+    const searchResponse = await fetch('https://ckgaqkbsnrvccctqxsqv.supabase.co/functions/v1/search-training-data', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        
     // Step 3: PRINCIPLE #1 - ALWAYS fetch training data for ALL queries
     console.log('🔍 STARTING TRAINING DATA SEARCH for message:', message);
     console.log('🔍 Making request to search-training-data endpoint with userId:', userId);
@@ -164,6 +171,7 @@ export const testChatbotResponse = async (
       console.log('🔍 FULL Request URL:', searchTrainingUrl);
       
       const searchPayload = {
+>>>>>>> 576f6940a87890c3e70ed9ecfeb70877d554423d
         query: message,
         userId: userId,
         conversationId: conversationId,
