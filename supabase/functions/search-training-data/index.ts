@@ -16,6 +16,7 @@ interface SearchRequest {
 serve(async (req) => {
   console.log("🔍 SEARCH-TRAINING-DATA FUNCTION CALLED");
   console.log(`🔍 Request Method: ${req.method}`);
+  console.log(`🔍 Request URL: ${req.url}`);
 
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
@@ -26,6 +27,15 @@ serve(async (req) => {
   try {
     // Log headers for debugging
     console.log("🔍 Request headers:", Object.fromEntries(req.headers.entries()));
+    
+    // For test requests, return a simple success response
+    if (req.headers.get("X-Test-Request") === "true") {
+      console.log("🔍 Received test request, returning simple response");
+      return new Response(
+        JSON.stringify({ status: "ok", message: "Test request successful" }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
     
     // Parse request body
     const requestData = await req.json() as SearchRequest;
@@ -100,12 +110,54 @@ serve(async (req) => {
         : b.priority - a.priority
     );
     
+    // Format results into different arrays for backward compatibility
+    const qa_matches = results
+      .filter(item => item.contentType === 'qa')
+      .map(item => {
+        const parts = item.content.split('\n');
+        let question = '', answer = '';
+        
+        if (parts.length >= 2) {
+          // Extract question and answer from the format "Q: question\nA: answer"
+          const questionMatch = parts[0].match(/^Q:\s*(.*)/);
+          const answerMatch = parts[1].match(/^A:\s*(.*)/);
+          
+          question = questionMatch ? questionMatch[1] : '';
+          answer = answerMatch ? answerMatch[1] : '';
+        } else {
+          // If not in Q/A format, use the content as the answer
+          answer = item.content;
+        }
+        
+        return {
+          id: item.id,
+          question,
+          answer,
+          category: item.category,
+          priority: item.priority,
+          similarity: item.similarity,
+        };
+      });
+    
+    const file_content = results
+      .filter(item => item.contentType !== 'qa')
+      .map(item => ({
+        id: item.id,
+        source: item.category || 'Website',
+        text: item.content,
+        category: item.category,
+        priority: item.priority,
+        similarity: item.similarity,
+      }));
+    
     // Log the final response
-    console.log(`🔍 Returning ${results.length} results`);
+    console.log(`🔍 Returning ${qa_matches.length} QA matches and ${file_content.length} file content items`);
     
     return new Response(
       JSON.stringify({
-        results,
+        qa_matches,
+        file_content,
+        property_listings: [], // Empty for now, could be added later
         meta: {
           total: results.length,
           query: requestData.query,

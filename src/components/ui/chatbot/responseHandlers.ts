@@ -1,4 +1,3 @@
-
 import { Message, PropertyRecommendation, VisitorInfo, ChatbotResponse } from './types';
 
 /**
@@ -149,15 +148,9 @@ export const testChatbotResponse = async (
     
     console.log('🔍 FINAL INTENT ANALYSIS:', JSON.stringify(intentData, null, 2));
     
-    // Step 2: PRINCIPLE #1 - ALWAYS search training data for EVERY query
-    // Determine search strategy based on intent
-    const shouldSearchTraining = true; // ALWAYS search training data first for ALL queries
-    const shouldSearchProperties = intentData.should_search_properties || 
-                                 lowerMessage.includes('property') || 
-                                 lowerMessage.includes('house') || 
-                                 lowerMessage.includes('apartment');
-    
-    console.log(`🔍 SEARCH STRATEGY - Training: Always, Properties: ${shouldSearchProperties}`);
+    // Step 2: PRINCIPLE #1 - ALWAYS search training data for EVERY query, regardless of intent
+    // Remove all conditional checks that might be skipping search-training-data
+    console.log(`🔍 SEARCH STRATEGY - Training: ALWAYS, Properties: Based on intent`);
     
     // Initialize result containers
     const trainingResults = {
@@ -167,7 +160,7 @@ export const testChatbotResponse = async (
     let propertyRecommendations: PropertyRecommendation[] = [];
     let responseSource = null; // Default to null until we determine source
     
-    // Step 3: ALWAYS fetch training data first for any intent - this is critical for agency info
+    // Step 3: CRITICAL FIX - ALWAYS CALL search-training-data without any conditions
     console.log('⚠️ CALLING SEARCH-TRAINING-DATA - EXPLICIT DEBUG LOG');
     console.log('⏳ STARTING SEARCH TRAINING DATA CALL...');
     console.log('🔍 STARTING TRAINING DATA SEARCH for message:', message);
@@ -185,7 +178,10 @@ export const testChatbotResponse = async (
       conversationId: conversationId,
       includeQA: true,
       includeFiles: true,  
-      includeProperties: shouldSearchProperties,
+      includeProperties: intentData.should_search_properties || 
+                         lowerMessage.includes('property') || 
+                         lowerMessage.includes('house') || 
+                         lowerMessage.includes('apartment'),
       previousMessages: previousMessages,
       // Add explicit flag for agency questions to prioritize training data
       isAgencyQuestion: isObviousAgencyQuestion || intentData.intent === 'agency_info'
@@ -198,15 +194,14 @@ export const testChatbotResponse = async (
     console.log(`⏱️ SEARCH CALL STARTED at ${new Date().toISOString()}`);
     
     try {
-      // FORCED DATABASE SEARCH: Always search before generating any response
-      console.log('⚠️ FORCED DATABASE SEARCH: Ensuring training data is always searched first');
-      
-      // Add retry mechanism to ensure the search-training-data function is called
-      let searchResponse = null;
-      let retryCount = 0;
-      const maxRetries = 3; // Reduced number of retries for faster debugging
+      // CRITICAL: Add direct debug logging to confirm this section is executing
+      console.log('🚨 EXECUTING SEARCH-TRAINING-DATA FUNCTION CALL - CRITICAL SECTION');
       
       // Direct fetch with explicit error handling
+      let searchResponse = null;
+      let retryCount = 0;
+      const maxRetries = 3;
+      
       while (retryCount <= maxRetries) {
         try {
           console.log(`🔄 ATTEMPT ${retryCount + 1} TO CALL SEARCH-TRAINING-DATA FUNCTION`);
@@ -218,24 +213,36 @@ export const testChatbotResponse = async (
           
           console.log(`Using URL with cache busting: ${uniqueUrl}`);
           
-          // PRE-REQUEST VALIDATION: Log the full request configuration
-          const requestHeaders = {
-            'Content-Type': 'application/json',
-            'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0',
-            'Pragma': 'no-cache',
-            'Expires': '0',
-            'X-Request-ID': uniqueId
-          };
+          // NEW - MAKE SIMPLIFIED REQUEST FIRST to see if function is accessible
+          console.log('🔥 MAKING DIRECT SIMPLE TEST REQUEST TO search-training-data');
+          const testResponse = await fetch(uniqueUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0',
+              'Pragma': 'no-cache',
+              'Expires': '0',
+              'X-Test-Request': 'true'
+            },
+            body: JSON.stringify({ 
+              query: "test query", 
+              userId: userId 
+            })
+          });
           
-          console.log('Request headers:', JSON.stringify(requestHeaders, null, 2));
-          console.log('Request method: POST');
-          console.log('Request body size:', JSON.stringify(searchPayload).length, 'bytes');
+          console.log(`Test request status: ${testResponse.status}, ok: ${testResponse.ok}`);
           
-          // CRITICALLY IMPORTANT: This is the actual fetch call that needs to work
+          // Now make the real request with full data
           console.log('🔍 EXECUTING FETCH to search-training-data NOW');
           searchResponse = await fetch(uniqueUrl, {
             method: 'POST',
-            headers: requestHeaders,
+            headers: {
+              'Content-Type': 'application/json',
+              'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0',
+              'Pragma': 'no-cache',
+              'Expires': '0',
+              'X-Request-ID': uniqueId
+            },
             body: JSON.stringify(searchPayload)
           });
           
