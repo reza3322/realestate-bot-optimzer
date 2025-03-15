@@ -53,19 +53,13 @@ serve(async (req) => {
     
     console.log("🔍 Parsed request data:", JSON.stringify(requestData, null, 2));
     
-    // Validate required fields
-    if (!requestData.query) {
-      console.error("❌ Missing required field: query");
+    // CRITICAL VALIDATION: Make sure we have a userId
+    if (!requestData.userId) {
+      console.error("❌ Missing required field: userId");
       return new Response(
-        JSON.stringify({ error: "Missing required field: query" }),
+        JSON.stringify({ error: "Missing required field: userId" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
-    }
-    
-    // Ensure userId is present - default to 'public_user' if not provided
-    if (!requestData.userId) {
-      console.log("⚠️ No userId provided, using 'public_user'");
-      requestData.userId = 'public_user';
     }
     
     // Initialize Supabase client
@@ -76,40 +70,69 @@ serve(async (req) => {
     
     const supabase = createClient(supabaseUrl, supabaseKey);
     
-    // Check if userId is a valid UUID or a public user marker
-    let results = [];
-    const isPublicUser = !requestData.userId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+    // We will always use the userId passed in the request - this is the user whose chatbot is deployed
+    // and whose training data we need to retrieve, NOT the visitor's ID
+    const userIdToQuery = requestData.userId;
+    console.log(`🔍 Searching for training data for user: ${userIdToQuery}`);
     
-    if (isPublicUser) {
-      // For public users, use a direct query without userId filtering
-      console.log(`🔍 Handling public user request for: ${requestData.userId}`);
+    // Check if userId is a valid UUID
+    let results = [];
+    const isValidUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userIdToQuery);
+    
+    if (!isValidUUID) {
+      console.error(`❌ Invalid UUID format for userId: ${userIdToQuery}`);
+      return new Response(
+        JSON.stringify({ 
+          error: "Invalid userId format", 
+          message: "The userId must be a valid UUID"
+        }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
+    try {
+      // For authenticated users, use the RPC function with the provided UUID
+      console.log(`🔍 Searching for training data for user: ${userIdToQuery}`);
+      console.log(`🔍 Query: "${requestData.query}"`);
       
-      try {
-        // Get public training data (using standard query instead of RPC)
-        const { data: publicData, error: publicError } = await supabase
+      // Use the search_all_training_content function for more comprehensive results
+      const { data, error } = await supabase
+        .rpc('search_all_training_content', {
+          user_id_param: userIdToQuery,
+          query_text: requestData.query
+        });
+      
+      // Log database query results
+      if (error) {
+        console.error("❌ Database RPC query error:", error);
+        
+        // If we get an RPC error, fall back to direct query
+        console.log("⚠️ RPC query failed, falling back to direct query");
+        
+        const { data: fallbackData, error: fallbackError } = await supabase
           .from('chatbot_training_files')
           .select('*')
+          .eq('user_id', userIdToQuery)
           .order('priority', { ascending: false })
           .limit(20);
-        
-        if (publicError) {
-          console.error("❌ Public data query error:", publicError);
+          
+        if (fallbackError) {
+          console.error("❌ Fallback query error:", fallbackError);
           return new Response(
             JSON.stringify({ 
               error: "Database error", 
-              message: publicError.message,
-              details: publicError.details,
-              hint: publicError.hint
+              message: fallbackError.message,
+              details: fallbackError.details,
+              hint: fallbackError.hint
             }),
             { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
         
-        console.log(`🔍 Found ${publicData?.length || 0} public training content items`);
+        console.log(`🔍 Found ${fallbackData?.length || 0} training content items via fallback query`);
         
-        // Process and format public results - add basic similarity scores
-        results = publicData?.map(item => {
-          // Calculate a simple similarity score based on word matching
+        // Process fallback results with basic similarity
+        results = fallbackData?.map(item => {
           let similarity = 0.5; // Default similarity
           
           if (item.question) {
@@ -133,100 +156,25 @@ serve(async (req) => {
             similarity: similarity
           };
         }) || [];
-      } catch (queryError) {
-        console.error("❌ Error querying database for public data:", queryError);
-        return new Response(
-          JSON.stringify({ error: "Database query error", message: queryError.message }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-    } else {
-      // For authenticated users, use the RPC function with UUID
-      console.log(`🔍 Searching for training data for authenticated user: ${requestData.userId}`);
-      console.log(`🔍 Query: "${requestData.query}"`);
-      
-      try {
-        // Use the search_all_training_content function for more comprehensive results
-        const { data, error } = await supabase
-          .rpc('search_all_training_content', {
-            user_id_param: requestData.userId,
-            query_text: requestData.query
-          });
+      } else {
+        console.log(`🔍 Found ${data?.length || 0} training content items via RPC`);
         
-        // Log database query results
-        if (error) {
-          console.error("❌ Database RPC query error:", error);
-          
-          // If we get an RPC error, fall back to direct query
-          console.log("⚠️ RPC query failed, falling back to direct query");
-          
-          const { data: fallbackData, error: fallbackError } = await supabase
-            .from('chatbot_training_files')
-            .select('*')
-            .eq('user_id', requestData.userId)
-            .order('priority', { ascending: false })
-            .limit(20);
-            
-          if (fallbackError) {
-            console.error("❌ Fallback query error:", fallbackError);
-            return new Response(
-              JSON.stringify({ 
-                error: "Database error", 
-                message: fallbackError.message,
-                details: fallbackError.details,
-                hint: fallbackError.hint
-              }),
-              { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-            );
-          }
-          
-          console.log(`🔍 Found ${fallbackData?.length || 0} training content items via fallback query`);
-          
-          // Process fallback results with basic similarity
-          results = fallbackData?.map(item => {
-            let similarity = 0.5; // Default similarity
-            
-            if (item.question) {
-              const questionWords = item.question.toLowerCase().split(/\s+/);
-              const queryWords = requestData.query.toLowerCase().split(/\s+/);
-              const matchCount = questionWords.filter(word => queryWords.includes(word)).length;
-              
-              if (matchCount > 0) {
-                similarity = Math.min(0.9, 0.5 + (matchCount / questionWords.length) * 0.4);
-              }
-            }
-            
-            return {
-              id: item.id,
-              contentType: item.content_type || 'qa',
-              content: item.question && item.answer ? 
-                      `Q: ${item.question}\nA: ${item.answer}` : 
-                      (item.extracted_text || item.answer || ''),
-              category: item.category,
-              priority: item.priority || 5,
-              similarity: similarity
-            };
-          }) || [];
-        } else {
-          console.log(`🔍 Found ${data?.length || 0} training content items via RPC`);
-          
-          // Process and format results from RPC function
-          results = data?.map(item => ({
-            id: item.content_id,
-            contentType: item.content_type,
-            content: item.content,
-            category: item.category,
-            priority: item.priority,
-            similarity: item.similarity
-          })) || [];
-        }
-      } catch (queryError) {
-        console.error("❌ Error in query execution:", queryError);
-        return new Response(
-          JSON.stringify({ error: "Database query error", message: queryError.message }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        // Process and format results from RPC function
+        results = data?.map(item => ({
+          id: item.content_id,
+          contentType: item.content_type,
+          content: item.content,
+          category: item.category,
+          priority: item.priority,
+          similarity: item.similarity
+        })) || [];
       }
+    } catch (queryError) {
+      console.error("❌ Error in query execution:", queryError);
+      return new Response(
+        JSON.stringify({ error: "Database query error", message: queryError.message }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
     
     // Sort by similarity then by priority
@@ -286,7 +234,7 @@ serve(async (req) => {
       meta: {
         total: results.length,
         query: requestData.query,
-        userId: requestData.userId,
+        userId: userIdToQuery,
         timestamp: new Date().toISOString()
       }
     };

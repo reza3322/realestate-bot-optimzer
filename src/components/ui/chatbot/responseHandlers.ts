@@ -130,10 +130,11 @@ export const testChatbotResponse = async (
     let propertyRecommendations: PropertyRecommendation[] = [];
     let responseSource = null; // Default to null until we determine source
     
-    // CRITICAL FIX: ALWAYS CALL search-training-data without any conditions
+    // CRITICAL FIX: ALWAYS CALL search-training-data with the correct userId parameter
     console.log('⚠️ CALLING SEARCH-TRAINING-DATA - CRITICAL SECTION');
     console.log('⏳ STARTING SEARCH TRAINING DATA CALL...');
     console.log('🔍 STARTING TRAINING DATA SEARCH for message:', message);
+    console.log('🔍 USING USER ID:', userId);
     
     // ENHANCED DEBUGGING: Log everything before the search call
     console.log("🔍 PREPARING TO FETCH TRAINING DATA...");
@@ -144,7 +145,7 @@ export const testChatbotResponse = async (
     
     const searchPayload = {
       query: message,
-      userId: userId || 'public_user', // Always provide a userId, use 'public_user' as fallback
+      userId: userId, // CRITICAL: Always use the provided userId - this is the business owner's ID
       conversationId: conversationId,
       includeQA: true,
       includeFiles: true,  
@@ -463,3 +464,4 @@ export const formatPropertyRecommendations = (properties: PropertyRecommendation
 
   return result;
 };
+
