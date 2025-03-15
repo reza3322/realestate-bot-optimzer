@@ -14,17 +14,35 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
-  console.log('🔍 SEARCH-TRAINING-DATA FUNCTION CALLED');
+  console.log('🚀 SEARCH-TRAINING-DATA FUNCTION CALLED - ENTRY POINT');
+  console.log('🔑 Function URL:', req.url);
+  console.log('📋 Request method:', req.method);
+  console.log('🔍 Request headers:', JSON.stringify(Object.fromEntries(req.headers.entries())));
   
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
-    console.log('🔍 Handling CORS preflight request');
+    console.log('🔄 Handling CORS preflight request');
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    console.log('🔍 Parsing request body');
-    const reqBody = await req.json();
+    console.log('📦 Starting to parse request body');
+    let reqBody;
+    try {
+      reqBody = await req.json();
+      console.log('📦 Request body parsed successfully');
+    } catch (parseError) {
+      console.error('❌ Error parsing request body:', parseError);
+      return new Response(
+        JSON.stringify({ 
+          error: 'Invalid JSON in request body',
+          qa_matches: [],
+          file_content: [],
+          property_listings: []
+        }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
     
     const { 
       query, 
@@ -43,8 +61,8 @@ serve(async (req) => {
       - Include QA: ${includeQA}
       - Include Files: ${includeFiles}
       - Include Properties: ${includeProperties}
-      - Previous messages: ${previousMessages.length}`
-    );
+      - Previous messages: ${previousMessages.length}
+    `);
     
     if (!userId) {
       console.error('❌ Missing required parameter: userId');
@@ -74,12 +92,12 @@ serve(async (req) => {
     
     // Extract keywords from the query for better matching
     const keywords = extractKeywords(query);
-    console.log(`Extracted keywords: ${keywords.join(', ')}`);
+    console.log(`🔤 Extracted keywords: ${keywords.join(', ')}`);
     
     // Extract property-related keywords if looking for properties
     const propertyKeywords = includeProperties ? extractPropertyKeywords(query) : [];
     if (propertyKeywords.length > 0) {
-      console.log(`Property-related keywords: ${propertyKeywords.join(', ')}`);
+      console.log(`🏠 Property-related keywords: ${propertyKeywords.join(', ')}`);
     }
     
     // Initialize response object
@@ -96,32 +114,39 @@ serve(async (req) => {
       console.log('🔍 Parameters:', { user_id_param: userId, query_text: query });
       
       try {
+        console.log(`⏳ Starting Supabase RPC call - ${new Date().toISOString()}`);
         // Use the search_all_training_content function which now combines all content types
         const { data: trainingData, error: trainingError } = await supabase.rpc(
           'search_all_training_content',
           { user_id_param: userId, query_text: query }
         );
+        console.log(`✅ Supabase RPC call completed - ${new Date().toISOString()}`);
         
         // 🔍 Debugging: Log the response from Supabase in detail
-        console.log(`🔍 Training Data Response from Supabase for user ${userId}:`, JSON.stringify(trainingData, null, 2));
+        console.log(`🔍 Training Data Response from Supabase for user ${userId}:`, JSON.stringify(trainingData || 'null', null, 2));
         
         if (trainingError) {
           console.error('❌ Error searching all training content:', trainingError);
           console.error('❌ Error details:', JSON.stringify(trainingError, null, 2));
         } else if (trainingData && trainingData.length > 0) {
-          console.log(`Found ${trainingData.length} training content matches`);
-          console.log('Content types found:', trainingData.map(item => item.content_type).join(', '));
+          console.log(`📊 Found ${trainingData.length} training content matches`);
+          console.log('📊 Content types found:', trainingData.map(item => item.content_type).join(', '));
+          
+          // Log sample results for debugging
+          if (trainingData.length > 0) {
+            console.log('📊 First result sample:', JSON.stringify(trainingData[0], null, 2));
+          }
           
           // Process and separate training content into qa_matches and file_content
           trainingData.forEach(item => {
-            console.log(`Processing item of type ${item.content_type}, similarity: ${item.similarity.toFixed(2)}, category: ${item.category}`);
+            console.log(`⚙️ Processing item of type ${item.content_type}, similarity: ${item.similarity.toFixed(2)}, category: ${item.category || 'uncategorized'}`);
             
             // Check content_type to determine whether it's a QA pair or file content
             if (item.content_type === 'qa' && includeQA) {
               // Extract question and answer from the content if it's in Q&A format
               const qaMatch = extractQAPair(item.content);
               if (qaMatch) {
-                console.log(`Adding QA match: Q: ${qaMatch.question.substring(0, 30)}...`);
+                console.log(`✅ Adding QA match: Q: ${qaMatch.question.substring(0, 30)}...`);
                 result.qa_matches.push({
                   id: item.content_id,
                   question: qaMatch.question,
@@ -135,7 +160,7 @@ serve(async (req) => {
               }
             } else if (includeFiles) {
               // Treat as file content for all other content types
-              console.log(`Adding file content: ${item.content.substring(0, 30)}...`);
+              console.log(`✅ Adding file content: ${item.content.substring(0, 30)}...`);
               result.file_content.push({
                 id: item.content_id,
                 source: item.content_type,
@@ -147,9 +172,9 @@ serve(async (req) => {
             }
           });
           
-          console.log(`Processed ${result.qa_matches.length} QA matches and ${result.file_content.length} file content items`);
+          console.log(`✅ Processed ${result.qa_matches.length} QA matches and ${result.file_content.length} file content items`);
         } else {
-          console.log('No training content matches found');
+          console.log('⚠️ No training content matches found');
         }
       } catch (supabaseError) {
         console.error('❌ Exception in Supabase RPC call:', supabaseError);
@@ -174,9 +199,9 @@ serve(async (req) => {
         );
         
         if (propertyError) {
-          console.error('Error searching properties:', propertyError);
+          console.error('❌ Error searching properties:', propertyError);
         } else if (propertyData && propertyData.length > 0) {
-          console.log(`Found ${propertyData.length} property matches`);
+          console.log(`📊 Found ${propertyData.length} property matches`);
           
           result.property_listings = propertyData.map(property => ({
             id: property.id,
@@ -195,15 +220,15 @@ serve(async (req) => {
             url: property.url || `./property/${property.id}`
           }));
         } else {
-          console.log('No property matches found');
+          console.log('⚠️ No property matches found');
         }
       } catch (error) {
-        console.error('Error processing property search:', error);
+        console.error('❌ Error processing property search:', error);
       }
     }
     
     // Return the combined results
-    console.log(`Returning: ${result.qa_matches.length} QA matches, ${result.file_content.length} file content items, ${result.property_listings.length} property listings`);
+    console.log(`🏁 Returning: ${result.qa_matches.length} QA matches, ${result.file_content.length} file content items, ${result.property_listings.length} property listings`);
     return new Response(
       JSON.stringify(result),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
