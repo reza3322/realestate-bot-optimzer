@@ -1,4 +1,3 @@
-
 import { Message, PropertyRecommendation, VisitorInfo, ChatbotResponse } from './types';
 
 /**
@@ -11,14 +10,13 @@ export const testChatbotResponse = async (
   conversationId?: string,
   previousMessages: Message[] = []
 ): Promise<ChatbotResponse> => {
-  console.log(`Processing chatbot response for user: ${userId}`);
-  console.log(`Current message: "${message}"`);
-  console.log(`Previous messages count: ${previousMessages.length}`);
-  console.log(`Conversation ID: ${conversationId || 'New conversation'}`);
+  console.log(`🔍 CHATBOT RESPONSE FUNCTION CALLED for user: ${userId}`);
+  console.log(`🔍 Current message: "${message}"`);
+  console.log(`🔍 Previous messages count: ${previousMessages.length}`);
+  console.log(`🔍 Conversation ID: ${conversationId || 'New conversation'}`);
   
   try {
     // Step 1: First, do quick check for agency-related keywords
-    // EXPANDED: Using a more comprehensive list of agency-related keywords
     const lowerMessage = message.toLowerCase();
     const agencyKeywords = [
       // Basic agency keywords
@@ -77,33 +75,47 @@ export const testChatbotResponse = async (
       console.log('🔍 AGENCY INTENT SET BY KEYWORD MATCHING:', intentData);
     } else {
       // Otherwise, use the intent classification API
-      console.log('Calling intent analysis API...');
+      console.log('⏳ STARTING INTENT ANALYSIS API CALL...');
       
       try {
         console.log('🔍 Making request to analyze-intent endpoint with message:', message);
-        const intentAnalysis = await fetch('https://ckgaqkbsnrvccctqxsqv.supabase.co/functions/v1/analyze-intent', {
+        
+        // Add detailed logging for analyze-intent request
+        const intentAnalysisUrl = 'https://ckgaqkbsnrvccctqxsqv.supabase.co/functions/v1/analyze-intent';
+        console.log('🔍 Intent analysis URL:', intentAnalysisUrl);
+        
+        const intentPayload = {
+          message: message,
+          userId: userId,
+          conversationId: conversationId,
+          previousMessages: previousMessages
+        };
+        
+        console.log('🔍 Intent analysis payload:', JSON.stringify(intentPayload, null, 2));
+        
+        const intentAnalysis = await fetch(intentAnalysisUrl, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            message: message,
-            userId: userId,
-            conversationId: conversationId,
-            previousMessages: previousMessages
-          })
+          headers: { 
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-cache, no-store, must-revalidate'
+          },
+          body: JSON.stringify(intentPayload)
         });
 
-        console.log('🔍 Intent analysis response status:', intentAnalysis.status);
+        console.log('✅ Intent analysis response status:', intentAnalysis.status);
         
         if (!intentAnalysis.ok) {
           const errorText = await intentAnalysis.text();
-          console.error(`Intent analysis API returned ${intentAnalysis.status}: ${errorText}`);
+          console.error(`❌ Intent analysis API returned ${intentAnalysis.status}: ${errorText}`);
           throw new Error(`Intent analysis API returned ${intentAnalysis.status}: ${errorText}`);
         }
 
         intentData = await intentAnalysis.json();
-        console.log('Intent analysis response:', intentData);
+        console.log('✅ Intent analysis response:', JSON.stringify(intentData, null, 2));
       } catch (intentError) {
-        console.error('Failed to get intent analysis:', intentError);
+        console.error('❌ Failed to get intent analysis:', intentError);
+        console.error('❌ Stack trace:', intentError.stack);
+        
         // If intent analysis fails, check for basic keywords manually as fallback
         const basicKeywords = ['agency', 'company', 'office', 'about you', 'who are you'];
         const isBasicAgencyQuestion = basicKeywords.some(keyword => lowerMessage.includes(keyword));
@@ -130,7 +142,7 @@ export const testChatbotResponse = async (
       }
     }
     
-    console.log('Intent analysis:', intentData);
+    console.log('🔍 FINAL INTENT ANALYSIS:', JSON.stringify(intentData, null, 2));
     
     // Step 2: PRINCIPLE #1 - ALWAYS search training data for EVERY query
     // Determine search strategy based on intent
@@ -140,8 +152,7 @@ export const testChatbotResponse = async (
                                  lowerMessage.includes('house') || 
                                  lowerMessage.includes('apartment');
     
-    console.log(`🔍 ALWAYS SEARCHING TRAINING DATA for: "${message}"`);
-    console.log(`Search strategy - Training: Always, Properties: ${shouldSearchProperties}`);
+    console.log(`🔍 SEARCH STRATEGY - Training: Always, Properties: ${shouldSearchProperties}`);
     
     // Initialize result containers
     const trainingResults = {
@@ -152,14 +163,14 @@ export const testChatbotResponse = async (
     let responseSource = null; // Default to null until we determine source
     
     // Step 3: ALWAYS fetch training data first for any intent - this is critical for agency info
-    console.log('Searching training data regardless of intent...');
+    console.log('⏳ STARTING SEARCH TRAINING DATA CALL...');
     
     // ENHANCED DEBUGGING: Log everything before the search call
     console.log("🔍 PREPARING TO FETCH TRAINING DATA...");
     
     // CRITICAL FIX: Use full URL with https protocol to ensure the function is called
     const searchTrainingUrl = 'https://ckgaqkbsnrvccctqxsqv.supabase.co/functions/v1/search-training-data';
-    console.log('🔍 FULL Request URL:', searchTrainingUrl);
+    console.log('🔍 SEARCH TRAINING DATA URL:', searchTrainingUrl);
     
     const searchPayload = {
       query: message,
@@ -186,14 +197,14 @@ export const testChatbotResponse = async (
       // Add retry mechanism to ensure the search-training-data function is called
       let searchResponse = null;
       let retryCount = 0;
-      const maxRetries = 5; // Increased number of retries
+      const maxRetries = 3; // Reduced number of retries for faster debugging
       
       // Direct fetch with explicit error handling
       while (retryCount <= maxRetries) {
         try {
           console.log(`🔄 ATTEMPT ${retryCount + 1} TO CALL SEARCH-TRAINING-DATA FUNCTION`);
           
-          // Add unique timestamp to prevent caching
+          // Create a unique ID for debugging
           const uniqueId = Math.random().toString(36).substring(2, 15);
           const timeStamp = Date.now();
           const uniqueUrl = `${searchTrainingUrl}?_=${timeStamp}&id=${uniqueId}`;
@@ -201,34 +212,28 @@ export const testChatbotResponse = async (
           console.log(`Using URL with cache busting: ${uniqueUrl}`);
           
           // PRE-REQUEST VALIDATION: Log the full request configuration
-          console.log('Request headers:', {
+          const requestHeaders = {
             'Content-Type': 'application/json',
             'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0',
             'Pragma': 'no-cache',
             'Expires': '0',
             'X-Request-ID': uniqueId
-          });
-          console.log('Request method:', 'POST');
+          };
+          
+          console.log('Request headers:', JSON.stringify(requestHeaders, null, 2));
+          console.log('Request method: POST');
           console.log('Request body size:', JSON.stringify(searchPayload).length, 'bytes');
           
           // CRITICALLY IMPORTANT: This is the actual fetch call that needs to work
+          // DIRECT FETCH CALL WITH SIMPLER OPTIONS FOR TESTING
+          console.log('🔍 EXECUTING FETCH to search-training-data NOW');
           searchResponse = await fetch(uniqueUrl, {
             method: 'POST',
-            headers: { 
-              'Content-Type': 'application/json',
-              'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0',
-              'Pragma': 'no-cache',
-              'Expires': '0',
-              'X-Request-ID': uniqueId
-            },
-            body: JSON.stringify(searchPayload),
-            cache: 'no-store',
-            mode: 'cors',
-            credentials: 'omit',
-            redirect: 'follow'
+            headers: requestHeaders,
+            body: JSON.stringify(searchPayload)
           });
           
-          console.log(`Response status: ${searchResponse.status}, ok: ${searchResponse.ok}`);
+          console.log(`✅ FETCH COMPLETED with status: ${searchResponse.status}, ok: ${searchResponse.ok}`);
           
           // If successful, break out of retry loop
           if (searchResponse.ok) {
@@ -254,7 +259,7 @@ export const testChatbotResponse = async (
           }
         } catch (fetchError) {
           console.error(`❌ NETWORK ERROR on attempt ${retryCount + 1}:`, fetchError);
-          console.error(`Stack trace: ${fetchError.stack || 'No stack trace available'}`);
+          console.error(`❌ Stack trace: ${fetchError.stack || 'No stack trace available'}`);
           retryCount++;
           
           if (retryCount <= maxRetries) {
@@ -274,12 +279,23 @@ export const testChatbotResponse = async (
       
       console.log('🔍 Search API status:', searchResponse.status);
       
-      // Parse the search results
-      const searchResults = await searchResponse.json();
-      console.log('🔍 RECEIVED TRAINING DATA:', JSON.stringify(searchResults, null, 2));
-      console.log('Training search results received:', 
+      // Parse the search results - WITH ERROR HANDLING
+      let searchResults;
+      try {
+        const responseText = await searchResponse.text();
+        console.log('🔍 RAW RESPONSE TEXT (first 500 chars):', responseText.substring(0, 500));
+        searchResults = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error('❌ Error parsing search results:', parseError);
+        throw new Error(`Failed to parse search results: ${parseError.message}`);
+      }
+      
+      console.log('🔍 RECEIVED TRAINING DATA (first 500 chars):', 
+                 JSON.stringify(searchResults).substring(0, 500));
+      console.log('Training search results counts:', 
                  `QA matches: ${searchResults.qa_matches?.length || 0}`, 
-                 `File content: ${searchResults.file_content?.length || 0}`);
+                 `File content: ${searchResults.file_content?.length || 0}`,
+                 `Properties: ${searchResults.property_listings?.length || 0}`);
       
       // Update training results
       trainingResults.qaMatches = searchResults.qa_matches || [];
@@ -292,6 +308,13 @@ export const testChatbotResponse = async (
       if (trainingResults.qaMatches.length > 0) {
         console.log('✅ Found QA matches with similarities:', 
           trainingResults.qaMatches.map(m => m.similarity.toFixed(2)).join(', '));
+        
+        // Log first QA match for debugging
+        if (trainingResults.qaMatches[0]) {
+          console.log('📚 First QA match:', 
+                      `Q: ${trainingResults.qaMatches[0].question?.substring(0, 50)}...`, 
+                      `A: ${trainingResults.qaMatches[0].answer?.substring(0, 50)}...`);
+        }
       } else {
         console.log('⚠️ No QA matches found in training data');
       }
@@ -299,6 +322,13 @@ export const testChatbotResponse = async (
       if (trainingResults.fileContent.length > 0) {
         console.log('✅ Found file content with similarities:', 
           trainingResults.fileContent.map(c => c.similarity.toFixed(2)).join(', '));
+        
+        // Log first file content for debugging
+        if (trainingResults.fileContent[0]) {
+          console.log('📚 First file content:', 
+                      `Source: ${trainingResults.fileContent[0].source}`,
+                      `Text: ${trainingResults.fileContent[0].text?.substring(0, 50)}...`);
+        }
       } else {
         console.log('⚠️ No file content found in training data');
       }
@@ -528,7 +558,8 @@ If you don't find the answer in the training data or property listings, say:
       };
     }
   } catch (error) {
-    console.error('Error in chatbot response:', error);
+    console.error('🔴 UNCAUGHT ERROR in chatbot response:', error);
+    console.error('🔴 Stack trace:', error.stack);
     // PRINCIPLE #3: If anything fails, don't make up an answer
     return {
       response: "I'm sorry, I encountered an error processing your request. Please try again.",
