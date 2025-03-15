@@ -160,6 +160,12 @@ export const testChatbotResponse = async (
     let propertyRecommendations: PropertyRecommendation[] = [];
     let responseSource = null; // Default to null until we determine source
     
+    // Determine if we should search properties based on intent or keywords
+    const shouldSearchProperties = intentData.should_search_properties || 
+                             lowerMessage.includes('property') || 
+                             lowerMessage.includes('house') || 
+                             lowerMessage.includes('apartment');
+    
     // Step 3: CRITICAL FIX - ALWAYS CALL search-training-data without any conditions
     console.log('⚠️ CALLING SEARCH-TRAINING-DATA - EXPLICIT DEBUG LOG');
     console.log('⏳ STARTING SEARCH TRAINING DATA CALL...');
