@@ -11,7 +11,7 @@ allow_xhr = true
 # Make sure CORS is enabled for the function
 [global.headers]
 Access-Control-Allow-Origin = "*"
-Access-Control-Allow-Headers = "authorization, x-client-info, apikey, content-type"
+Access-Control-Allow-Headers = "authorization, x-client-info, apikey, content-type, x-request-id, cache-control, pragma, expires"
 Access-Control-Allow-Methods = "GET, POST, OPTIONS"
 
 # Add debugging environment variables
