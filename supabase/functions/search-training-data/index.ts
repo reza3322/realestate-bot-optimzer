@@ -50,14 +50,6 @@ serve(async (req) => {
       );
     }
     
-    if (!requestData.userId) {
-      console.error("❌ Missing required field: userId");
-      return new Response(
-        JSON.stringify({ error: "Missing required field: userId" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-    
     // Initialize Supabase client
     const supabaseUrl = Deno.env.get("SUPABASE_URL") || "https://ckgaqkbsnrvccctqxsqv.supabase.co";
     const supabaseKey = Deno.env.get("SUPABASE_ANON_KEY") || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNrZ2Fxa2JzbnJ2Y2NjdHF4c3F2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDEwMTEyODksImV4cCI6MjA1NjU4NzI4OX0.z62BR5psK8FBR5lfqbnpbFMfQLKgzFCisqDiuWg4MKM";
@@ -66,42 +58,84 @@ serve(async (req) => {
     
     const supabase = createClient(supabaseUrl, supabaseKey);
     
-    // Log before database query
-    console.log(`🔍 Searching for training data for user: ${requestData.userId}`);
-    console.log(`🔍 Query: "${requestData.query}"`);
+    // Check if userId is a valid UUID or a public user marker
+    let results = [];
     
-    // Use the search_all_training_content function for more comprehensive results
-    const { data, error } = await supabase
-      .rpc('search_all_training_content', {
-        user_id_param: requestData.userId,
-        query_text: requestData.query
-      });
-    
-    // Log database query results
-    if (error) {
-      console.error("❌ Database query error:", error);
-      return new Response(
-        JSON.stringify({ 
-          error: "Database error", 
-          message: error.message,
-          details: error.details,
-          hint: error.hint
-        }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    if (requestData.userId === 'public_user' || requestData.userId === 'demo-user' || !requestData.userId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
+      // For public users, use a direct query without userId filtering
+      console.log(`🔍 Handling public user request`);
+      
+      // Get public training data (simple query)
+      const { data: publicData, error: publicError } = await supabase
+        .from('chatbot_training_files')
+        .select('*')
+        .order('priority', { ascending: false })
+        .limit(10);
+      
+      if (publicError) {
+        console.error("❌ Public data query error:", publicError);
+        return new Response(
+          JSON.stringify({ 
+            error: "Database error", 
+            message: publicError.message,
+            details: publicError.details,
+            hint: publicError.hint
+          }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
+      console.log(`🔍 Found ${publicData?.length || 0} public training content items`);
+      
+      // Process and format public results
+      results = publicData?.map(item => ({
+        id: item.id,
+        contentType: item.content_type || 'qa',
+        content: item.question && item.answer ? 
+                `Q: ${item.question}\nA: ${item.answer}` : 
+                (item.extracted_text || item.answer || ''),
+        category: item.category,
+        priority: item.priority || 5,
+        similarity: 1.0  // Default similarity for public content
+      })) || [];
+    } else {
+      // For authenticated users, use the RPC function with UUID
+      console.log(`🔍 Searching for training data for user: ${requestData.userId}`);
+      console.log(`🔍 Query: "${requestData.query}"`);
+      
+      // Use the search_all_training_content function for more comprehensive results
+      const { data, error } = await supabase
+        .rpc('search_all_training_content', {
+          user_id_param: requestData.userId,
+          query_text: requestData.query
+        });
+      
+      // Log database query results
+      if (error) {
+        console.error("❌ Database query error:", error);
+        return new Response(
+          JSON.stringify({ 
+            error: "Database error", 
+            message: error.message,
+            details: error.details,
+            hint: error.hint
+          }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
+      console.log(`🔍 Found ${data?.length || 0} training content items`);
+      
+      // Process and format results
+      results = data?.map(item => ({
+        id: item.content_id,
+        contentType: item.content_type,
+        content: item.content,
+        category: item.category,
+        priority: item.priority,
+        similarity: item.similarity
+      })) || [];
     }
-    
-    console.log(`🔍 Found ${data?.length || 0} training content items`);
-    
-    // Process and format results
-    const results = data?.map(item => ({
-      id: item.content_id,
-      contentType: item.content_type,
-      content: item.content,
-      category: item.category,
-      priority: item.priority,
-      similarity: item.similarity
-    })) || [];
     
     // Sort by similarity then by priority
     results.sort((a, b) => 
