@@ -1,4 +1,3 @@
-
 import { Message, PropertyRecommendation, VisitorInfo, ChatbotResponse } from './types';
 
 /**
@@ -184,7 +183,7 @@ export const testChatbotResponse = async (
       // Add retry mechanism to ensure the search-training-data function is called
       let searchResponse = null;
       let retryCount = 0;
-      const maxRetries = 3; // Increased number of retries
+      const maxRetries = 4; // Increased number of retries
       
       // Direct fetch with explicit error handling
       while (retryCount <= maxRetries) {
@@ -192,19 +191,26 @@ export const testChatbotResponse = async (
           console.log(`🔄 DIRECT FETCH: Attempt ${retryCount + 1} to call search-training-data function`);
           
           // Add unique timestamp to prevent caching
-          const uniqueUrl = `${searchTrainingUrl}?cachebuster=${Date.now()}`;
+          const uniqueId = Math.random().toString(36).substring(2, 15);
+          const timeStamp = Date.now();
+          const uniqueUrl = `${searchTrainingUrl}?_=${timeStamp}&id=${uniqueId}`;
+          
           console.log(`Using URL with cache busting: ${uniqueUrl}`);
           
           searchResponse = await fetch(uniqueUrl, {
             method: 'POST',
             headers: { 
               'Content-Type': 'application/json',
-              // Add headers to prevent caching
-              'Cache-Control': 'no-cache, no-store, must-revalidate',
+              'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0',
               'Pragma': 'no-cache',
-              'Expires': '0'
+              'Expires': '0',
+              'X-Request-ID': uniqueId
             },
-            body: JSON.stringify(searchPayload)
+            body: JSON.stringify(searchPayload),
+            cache: 'no-store',
+            mode: 'cors',
+            credentials: 'omit',
+            redirect: 'follow'
           });
           
           console.log(`Response status: ${searchResponse.status}, ok: ${searchResponse.ok}`);
@@ -225,7 +231,7 @@ export const testChatbotResponse = async (
             retryCount++;
             
             if (retryCount <= maxRetries) {
-              const delay = 800 * retryCount; // Increasing backoff
+              const delay = 1000 * retryCount; // Increased backoff
               console.log(`🔄 Retrying in ${delay}ms... (${retryCount}/${maxRetries})`);
               await new Promise(resolve => setTimeout(resolve, delay));
             }
@@ -236,7 +242,7 @@ export const testChatbotResponse = async (
           retryCount++;
           
           if (retryCount <= maxRetries) {
-            const delay = 800 * retryCount; // Increasing backoff
+            const delay = 1000 * retryCount; // Increasing backoff
             console.log(`🔄 Retrying after network error in ${delay}ms... (${retryCount}/${maxRetries})`);
             await new Promise(resolve => setTimeout(resolve, delay));
           }
@@ -511,7 +517,7 @@ If you don't find the answer in the training data or property listings, say:
     console.error('Error in chatbot response:', error);
     // PRINCIPLE #3: If anything fails, don't make up an answer
     return {
-      response: "I'm sorry, I encountered an error processing your request. Please try again in a moment.",
+      response: "I'm sorry, I encountered an error processing your request. Please try again.",
       error: error instanceof Error ? error.message : String(error),
       source: 'error',
       conversationId: conversationId || `conv_${Date.now()}`

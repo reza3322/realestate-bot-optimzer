@@ -1,7 +1,15 @@
 
 # Function configuration for search-training-data
 # Enable detailed logging for debugging
-log_level = "debug"
+log_level = "info"
 # Always log traces for debugging
 trace_propagation = true
 verify_jwt = false
+http_port = 54321
+allow_xhr = true
+
+# Make sure CORS is enabled for the function
+[global.headers]
+Access-Control-Allow-Origin = "*"
+Access-Control-Allow-Headers = "authorization, x-client-info, apikey, content-type"
+Access-Control-Allow-Methods = "GET, POST, OPTIONS"

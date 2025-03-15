@@ -1,4 +1,3 @@
-
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.0";
@@ -11,9 +10,13 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey);
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
 };
 
+console.log('🚀 SEARCH-TRAINING-DATA FUNCTION LOADED AND READY');
+
 serve(async (req) => {
+  // Universal logging for every request
   console.log('🚀 SEARCH-TRAINING-DATA FUNCTION CALLED - ENTRY POINT');
   console.log('🔑 Function URL:', req.url);
   console.log('📋 Request method:', req.method);
@@ -22,7 +25,10 @@ serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     console.log('🔄 Handling CORS preflight request');
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { 
+      status: 204, 
+      headers: corsHeaders 
+    });
   }
 
   try {
@@ -30,7 +36,7 @@ serve(async (req) => {
     let reqBody;
     try {
       reqBody = await req.json();
-      console.log('📦 Request body parsed successfully:', JSON.stringify(reqBody));
+      console.log('📦 Request body parsed successfully:', JSON.stringify(reqBody, null, 2));
     } catch (parseError) {
       console.error('❌ Error parsing request body:', parseError);
       return new Response(
@@ -419,16 +425,21 @@ serve(async (req) => {
       }
     }
     
-    // Return the combined results
-    console.log(`🏁 Returning: ${result.qa_matches.length} QA matches, ${result.file_content.length} file content items, ${result.property_listings.length} property listings`);
-    console.log('📡 Supabase Training Data Results (SAMPLE):', {
-      qa_matches: result.qa_matches.slice(0, 2),
-      file_content: result.file_content.slice(0, 2)
-    });
+    // Return the combined results - Add additional CORS headers to ensure proper handling
+    console.log(`🏁 Returning results with status 200 and CORS headers`);
     
     return new Response(
       JSON.stringify(result),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { 
+        status: 200,
+        headers: { 
+          ...corsHeaders, 
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        } 
+      }
     );
   } catch (error) {
     console.error("❌ Error in search-training-data function:", error);
@@ -441,7 +452,14 @@ serve(async (req) => {
         file_content: [],
         property_listings: []
       }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { 
+        status: 500, 
+        headers: { 
+          ...corsHeaders, 
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache, no-store, must-revalidate' 
+        } 
+      }
     );
   }
 });
