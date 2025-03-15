@@ -179,25 +179,55 @@ export const testChatbotResponse = async (
       
       // FORCED DATABASE SEARCH: Always search before generating any response
       console.log('⚠️ FORCED DATABASE SEARCH: Ensuring training data is always searched first');
-      const searchResponse = await fetch(searchTrainingUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(searchPayload)
-      });
+      
+      // Add retry mechanism to ensure the search-training-data function is called
+      let searchResponse = null;
+      let retryCount = 0;
+      const maxRetries = 2;
+      
+      while (retryCount <= maxRetries) {
+        try {
+          console.log(`🔄 Attempt ${retryCount + 1} to call search-training-data function`);
+          searchResponse = await fetch(searchTrainingUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(searchPayload)
+          });
+          
+          if (searchResponse.ok) {
+            console.log(`✅ Successfully called search-training-data on attempt ${retryCount + 1}`);
+            break;
+          } else {
+            const errorText = await searchResponse.text();
+            console.error(`❌ Search API returned ${searchResponse.status} on attempt ${retryCount + 1}: ${errorText}`);
+            retryCount++;
+            
+            if (retryCount <= maxRetries) {
+              console.log(`🔄 Retrying in 500ms... (${retryCount}/${maxRetries})`);
+              await new Promise(resolve => setTimeout(resolve, 500));
+            }
+          }
+        } catch (fetchError) {
+          console.error(`❌ Fetch error on attempt ${retryCount + 1}:`, fetchError);
+          retryCount++;
+          
+          if (retryCount <= maxRetries) {
+            console.log(`🔄 Retrying in 500ms... (${retryCount}/${maxRetries})`);
+            await new Promise(resolve => setTimeout(resolve, 500));
+          }
+        }
+      }
 
       const searchEndTime = Date.now();
       console.log(`⏱️ SEARCH CALL COMPLETED at ${new Date().toISOString()} (took ${searchEndTime - searchStartTime}ms)`);
+      
+      if (!searchResponse || !searchResponse.ok) {
+        throw new Error(`Failed to fetch training data after ${maxRetries} retries`);
+      }
+      
       console.log('🔍 Search API status:', searchResponse.status);
       
-      // More detailed error handling to help debug issues
-      if (!searchResponse.ok) {
-        const errorText = await searchResponse.text();
-        console.error(`❌ Search API returned ${searchResponse.status}: ${errorText}`);
-        console.error(`❌ Search API endpoint: ${searchTrainingUrl}`);
-        console.error(`❌ Search API payload: ${JSON.stringify(searchPayload, null, 2)}`);
-        throw new Error(`Search API returned ${searchResponse.status}: ${errorText}`);
-      }
-
+      // Parse the search results
       const searchResults = await searchResponse.json();
       console.log('🔍 Training search results received:', 
                  `QA matches: ${searchResults.qa_matches?.length || 0}`, 
