@@ -50,8 +50,25 @@ serve(async (req) => {
       );
     }
 
-    // Unlike search-training-data, we don't need UUID validation here
-    // The analyze-intent function works with any userId string
+    // Validate userId is present (but don't require UUID format)
+    if (!body.userId) {
+      console.error("❌ Missing required field: userId");
+      return new Response(
+        JSON.stringify({ error: "Missing required field: userId" }),
+        { 
+          status: 400, 
+          headers: { ...corsHeaders, "Content-Type": "application/json" } 
+        }
+      );
+    }
+
+    // Log if public user
+    const isPublicUser = !body.userId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+    if (isPublicUser) {
+      console.log(`🔍 Processing request for public user: ${body.userId}`);
+    } else {
+      console.log(`🔍 Processing request for authenticated user: ${body.userId}`);
+    }
 
     // Normalize message for intent detection
     const normalizedMessage = body.message.toLowerCase().trim();
@@ -156,6 +173,7 @@ serve(async (req) => {
         message: normalizedMessage,
         userId: body.userId,
         conversationId: body.conversationId,
+        isPublicUser: isPublicUser
       }
     };
 
