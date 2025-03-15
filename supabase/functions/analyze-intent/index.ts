@@ -1,249 +1,196 @@
 
-import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.0";
-import { Configuration, OpenAIApi } from "https://esm.sh/openai@3.3.0";
+import { corsHeaders } from "../_shared/cors.ts";
 
-// Initialize Supabase client
-const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
-const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
+interface IntentRequest {
+  message: string;
+  userId: string;
+  conversationId?: string;
+  previousMessages?: any[];
+  visitorInfo?: any;
+}
 
-// Initialize OpenAI
-const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
-const openai = openAIApiKey ? new OpenAIApi(new Configuration({ apiKey: openAIApiKey })) : null;
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+interface IntentResponse {
+  intent: string;
+  confidence: number;
+  entities?: Record<string, any>;
+  action?: string;
+  slots?: Record<string, any>;
+  debug_info?: Record<string, any>;
+}
 
 serve(async (req) => {
-  console.log('🚀 ANALYZE-INTENT FUNCTION CALLED - ENTRY POINT');
-  console.log('🔑 Function URL:', req.url);
-  console.log('📋 Request method:', req.method);
-  
+  // Log every request
+  console.log("🔍 ANALYZE-INTENT FUNCTION CALLED");
+  console.log(`🔍 Request Method: ${req.method}`);
+
   // Handle CORS preflight requests
-  if (req.method === 'OPTIONS') {
-    console.log('🔄 Handling CORS preflight request');
-    return new Response(null, { headers: corsHeaders });
+  if (req.method === "OPTIONS") {
+    console.log("🔍 Handling CORS preflight request");
+    return new Response("ok", { headers: corsHeaders });
   }
 
   try {
-    const { message, userId, conversationId, previousMessages = [] } = await req.json();
-    console.log('📝 Analyzing intent for message:', message);
-    
-    if (!message) {
-      console.error('❌ Missing required parameter: message');
+    // Log headers for debugging
+    console.log("🔍 Request headers:", Object.fromEntries(req.headers.entries()));
+
+    // Parse the request body
+    const body = await req.json() as IntentRequest;
+    console.log("🔍 Request body:", JSON.stringify(body, null, 2));
+
+    // Validate required fields
+    if (!body.message) {
+      console.error("❌ Missing required field: message");
       return new Response(
-        JSON.stringify({ error: "Message is required" }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // First, do a simple rule-based check for common agency-related queries
-    // IMPORTANT: This ensures we catch agency questions without relying on AI
-    const lowerMessage = message.toLowerCase();
-    
-    // Expanded list of keywords for detecting agency questions
-    const agencyKeywords = [
-      'agency', 'company', 'firm', 'business', 'office', 
-      'about you', 'your name', 'who are you', 'your website', 
-      'your location', 'your address', 'contact information', 
-      'how can i contact', 'tell me about your', 'what is your', 
-      'where are you', 'your team', 'your services', 'your experience',
-      'how long have you', 'your hours', 'when are you', 'founded',
-      'established', 'how many agents', 'how many people', 'specialists',
-      'what do you specialize', 'your specialty', 'work with',
-      'commission', 'fee', 'charge', 'cost of your service',
-      'license', 'certified', 'accredited', 'credentials',
-      'family owned', 'independent', 'franchise', 'broker',
-      'agent', 'realtor', 'award', 'recognition', 'reputation',
-      'history', 'tell me more', 'brand', 'your brand'
-    ];
-      
-    const isAgencyQuestion = agencyKeywords.some(keyword => lowerMessage.includes(keyword));
-      
-    if (isAgencyQuestion) {
-      console.log('🏢 DIRECT AGENCY QUESTION DETECTED through keyword matching:', message);
-      console.log('✅ Setting intent to agency_info with high confidence');
-      return new Response(
-        JSON.stringify({
-          intent: 'agency_info',
-          should_search_training: true,
-          should_search_properties: false,
-          confidence: 0.95,
-          detected_via: 'keyword_match'
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-    
-    // Next, check for obvious property-related queries
-    const propertyKeywords = [
-      'property', 'house', 'apartment', 'villa', 'condo',
-      'bedroom', 'bathroom', 'price', 'cost', 'buy', 'rent', 'sell'
-    ];
-      
-    const isPropertyQuestion = propertyKeywords.some(keyword => lowerMessage.includes(keyword));
-      
-    if (isPropertyQuestion) {
-      console.log('🏠 DIRECT PROPERTY QUESTION detected through keyword matching:', message);
-      return new Response(
-        JSON.stringify({
-          intent: 'property_search',
-          should_search_training: true,
-          should_search_properties: true,
-          confidence: 0.9,
-          detected_via: 'keyword_match'
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // For more complex queries, use OpenAI to classify the intent
-    if (openai) {
-      console.log('🤖 Using OpenAI to classify intent for complex query');
-      // System prompt to analyze user's intent
-      const systemPrompt = `You are an AI assistant for a real estate agency, analyzing customer queries to determine their intent.
-
-Intent Categories:
-1. agency_info: Questions about the real estate agency itself, its services, agents, history, contact information, location, or policies.
-2. property_search: Questions about available properties, specific property features, pricing, or locations.
-3. real_estate_advice: Questions about the real estate market, buying/selling process, or investment advice.
-4. faq: Frequently asked questions about real estate or the agency's processes.
-5. lead_qualification: User sharing personal information or requirements that indicate they're interested in buying/selling.
-6. greeting: Simple greetings or conversation starters.
-7. general_query: Other questions not fitting into above categories.
-
-Examples:
-"What properties do you have in Madrid?" → property_search
-"Tell me about your agency" → agency_info
-"How long has your company been in business?" → agency_info
-"What's your agency called?" → agency_info
-"Where are you located?" → agency_info
-"Who is the owner of your company?" → agency_info
-"Do you offer property management services?" → agency_info
-"Is there a fee for property viewings?" → faq
-"Do you have any 3-bedroom villas?" → property_search
-"What's the best time to buy property?" → real_estate_advice
-"My name is John and I'm looking for a house" → lead_qualification
-
-For ANY question that could possibly be about the agency, its people, services, contact info, or operations, classify as "agency_info".
-
-IMPORTANT: For agency_info AND faq intents, ALWAYS set "should_search_training" to true.`;
-
-      // Format previous messages for context
-      let conversationContext = '';
-      if (previousMessages && previousMessages.length > 0) {
-        conversationContext = "Previous conversation:\n" + 
-          previousMessages.map(msg => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`).join("\n");
-      }
-
-      // Call OpenAI API to analyze intent
-      console.log('🔍 Calling OpenAI to analyze intent');
-      const completion = await openai.createChatCompletion({
-        model: "gpt-3.5-turbo",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: `Analyze this query: "${message}"${conversationContext ? '\n\n' + conversationContext : ''}` }
-        ],
-        temperature: 0.3,
-        max_tokens: 150,
-        frequency_penalty: 0.0,
-        presence_penalty: 0.0,
-        function_call: {
-          name: "classify_intent"
-        },
-        functions: [
-          {
-            name: "classify_intent",
-            description: "Classifies the intent of the user's message",
-            parameters: {
-              type: "object",
-              properties: {
-                intent: {
-                  type: "string",
-                  enum: ["agency_info", "property_search", "real_estate_advice", "faq", "lead_qualification", "greeting", "general_query"],
-                  description: "The classified intent of the user's message"
-                },
-                should_search_training: {
-                  type: "boolean",
-                  description: "Whether to search the training data for this query. Should be true for agency_info, faq, and real_estate_advice."
-                },
-                should_search_properties: {
-                  type: "boolean",
-                  description: "Whether to search for property listings for this query. Should be true for property_search."
-                },
-                confidence: {
-                  type: "number",
-                  description: "Confidence score between 0 and 1"
-                }
-              },
-              required: ["intent", "should_search_training", "should_search_properties"]
-            }
-          }
-        ]
-      });
-
-      // Extract the function call results
-      if (completion.data.choices[0].message?.function_call) {
-        const functionCallResult = JSON.parse(completion.data.choices[0].message.function_call.arguments);
-        
-        // Force should_search_training to true for agency_info and faq intents
-        if (functionCallResult.intent === 'agency_info' || functionCallResult.intent === 'faq') {
-          functionCallResult.should_search_training = true;
-          functionCallResult.detected_via = 'openai';
+        JSON.stringify({ error: "Missing required field: message" }),
+        { 
+          status: 400, 
+          headers: { ...corsHeaders, "Content-Type": "application/json" } 
         }
-        
-        // Log the result for debugging
-        console.log('✅ OpenAI intent classification:', functionCallResult);
-        
-        return new Response(
-          JSON.stringify(functionCallResult),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      } else {
-        console.log('⚠️ OpenAI did not return a function call result, falling back to rule-based classification');
+      );
+    }
+
+    if (!body.userId) {
+      console.error("❌ Missing required field: userId");
+      return new Response(
+        JSON.stringify({ error: "Missing required field: userId" }),
+        { 
+          status: 400, 
+          headers: { ...corsHeaders, "Content-Type": "application/json" } 
+        }
+      );
+    }
+
+    // Normalize message for intent detection
+    const normalizedMessage = body.message.toLowerCase().trim();
+    console.log("🔍 Normalized message:", normalizedMessage);
+
+    // Basic intent detection logic
+    const intentPatterns = [
+      { pattern: /(hi|hello|hey|greetings)/i, intent: "greeting" },
+      { pattern: /(bye|goodbye|see you|talk later)/i, intent: "farewell" },
+      { pattern: /(thank you|thanks)/i, intent: "thanks" },
+      { pattern: /(property|house|home|apartment|condo|real estate)/i, intent: "property_inquiry" },
+      { pattern: /(price|cost|afford|budget|money)/i, intent: "price_inquiry" },
+      { pattern: /(location|area|neighborhood|where)/i, intent: "location_inquiry" },
+      { pattern: /(agent|realtor|broker)/i, intent: "agent_inquiry" },
+      { pattern: /(contact|call|email|phone|reach)/i, intent: "contact_request" },
+      { pattern: /(schedule|book|appointment|meeting|visit)/i, intent: "appointment_request" },
+      { pattern: /(mortgage|loan|financing|payment)/i, intent: "mortgage_inquiry" },
+      { pattern: /(buy|purchase|offer)/i, intent: "buying_inquiry" },
+      { pattern: /(sell|selling|list|market)/i, intent: "selling_inquiry" },
+      { pattern: /(rent|lease|rental)/i, intent: "rental_inquiry" },
+      { pattern: /(name|who are you|what are you)/i, intent: "bot_identity" },
+      { pattern: /(help|assist|support)/i, intent: "help_request" },
+      { pattern: /(feature|amenity|include)/i, intent: "feature_inquiry" },
+      { pattern: /(address|street|location)/i, intent: "address_inquiry" },
+      { pattern: /(bedroom|bathroom|size|square|footage)/i, intent: "property_details" },
+      { pattern: /(company|business|firm|agency)/i, intent: "company_info" },
+    ];
+
+    // Find the first matching pattern or default to "general_query"
+    let detectedIntent = "general_query";
+    let confidence = 0.4; // Default confidence for general queries
+
+    for (const { pattern, intent } of intentPatterns) {
+      if (pattern.test(normalizedMessage)) {
+        detectedIntent = intent;
+        confidence = 0.8; // Higher confidence for pattern matches
+        console.log(`🔍 Intent detected: ${intent} with confidence ${confidence}`);
+        break;
       }
     }
 
-    // Fallback to a simple rule-based approach if OpenAI is unavailable
-    // or if the function call failed
-    console.log('⚠️ Using fallback rule-based intent classification');
-    const lowerCaseMessage = message.toLowerCase();
-    
-    // Default fallback classification
-    const fallbackResult = {
-      intent: 'general_query',
-      should_search_training: true, // Always search training data in fallback
-      should_search_properties: lowerCaseMessage.includes('property') || 
-                              lowerCaseMessage.includes('house') || 
-                              lowerCaseMessage.includes('apartment'),
-      confidence: 0.7,
-      detected_via: 'fallback'
+    // Extract entities (basic implementation)
+    const entities: Record<string, any> = {};
+
+    // Extract price-related entities
+    const priceMatch = normalizedMessage.match(/(\$[\d,]+|\d+k|\d+ thousand|\d+ million|\d+m)/i);
+    if (priceMatch) {
+      entities.price = priceMatch[0];
+    }
+
+    // Extract location-related entities
+    const locationPatterns = [
+      /in ([a-z]+ ?[a-z]*)/i,
+      /near ([a-z]+ ?[a-z]*)/i,
+      /at ([a-z]+ ?[a-z]*)/i,
+      /([a-z]+ ?[a-z]*) area/i,
+    ];
+
+    for (const pattern of locationPatterns) {
+      const match = normalizedMessage.match(pattern);
+      if (match && match[1]) {
+        entities.location = match[1];
+        break;
+      }
+    }
+
+    // Extract property type entities
+    const propertyTypePatterns = [
+      /([1-6])-bedroom/i,
+      /([1-6]) bedroom/i,
+      /([1-6])bed/i,
+      /([1-5])-bathroom/i,
+      /([1-5]) bathroom/i,
+      /([1-5])bath/i,
+    ];
+
+    for (const pattern of propertyTypePatterns) {
+      const match = normalizedMessage.match(pattern);
+      if (match && match[1]) {
+        const num = parseInt(match[1]);
+        if (pattern.toString().includes("bed")) {
+          entities.bedrooms = num;
+        } else if (pattern.toString().includes("bath")) {
+          entities.bathrooms = num;
+        }
+      }
+    }
+
+    // Enhanced logging for debug purposes
+    console.log("🔍 Intent analysis complete");
+    console.log(`🔍 Detected intent: ${detectedIntent}`);
+    console.log(`🔍 Confidence: ${confidence}`);
+    console.log("🔍 Extracted entities:", entities);
+
+    // Create the response
+    const response: IntentResponse = {
+      intent: detectedIntent,
+      confidence,
+      entities: Object.keys(entities).length > 0 ? entities : undefined,
+      debug_info: {
+        timestamp: new Date().toISOString(),
+        message: normalizedMessage,
+        userId: body.userId,
+        conversationId: body.conversationId,
+      }
     };
-    
-    console.log('✅ Fallback intent classification:', fallbackResult);
-    
+
+    console.log("🔍 Response payload:", JSON.stringify(response, null, 2));
+
     return new Response(
-      JSON.stringify(fallbackResult),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      JSON.stringify(response),
+      { 
+        status: 200, 
+        headers: { ...corsHeaders, "Content-Type": "application/json" } 
+      }
     );
   } catch (error) {
-    console.error('❌ Error in intent analysis:', error);
-    console.error('❌ Stack trace:', error.stack);
+    // Enhanced error logging
+    console.error("❌ ERROR IN ANALYZE-INTENT:", error);
+    console.error("❌ Error stack:", error.stack);
     
     return new Response(
       JSON.stringify({ 
-        error: error.message,
-        intent: 'general_query',
-        should_search_training: true, // Always search training in case of error
-        should_search_properties: false,
-        confidence: 0.5,
-        detected_via: 'error_fallback'
+        error: "Internal Server Error", 
+        message: error.message,
+        stack: Deno.env.get("DEBUG") === "true" ? error.stack : undefined
       }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { 
+        status: 500, 
+        headers: { ...corsHeaders, "Content-Type": "application/json" } 
+      }
     );
   }
 });
