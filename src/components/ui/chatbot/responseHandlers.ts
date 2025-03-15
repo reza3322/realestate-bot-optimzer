@@ -154,6 +154,10 @@ export const testChatbotResponse = async (
     console.log('🔍 STARTING TRAINING DATA SEARCH for message:', message);
     console.log('🔍 Making request to search-training-data endpoint with userId:', userId);
     
+    // ENHANCED LOGGING: Add timing for the search-training-data call
+    const searchStartTime = Date.now();
+    console.log(`⏱️ SEARCH CALL STARTED at ${new Date().toISOString()}`);
+    
     try {
       const searchTrainingUrl = 'https://ckgaqkbsnrvccctqxsqv.supabase.co/functions/v1/search-training-data';
       console.log('🔍 Request URL:', searchTrainingUrl);
@@ -178,11 +182,13 @@ export const testChatbotResponse = async (
         body: JSON.stringify(searchPayload)
       });
 
+      const searchEndTime = Date.now();
+      console.log(`⏱️ SEARCH CALL COMPLETED at ${new Date().toISOString()} (took ${searchEndTime - searchStartTime}ms)`);
       console.log('🔍 Search API status:', searchResponse.status);
       
       if (!searchResponse.ok) {
         const errorText = await searchResponse.text();
-        console.error(`Search API returned ${searchResponse.status}: ${errorText}`);
+        console.error(`❌ Search API returned ${searchResponse.status}: ${errorText}`);
         throw new Error(`Search API returned ${searchResponse.status}: ${errorText}`);
       }
 
@@ -201,8 +207,24 @@ export const testChatbotResponse = async (
       // Update property recommendations from the same search if available
       propertyRecommendations = searchResults.property_listings || [];
       
+      // ENHANCED LOGGING: Add summary of what was found
+      if (trainingResults.qaMatches.length > 0) {
+        console.log('✅ Found QA matches with similarities:', 
+          trainingResults.qaMatches.map(m => m.similarity.toFixed(2)).join(', '));
+      } else {
+        console.log('⚠️ No QA matches found in training data');
+      }
+      
+      if (trainingResults.fileContent.length > 0) {
+        console.log('✅ Found file content with similarities:', 
+          trainingResults.fileContent.map(c => c.similarity.toFixed(2)).join(', '));
+      } else {
+        console.log('⚠️ No file content found in training data');
+      }
+      
     } catch (searchError) {
       console.error('🔴 Error in training data search:', searchError);
+      console.error('🔴 Stack trace:', searchError.stack);
     }
     
     // Step 4: Determine if we have valid training data to base response on

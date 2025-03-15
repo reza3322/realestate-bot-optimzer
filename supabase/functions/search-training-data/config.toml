@@ -1,5 +1,5 @@
 
-project_id = "ckgaqkbsnrvccctqxsqv"
+# Function configuration for search-training-data
+# Enable detailed logging for debugging
+log_level = "debug"
 
-[global.env]
-ENABLE_ALL_FEATURES = "true"
