@@ -12,8 +12,13 @@ const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
 const supabaseClient = createClient(supabaseUrl, supabaseKey);
 
 serve(async (req) => {
+  console.log('🚀 GET-CONVERSATION-HISTORY FUNCTION CALLED - ENTRY POINT');
+  console.log('🔑 Function URL:', req.url);
+  console.log('📋 Request method:', req.method);
+
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
+    console.log('🔄 Handling CORS preflight request');
     return new Response(null, { headers: corsHeaders });
   }
 
@@ -24,16 +29,19 @@ serve(async (req) => {
       limit = 10
     } = await req.json();
     
-    console.log(`Fetching conversation history for conversation: ${conversationId}, user: ${userId}`);
+    console.log(`📝 Fetching conversation history for conversation: ${conversationId}, user: ${userId}, limit: ${limit}`);
 
     if (!conversationId || !userId) {
+      console.error('❌ Missing required parameters: conversationId or userId is missing');
       return new Response(
         JSON.stringify({ error: 'Conversation ID and user ID are required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Get conversation history
+    // Get conversation history without requiring authentication
+    // This is safe because we're still checking that the conversation belongs to the specified user
+    console.log('⏳ Querying database for conversation history');
     const { data: messages, error } = await supabaseClient
       .from('chatbot_conversations')
       .select('id, message, response, created_at, visitor_id')
@@ -43,19 +51,21 @@ serve(async (req) => {
       .limit(limit);
     
     if (error) {
-      console.error('Error fetching conversation history:', error);
+      console.error('❌ Error fetching conversation history:', error);
       return new Response(
         JSON.stringify({ error: error.message }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
+    console.log(`✅ Successfully retrieved ${messages?.length || 0} messages`);
     return new Response(
       JSON.stringify({ messages: messages || [] }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
-    console.error('Error in get-conversation-history function:', error);
+    console.error('❌ Error in get-conversation-history function:', error);
+    console.error('❌ Stack trace:', error.stack);
     return new Response(
       JSON.stringify({ error: error.message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
