@@ -38,8 +38,20 @@ serve(async (req) => {
     }
     
     // Parse request body
-    const requestData = await req.json() as SearchRequest;
-    console.log("🔍 Request data:", JSON.stringify(requestData, null, 2));
+    let requestData;
+    try {
+      const requestText = await req.text();
+      console.log("🔍 Raw request body:", requestText);
+      requestData = JSON.parse(requestText) as SearchRequest;
+    } catch (parseError) {
+      console.error("❌ Error parsing request body:", parseError);
+      return new Response(
+        JSON.stringify({ error: "Invalid JSON in request body", details: parseError.message }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
+    console.log("🔍 Parsed request data:", JSON.stringify(requestData, null, 2));
     
     // Validate required fields
     if (!requestData.query) {
@@ -48,6 +60,12 @@ serve(async (req) => {
         JSON.stringify({ error: "Missing required field: query" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+    
+    // Ensure userId is present - default to 'public_user' if not provided
+    if (!requestData.userId) {
+      console.log("⚠️ No userId provided, using 'public_user'");
+      requestData.userId = 'public_user';
     }
     
     // Initialize Supabase client
@@ -66,76 +84,149 @@ serve(async (req) => {
       // For public users, use a direct query without userId filtering
       console.log(`🔍 Handling public user request for: ${requestData.userId}`);
       
-      // Get public training data (simple query)
-      const { data: publicData, error: publicError } = await supabase
-        .from('chatbot_training_files')
-        .select('*')
-        .order('priority', { ascending: false })
-        .limit(10);
-      
-      if (publicError) {
-        console.error("❌ Public data query error:", publicError);
+      try {
+        // Get public training data (using standard query instead of RPC)
+        const { data: publicData, error: publicError } = await supabase
+          .from('chatbot_training_files')
+          .select('*')
+          .order('priority', { ascending: false })
+          .limit(20);
+        
+        if (publicError) {
+          console.error("❌ Public data query error:", publicError);
+          return new Response(
+            JSON.stringify({ 
+              error: "Database error", 
+              message: publicError.message,
+              details: publicError.details,
+              hint: publicError.hint
+            }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        
+        console.log(`🔍 Found ${publicData?.length || 0} public training content items`);
+        
+        // Process and format public results - add basic similarity scores
+        results = publicData?.map(item => {
+          // Calculate a simple similarity score based on word matching
+          let similarity = 0.5; // Default similarity
+          
+          if (item.question) {
+            const questionWords = item.question.toLowerCase().split(/\s+/);
+            const queryWords = requestData.query.toLowerCase().split(/\s+/);
+            const matchCount = questionWords.filter(word => queryWords.includes(word)).length;
+            
+            if (matchCount > 0) {
+              similarity = Math.min(0.9, 0.5 + (matchCount / questionWords.length) * 0.4);
+            }
+          }
+          
+          return {
+            id: item.id,
+            contentType: item.content_type || 'qa',
+            content: item.question && item.answer ? 
+                    `Q: ${item.question}\nA: ${item.answer}` : 
+                    (item.extracted_text || item.answer || ''),
+            category: item.category,
+            priority: item.priority || 5,
+            similarity: similarity
+          };
+        }) || [];
+      } catch (queryError) {
+        console.error("❌ Error querying database for public data:", queryError);
         return new Response(
-          JSON.stringify({ 
-            error: "Database error", 
-            message: publicError.message,
-            details: publicError.details,
-            hint: publicError.hint
-          }),
+          JSON.stringify({ error: "Database query error", message: queryError.message }),
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      
-      console.log(`🔍 Found ${publicData?.length || 0} public training content items`);
-      
-      // Process and format public results
-      results = publicData?.map(item => ({
-        id: item.id,
-        contentType: item.content_type || 'qa',
-        content: item.question && item.answer ? 
-                `Q: ${item.question}\nA: ${item.answer}` : 
-                (item.extracted_text || item.answer || ''),
-        category: item.category,
-        priority: item.priority || 5,
-        similarity: 1.0  // Default similarity for public content
-      })) || [];
     } else {
       // For authenticated users, use the RPC function with UUID
-      console.log(`🔍 Searching for training data for user: ${requestData.userId}`);
+      console.log(`🔍 Searching for training data for authenticated user: ${requestData.userId}`);
       console.log(`🔍 Query: "${requestData.query}"`);
       
-      // Use the search_all_training_content function for more comprehensive results
-      const { data, error } = await supabase
-        .rpc('search_all_training_content', {
-          user_id_param: requestData.userId,
-          query_text: requestData.query
-        });
-      
-      // Log database query results
-      if (error) {
-        console.error("❌ Database query error:", error);
+      try {
+        // Use the search_all_training_content function for more comprehensive results
+        const { data, error } = await supabase
+          .rpc('search_all_training_content', {
+            user_id_param: requestData.userId,
+            query_text: requestData.query
+          });
+        
+        // Log database query results
+        if (error) {
+          console.error("❌ Database RPC query error:", error);
+          
+          // If we get an RPC error, fall back to direct query
+          console.log("⚠️ RPC query failed, falling back to direct query");
+          
+          const { data: fallbackData, error: fallbackError } = await supabase
+            .from('chatbot_training_files')
+            .select('*')
+            .eq('user_id', requestData.userId)
+            .order('priority', { ascending: false })
+            .limit(20);
+            
+          if (fallbackError) {
+            console.error("❌ Fallback query error:", fallbackError);
+            return new Response(
+              JSON.stringify({ 
+                error: "Database error", 
+                message: fallbackError.message,
+                details: fallbackError.details,
+                hint: fallbackError.hint
+              }),
+              { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+          
+          console.log(`🔍 Found ${fallbackData?.length || 0} training content items via fallback query`);
+          
+          // Process fallback results with basic similarity
+          results = fallbackData?.map(item => {
+            let similarity = 0.5; // Default similarity
+            
+            if (item.question) {
+              const questionWords = item.question.toLowerCase().split(/\s+/);
+              const queryWords = requestData.query.toLowerCase().split(/\s+/);
+              const matchCount = questionWords.filter(word => queryWords.includes(word)).length;
+              
+              if (matchCount > 0) {
+                similarity = Math.min(0.9, 0.5 + (matchCount / questionWords.length) * 0.4);
+              }
+            }
+            
+            return {
+              id: item.id,
+              contentType: item.content_type || 'qa',
+              content: item.question && item.answer ? 
+                      `Q: ${item.question}\nA: ${item.answer}` : 
+                      (item.extracted_text || item.answer || ''),
+              category: item.category,
+              priority: item.priority || 5,
+              similarity: similarity
+            };
+          }) || [];
+        } else {
+          console.log(`🔍 Found ${data?.length || 0} training content items via RPC`);
+          
+          // Process and format results from RPC function
+          results = data?.map(item => ({
+            id: item.content_id,
+            contentType: item.content_type,
+            content: item.content,
+            category: item.category,
+            priority: item.priority,
+            similarity: item.similarity
+          })) || [];
+        }
+      } catch (queryError) {
+        console.error("❌ Error in query execution:", queryError);
         return new Response(
-          JSON.stringify({ 
-            error: "Database error", 
-            message: error.message,
-            details: error.details,
-            hint: error.hint
-          }),
+          JSON.stringify({ error: "Database query error", message: queryError.message }),
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      
-      console.log(`🔍 Found ${data?.length || 0} training content items`);
-      
-      // Process and format results
-      results = data?.map(item => ({
-        id: item.content_id,
-        contentType: item.content_type,
-        content: item.content,
-        category: item.category,
-        priority: item.priority,
-        similarity: item.similarity
-      })) || [];
     }
     
     // Sort by similarity then by priority
@@ -188,18 +279,22 @@ serve(async (req) => {
     // Log the final response
     console.log(`🔍 Returning ${qa_matches.length} QA matches and ${file_content.length} file content items`);
     
+    const response = {
+      qa_matches,
+      file_content,
+      property_listings: [], // Empty for now, could be added later
+      meta: {
+        total: results.length,
+        query: requestData.query,
+        userId: requestData.userId,
+        timestamp: new Date().toISOString()
+      }
+    };
+    
+    console.log("🔍 Final response (truncated):", JSON.stringify(response).substring(0, 200) + "...");
+    
     return new Response(
-      JSON.stringify({
-        qa_matches,
-        file_content,
-        property_listings: [], // Empty for now, could be added later
-        meta: {
-          total: results.length,
-          query: requestData.query,
-          userId: requestData.userId,
-          timestamp: new Date().toISOString()
-        }
-      }),
+      JSON.stringify(response),
       { 
         status: 200, 
         headers: { ...corsHeaders, "Content-Type": "application/json" } 

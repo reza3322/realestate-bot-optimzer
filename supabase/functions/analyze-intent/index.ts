@@ -17,12 +17,15 @@ interface IntentResponse {
   action?: string;
   slots?: Record<string, any>;
   debug_info?: Record<string, any>;
+  should_search_training?: boolean;
+  should_search_properties?: boolean;
 }
 
 serve(async (req) => {
   // Log every request
   console.log("🔍 ANALYZE-INTENT FUNCTION CALLED");
   console.log(`🔍 Request Method: ${req.method}`);
+  console.log(`🔍 Request URL: ${req.url}`);
 
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
@@ -157,17 +160,33 @@ serve(async (req) => {
       }
     }
 
+    // Determine if we should search training data and properties
+    // IMPORTANT: Default to true for public users to ensure functionality
+    const should_search_training = true; // Always search training data
+    
+    // Set property search based on intent type
+    const property_related_intents = [
+      "property_inquiry", "price_inquiry", "location_inquiry", 
+      "feature_inquiry", "address_inquiry", "property_details"
+    ];
+    
+    const should_search_properties = property_related_intents.includes(detectedIntent);
+
     // Enhanced logging for debug purposes
     console.log("🔍 Intent analysis complete");
     console.log(`🔍 Detected intent: ${detectedIntent}`);
     console.log(`🔍 Confidence: ${confidence}`);
     console.log("🔍 Extracted entities:", entities);
+    console.log(`🔍 Should search training: ${should_search_training}`);
+    console.log(`🔍 Should search properties: ${should_search_properties}`);
 
     // Create the response
     const response: IntentResponse = {
       intent: detectedIntent,
       confidence,
       entities: Object.keys(entities).length > 0 ? entities : undefined,
+      should_search_training,
+      should_search_properties,
       debug_info: {
         timestamp: new Date().toISOString(),
         message: normalizedMessage,

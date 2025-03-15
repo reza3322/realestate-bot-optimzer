@@ -1,4 +1,3 @@
-
 import { Message, PropertyRecommendation, VisitorInfo, ChatbotResponse } from './types';
 
 /**
@@ -58,100 +57,70 @@ export const testChatbotResponse = async (
       return keywordFound;
     });
     
-    // If it's an obvious agency question, set intent directly and log it
-    let intentData;
+    // CRITICAL: Always call analyze-intent regardless of message content
+    console.log('⚠️ CALLING ANALYZE-INTENT - CRITICAL SECTION');
+    console.log('🔍 Calling analyze-intent with message:', message);
     
-    if (isObviousAgencyQuestion) {
-      console.log('🏢 DETECTED AGENCY QUESTION via direct keyword matching:', message);
-      console.log('WITH CONVERSATION HISTORY:', JSON.stringify(previousMessages, null, 2));
-      intentData = {
-        intent: 'agency_info',
-        should_search_training: true,
-        should_search_properties: false,
-        confidence: 0.95,
-        detected_via: 'keyword_matching'
+    let intentData;
+    try {
+      // Use full URL with https and correct project ID
+      const intentAnalysisUrl = 'https://ckgaqkbsnrvccctqxsqv.supabase.co/functions/v1/analyze-intent';
+      console.log('🔍 Intent analysis URL:', intentAnalysisUrl);
+      
+      const intentPayload = {
+        message: message,
+        userId: userId || 'public_user', // Always provide a userId, use 'public_user' as fallback
+        conversationId: conversationId,
+        previousMessages: previousMessages,
+        visitorInfo: visitorInfo
       };
       
-      // Additional logging to help debug
-      console.log('🔍 AGENCY INTENT SET BY KEYWORD MATCHING:', intentData);
-    } else {
-      // Debug Edge Function connectivity - CRITICAL SECTION!
-      console.log('⚠️ CALLING ANALYZE-INTENT - EXPLICIT DEBUG LOG');
-      console.log('🔍 Calling analyze-intent with message:', message);
+      console.log('🔍 Intent analysis payload:', JSON.stringify(intentPayload, null, 2));
       
-      try {
-        console.log('🔍 Making request to analyze-intent endpoint with message:', message);
-        
-        // CRITICAL FIX: Add full URL with https protocol to ensure the function is called
-        const intentAnalysisUrl = 'https://ckgaqkbsnrvccctqxsqv.supabase.co/functions/v1/analyze-intent';
-        console.log('🔍 Intent analysis URL:', intentAnalysisUrl);
-        
-        const intentPayload = {
-          message: message,
-          userId: userId,
-          conversationId: conversationId,
-          previousMessages: previousMessages
-        };
-        
-        console.log('🔍 Intent analysis payload:', JSON.stringify(intentPayload, null, 2));
-        
-        // Disable any caching
-        const intentAnalysis = await fetch(intentAnalysisUrl, {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'Cache-Control': 'no-cache, no-store, must-revalidate',
-            'Pragma': 'no-cache',
-            'Expires': '0'
-          },
-          body: JSON.stringify(intentPayload)
-        });
+      // Add cache-busting parameter to URL
+      const cacheBuster = Date.now();
+      const uniqueAnalysisUrl = `${intentAnalysisUrl}?_=${cacheBuster}`;
+      
+      // Disable any caching with explicit headers
+      const intentAnalysis = await fetch(uniqueAnalysisUrl, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        },
+        body: JSON.stringify(intentPayload)
+      });
 
-        console.log('✅ Intent analysis response status:', intentAnalysis.status);
-        
-        if (!intentAnalysis.ok) {
-          const errorText = await intentAnalysis.text();
-          console.error(`❌ Intent analysis API returned ${intentAnalysis.status}: ${errorText}`);
-          throw new Error(`Intent analysis API returned ${intentAnalysis.status}: ${errorText}`);
-        }
-
-        intentData = await intentAnalysis.json();
-        console.log('✅ Intent analysis response:', JSON.stringify(intentData, null, 2));
-      } catch (intentError) {
-        console.error('❌ Failed to get intent analysis:', intentError);
-        console.error('❌ Stack trace:', intentError.stack);
-        
-        // If intent analysis fails, check for basic keywords manually as fallback
-        const basicKeywords = ['agency', 'company', 'office', 'about you', 'who are you'];
-        const isBasicAgencyQuestion = basicKeywords.some(keyword => lowerMessage.includes(keyword));
-        
-        if (isBasicAgencyQuestion) {
-          console.log('⚠️ Intent API failed but detected basic agency question keywords');
-          intentData = {
-            intent: 'agency_info',
-            should_search_training: true,
-            should_search_properties: false,
-            confidence: 0.8,
-            detected_via: 'fallback_keywords'
-          };
-        } else {
-          // Otherwise use general query as fallback
-          intentData = {
-            intent: 'general_query',
-            should_search_training: true, // Always search training on error
-            should_search_properties: false,
-            confidence: 0.5,
-            detected_via: 'error_fallback'
-          };
-        }
+      console.log('✅ Intent analysis response status:', intentAnalysis.status);
+      
+      if (!intentAnalysis.ok) {
+        const errorText = await intentAnalysis.text();
+        console.error(`❌ Intent analysis API returned ${intentAnalysis.status}: ${errorText}`);
+        throw new Error(`Intent analysis API returned ${intentAnalysis.status}: ${errorText}`);
       }
+
+      const responseText = await intentAnalysis.text();
+      console.log('✅ Intent analysis raw response:', responseText);
+      
+      intentData = JSON.parse(responseText);
+      console.log('✅ Intent analysis response parsed:', JSON.stringify(intentData, null, 2));
+    } catch (intentError) {
+      console.error('❌ Failed to get intent analysis:', intentError);
+      console.error('❌ Stack trace:', intentError.stack);
+      
+      // Fallback intent data if analyze-intent fails
+      intentData = {
+        intent: 'general_query',
+        confidence: 0.5,
+        should_search_training: true,
+        should_search_properties: false,
+        detected_via: 'error_fallback'
+      };
     }
     
     console.log('🔍 FINAL INTENT ANALYSIS:', JSON.stringify(intentData, null, 2));
-    
-    // Step 2: PRINCIPLE #1 - ALWAYS search training data for EVERY query, regardless of intent
-    // Remove all conditional checks that might be skipping search-training-data
-    console.log(`🔍 SEARCH STRATEGY - Training: ALWAYS, Properties: Based on intent`);
     
     // Initialize result containers
     const trainingResults = {
@@ -161,27 +130,21 @@ export const testChatbotResponse = async (
     let propertyRecommendations: PropertyRecommendation[] = [];
     let responseSource = null; // Default to null until we determine source
     
-    // Determine if we should search properties based on intent or keywords
-    const shouldSearchProperties = intentData.should_search_properties || 
-                             lowerMessage.includes('property') || 
-                             lowerMessage.includes('house') || 
-                             lowerMessage.includes('apartment');
-    
-    // Step 3: CRITICAL FIX - ALWAYS CALL search-training-data without any conditions
-    console.log('⚠️ CALLING SEARCH-TRAINING-DATA - EXPLICIT DEBUG LOG');
+    // CRITICAL FIX: ALWAYS CALL search-training-data without any conditions
+    console.log('⚠️ CALLING SEARCH-TRAINING-DATA - CRITICAL SECTION');
     console.log('⏳ STARTING SEARCH TRAINING DATA CALL...');
     console.log('🔍 STARTING TRAINING DATA SEARCH for message:', message);
     
     // ENHANCED DEBUGGING: Log everything before the search call
     console.log("🔍 PREPARING TO FETCH TRAINING DATA...");
     
-    // CRITICAL FIX: Use full URL with https protocol to ensure the function is called
+    // Use full URL with https and correct project ID
     const searchTrainingUrl = 'https://ckgaqkbsnrvccctqxsqv.supabase.co/functions/v1/search-training-data';
     console.log('🔍 SEARCH TRAINING DATA URL:', searchTrainingUrl);
     
     const searchPayload = {
       query: message,
-      userId: userId,
+      userId: userId || 'public_user', // Always provide a userId, use 'public_user' as fallback
       conversationId: conversationId,
       includeQA: true,
       includeFiles: true,  
@@ -190,125 +153,49 @@ export const testChatbotResponse = async (
                          lowerMessage.includes('house') || 
                          lowerMessage.includes('apartment'),
       previousMessages: previousMessages,
-      // Add explicit flag for agency questions to prioritize training data
       isAgencyQuestion: isObviousAgencyQuestion || intentData.intent === 'agency_info'
     };
     
     console.log('🔍 SEARCH PAYLOAD:', JSON.stringify(searchPayload, null, 2));
     
-    // ENHANCED LOGGING: Add timing for the search-training-data call
     const searchStartTime = Date.now();
     console.log(`⏱️ SEARCH CALL STARTED at ${new Date().toISOString()}`);
     
     try {
-      // CRITICAL: Add direct debug logging to confirm this section is executing
-      console.log('🚨 EXECUTING SEARCH-TRAINING-DATA FUNCTION CALL - CRITICAL SECTION');
+      // Create a unique ID for debugging
+      const uniqueId = Math.random().toString(36).substring(2, 15);
+      const timeStamp = Date.now();
+      const uniqueUrl = `${searchTrainingUrl}?_=${timeStamp}&id=${uniqueId}`;
       
-      // Direct fetch with explicit error handling
-      let searchResponse = null;
-      let retryCount = 0;
-      const maxRetries = 3;
+      console.log(`Using URL with cache busting: ${uniqueUrl}`);
       
-      while (retryCount <= maxRetries) {
-        try {
-          console.log(`🔄 ATTEMPT ${retryCount + 1} TO CALL SEARCH-TRAINING-DATA FUNCTION`);
-          
-          // Create a unique ID for debugging
-          const uniqueId = Math.random().toString(36).substring(2, 15);
-          const timeStamp = Date.now();
-          const uniqueUrl = `${searchTrainingUrl}?_=${timeStamp}&id=${uniqueId}`;
-          
-          console.log(`Using URL with cache busting: ${uniqueUrl}`);
-          
-          // NEW - MAKE SIMPLIFIED REQUEST FIRST to see if function is accessible
-          console.log('🔥 MAKING DIRECT SIMPLE TEST REQUEST TO search-training-data');
-          const testResponse = await fetch(uniqueUrl, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0',
-              'Pragma': 'no-cache',
-              'Expires': '0',
-              'X-Test-Request': 'true'
-            },
-            body: JSON.stringify({ 
-              query: "test query", 
-              userId: userId 
-            })
-          });
-          
-          console.log(`Test request status: ${testResponse.status}, ok: ${testResponse.ok}`);
-          
-          // Now make the real request with full data
-          console.log('🔍 EXECUTING FETCH to search-training-data NOW');
-          searchResponse = await fetch(uniqueUrl, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0',
-              'Pragma': 'no-cache',
-              'Expires': '0',
-              'X-Request-ID': uniqueId
-            },
-            body: JSON.stringify(searchPayload)
-          });
-          
-          console.log(`✅ FETCH COMPLETED with status: ${searchResponse.status}, ok: ${searchResponse.ok}`);
-          
-          // If successful, break out of retry loop
-          if (searchResponse.ok) {
-            console.log(`✅ SUCCESS: Called search-training-data on attempt ${retryCount + 1}`);
-            break;
-          } else {
-            let errorText = '';
-            try {
-              errorText = await searchResponse.text();
-            } catch (e) {
-              errorText = 'Could not read error response';
-            }
-            
-            console.error(`❌ Search API error: HTTP ${searchResponse.status} on attempt ${retryCount + 1}`);
-            console.error(`Error details: ${errorText}`);
-            retryCount++;
-            
-            if (retryCount <= maxRetries) {
-              const delay = 1000 * Math.pow(2, retryCount); // Exponential backoff
-              console.log(`🔄 Retrying in ${delay}ms... (${retryCount}/${maxRetries})`);
-              await new Promise(resolve => setTimeout(resolve, delay));
-            }
-          }
-        } catch (fetchError) {
-          console.error(`❌ NETWORK ERROR on attempt ${retryCount + 1}:`, fetchError);
-          console.error(`❌ Stack trace: ${fetchError.stack || 'No stack trace available'}`);
-          retryCount++;
-          
-          if (retryCount <= maxRetries) {
-            const delay = 1000 * Math.pow(2, retryCount); // Exponential backoff
-            console.log(`🔄 Retrying after network error in ${delay}ms... (${retryCount}/${maxRetries})`);
-            await new Promise(resolve => setTimeout(resolve, delay));
-          }
-        }
+      // Make the real request with full data and explicit cache control
+      console.log('🔍 EXECUTING FETCH to search-training-data NOW');
+      const searchResponse = await fetch(uniqueUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+          'X-Request-ID': uniqueId
+        },
+        body: JSON.stringify(searchPayload)
+      });
+      
+      console.log(`✅ SEARCH FETCH COMPLETED with status: ${searchResponse.status}, ok: ${searchResponse.ok}`);
+      
+      if (!searchResponse.ok) {
+        const errorText = await searchResponse.text();
+        console.error(`❌ Search API error: HTTP ${searchResponse.status}`);
+        console.error(`Error details: ${errorText}`);
+        throw new Error(`Search API error: ${errorText}`);
       }
-
-      const searchEndTime = Date.now();
-      console.log(`⏱️ SEARCH CALL COMPLETED at ${new Date().toISOString()} (took ${searchEndTime - searchStartTime}ms)`);
-      
-      if (!searchResponse || !searchResponse.ok) {
-        throw new Error(`Failed to fetch training data after ${maxRetries} retries`);
-      }
-      
-      console.log('🔍 Search API status:', searchResponse.status);
       
       // Parse the search results - WITH ERROR HANDLING
-      let searchResults;
-      try {
-        const responseText = await searchResponse.text();
-        console.log('🔍 RAW RESPONSE TEXT (first 500 chars):', responseText.substring(0, 500));
-        searchResults = JSON.parse(responseText);
-      } catch (parseError) {
-        console.error('❌ Error parsing search results:', parseError);
-        throw new Error(`Failed to parse search results: ${parseError.message}`);
-      }
+      const responseText = await searchResponse.text();
+      console.log('🔍 RAW RESPONSE TEXT (first 500 chars):', responseText.substring(0, 500));
+      const searchResults = JSON.parse(responseText);
       
       console.log('🔍 RECEIVED TRAINING DATA (first 500 chars):', 
                  JSON.stringify(searchResults).substring(0, 500));
@@ -324,47 +211,12 @@ export const testChatbotResponse = async (
       // Update property recommendations from the same search if available
       propertyRecommendations = searchResults.property_listings || [];
       
-      // ENHANCED LOGGING: Add summary of what was found
-      if (trainingResults.qaMatches.length > 0) {
-        console.log('✅ Found QA matches with similarities:', 
-          trainingResults.qaMatches.map(m => m.similarity.toFixed(2)).join(', '));
-        
-        // Log first QA match for debugging
-        if (trainingResults.qaMatches[0]) {
-          console.log('📚 First QA match:', 
-                      `Q: ${trainingResults.qaMatches[0].question?.substring(0, 50)}...`, 
-                      `A: ${trainingResults.qaMatches[0].answer?.substring(0, 50)}...`);
-        }
-      } else {
-        console.log('⚠️ No QA matches found in training data');
-      }
-      
-      if (trainingResults.fileContent.length > 0) {
-        console.log('✅ Found file content with similarities:', 
-          trainingResults.fileContent.map(c => c.similarity.toFixed(2)).join(', '));
-        
-        // Log first file content for debugging
-        if (trainingResults.fileContent[0]) {
-          console.log('📚 First file content:', 
-                      `Source: ${trainingResults.fileContent[0].source}`,
-                      `Text: ${trainingResults.fileContent[0].text?.substring(0, 50)}...`);
-        }
-      } else {
-        console.log('⚠️ No file content found in training data');
-      }
-      
     } catch (searchError) {
       console.error('🔴 ERROR IN TRAINING DATA SEARCH:', searchError);
       console.error('🔴 Stack trace:', searchError.stack);
       
-      // SAFETY FALLBACK: If the search fails, return a fallback message instead of proceeding
-      console.error('🔴 CRITICAL ERROR: Training data search failed, returning fallback response');
-      return {
-        response: "I'm having trouble accessing my knowledge base at the moment. Please try your question again in a moment.",
-        source: 'error',
-        conversationId: conversationId || `conv_${Date.now()}`,
-        propertyRecommendations: []
-      };
+      // SAFETY FALLBACK: If the search fails, log the error but continue
+      console.error('🔴 Training data search failed, continuing with empty results');
     }
     
     // Step 4: Determine if we have valid training data to base response on
@@ -390,7 +242,7 @@ export const testChatbotResponse = async (
     }
     
     // Step 5: If we didn't get property data and need it, fetch it separately
-    if (shouldSearchProperties && propertyRecommendations.length === 0) {
+    if (intentData.should_search_properties && propertyRecommendations.length === 0) {
       console.log('Searching property data separately...');
       try {
         const propertyResponse = await fetch('https://ckgaqkbsnrvccctqxsqv.supabase.co/functions/v1/search-property-listings', {
@@ -464,7 +316,7 @@ export const testChatbotResponse = async (
     }
 
     // Step 7: PRINCIPLE #3 - If no training data for general questions - say "I don't have that information"
-    if (!hasGoodTrainingMatches && !propertyRecommendations.length) {
+    if (!trainingResults.qaMatches.length && !trainingResults.fileContent.length && !propertyRecommendations.length) {
       console.log('⚠️ NO TRAINING DATA OR PROPERTIES - USING FALLBACK RESPONSE');
       return {
         response: "I don't have that information in my knowledge base. Is there something specific about our properties or services that you'd like to know?",
