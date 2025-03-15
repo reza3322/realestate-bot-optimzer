@@ -53,7 +53,7 @@ export interface PropertyRecommendation {
 export interface ChatbotResponse {
   response: string;
   error?: string;
-  source?: 'ai' | 'training';
+  source?: 'ai' | 'training' | 'fallback' | 'error';
   leadInfo?: any;
   conversationId?: string;
   propertyRecommendations?: PropertyRecommendation[];
