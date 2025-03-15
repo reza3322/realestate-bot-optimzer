@@ -1,3 +1,4 @@
+
 import { Message, PropertyRecommendation, VisitorInfo, ChatbotResponse } from './types';
 
 /**
@@ -131,20 +132,16 @@ export const testChatbotResponse = async (
     
     console.log('Intent analysis:', intentData);
     
-    // Step 2: Determine search strategy based on intent
-    const shouldSearchTraining = intentData.should_search_training;
-    const shouldSearchProperties = intentData.should_search_properties;
+    // Step 2: ALWAYS search training data for EVERY query - this is critical for principle #1
+    // Determine search strategy based on intent
+    const shouldSearchTraining = true; // ALWAYS search training data first for ALL queries
+    const shouldSearchProperties = intentData.should_search_properties || 
+                                 lowerMessage.includes('property') || 
+                                 lowerMessage.includes('house') || 
+                                 lowerMessage.includes('apartment');
     
-    // If the intent is agency_info or faq, we should ALWAYS search training data
-    const isAgencyOrFaqIntent = intentData.intent === 'agency_info' || 
-                                intentData.intent === 'faq' || 
-                                intentData.intent === 'general_query';
-                                
-    // Force training search for agency/faq questions regardless of intent analysis result
-    const finalShouldSearchTraining = shouldSearchTraining || isAgencyOrFaqIntent || isObviousAgencyQuestion;
-    
-    console.log(`Search strategy - Training: ${finalShouldSearchTraining}, Properties: ${shouldSearchProperties}`);
-    console.log(`Intent: ${intentData.intent}, Is Agency/FAQ: ${isAgencyOrFaqIntent}, Is Obvious Agency: ${isObviousAgencyQuestion}`);
+    console.log(`🔍 ALWAYS SEARCHING TRAINING DATA for: "${message}"`);
+    console.log(`Search strategy - Training: Always, Properties: ${shouldSearchProperties}`);
     
     // Initialize result containers
     const trainingResults = {
@@ -152,9 +149,9 @@ export const testChatbotResponse = async (
       fileContent: []
     };
     let propertyRecommendations: PropertyRecommendation[] = [];
-    let responseSource = 'ai'; // Default source
+    let responseSource = null; // Default to null until we determine source
     
-    // Step 3: ALWAYS fetch training data for any intent - this is critical for agency info
+    // Step 3: ALWAYS fetch training data for ALL queries (principle #1)
     console.log('🔍 STARTING TRAINING DATA SEARCH for message:', message);
     console.log('🔍 Making request to search-training-data endpoint with userId:', userId);
     
@@ -198,29 +195,6 @@ export const testChatbotResponse = async (
       // IMPORTANT: Log detailed training results to debug agency-related issues
       console.log('🔍 Training search results:', JSON.stringify(searchResults, null, 2));
       
-      if (isAgencyOrFaqIntent || isObviousAgencyQuestion) {
-        console.log('🏢 Agency-related question detected, QA matches:', 
-                   searchResults.qa_matches?.length || 0, 
-                   'File content:', 
-                   searchResults.file_content?.length || 0);
-        
-        // Log the actual content for debugging
-        if (searchResults.qa_matches?.length > 0) {
-          searchResults.qa_matches.forEach((match, index) => {
-            console.log(`QA Match ${index + 1} (similarity: ${match.similarity?.toFixed(2) || 'N/A'}):`, 
-                       `Q: ${match.question || 'No question'}`, 
-                       `A: ${match.answer || 'No answer'}`);
-          });
-        }
-        
-        if (searchResults.file_content?.length > 0) {
-          searchResults.file_content.forEach((content, index) => {
-            console.log(`File Content ${index + 1} (similarity: ${content.similarity?.toFixed(2) || 'N/A'}):`, 
-                       content.text?.substring(0, 100) + '...' || 'No text');
-          });
-        }
-      }
-      
       // Update training results
       trainingResults.qaMatches = searchResults.qa_matches || [];
       trainingResults.fileContent = searchResults.file_content || [];
@@ -232,19 +206,20 @@ export const testChatbotResponse = async (
       console.error('🔴 Error in training data search:', searchError);
     }
     
-    // Check if we found good training matches - LOWER the threshold for agency questions
-    const similarityThreshold = isAgencyOrFaqIntent || isObviousAgencyQuestion ? 0.1 : 0.15;
-    
+    // Step 4: Determine if we have valid training data to base response on
+    // MODIFIED: Use lower threshold for any training data match
+    const similarityThreshold = 0.15;
     const hasGoodTrainingMatches = (trainingResults.qaMatches.length > 0 && 
-                                   trainingResults.qaMatches[0].similarity > similarityThreshold) || 
+                                  trainingResults.qaMatches[0].similarity > similarityThreshold) || 
                                   (trainingResults.fileContent.length > 0 && 
-                                   trainingResults.fileContent[0].similarity > similarityThreshold);
+                                  trainingResults.fileContent[0].similarity > similarityThreshold);
     
     // For agency questions, force using training data even with lower similarities
-    const forceTrainingDataForAgency = (isAgencyOrFaqIntent || isObviousAgencyQuestion) && 
+    const forceTrainingDataForAgency = (isObviousAgencyQuestion || intentData.intent === 'agency_info') && 
                                       (trainingResults.qaMatches.length > 0 || 
-                                       trainingResults.fileContent.length > 0);
+                                      trainingResults.fileContent.length > 0);
     
+    // PRINCIPLE #2: Use training data if available
     if (hasGoodTrainingMatches || forceTrainingDataForAgency) {
       console.log('Found training matches, setting source to training');
       if (forceTrainingDataForAgency) {
@@ -253,20 +228,17 @@ export const testChatbotResponse = async (
       responseSource = 'training';
     }
     
-    // Step 4: If we didn't get property data and need it, fetch it separately
-    if (shouldSearchProperties && propertyRecommendations.length === 0 && (responseSource !== 'training' || intentData.intent === 'property_search')) {
+    // Step 5: If we didn't get property data and need it, fetch it separately
+    if (shouldSearchProperties && propertyRecommendations.length === 0) {
       console.log('Searching property data separately...');
       try {
-        const propertyResponse = await fetch('https://ckgaqkbsnrvccctqxsqv.supabase.co/functions/v1/search-training-data', {
+        const propertyResponse = await fetch('https://ckgaqkbsnrvccctqxsqv.supabase.co/functions/v1/search-property-listings', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             query: message,
             userId: userId,
             conversationId: conversationId,
-            includeQA: false,
-            includeFiles: false,
-            includeProperties: true,
             previousMessages: previousMessages
           })
         });
@@ -292,7 +264,7 @@ export const testChatbotResponse = async (
       }
     }
     
-    // Step 5: Special handling for agency questions
+    // Step 6: Special handling for agency questions
     if (isObviousAgencyQuestion || intentData.intent === 'agency_info') {
       console.log('⭐️ DETECTED AGENCY QUESTION - Special handling enabled');
       
@@ -318,10 +290,30 @@ export const testChatbotResponse = async (
           conversationId: conversationId || `conv_${Date.now()}`,
           propertyRecommendations: []
         };
+      } else {
+        // PRINCIPLE #3: If no training data, say "I don't have that information"
+        console.log('⚠️ NO TRAINING DATA FOR AGENCY QUESTION - USING FALLBACK RESPONSE');
+        return {
+          response: "I don't have that information about our agency at the moment. Please contact our office directly for the most accurate information.",
+          source: 'fallback',
+          conversationId: conversationId || `conv_${Date.now()}`,
+          propertyRecommendations: []
+        };
       }
     }
+
+    // Step 7: If no training data for general questions - PRINCIPLE #3
+    if (!hasGoodTrainingMatches && !propertyRecommendations.length) {
+      console.log('⚠️ NO TRAINING DATA OR PROPERTIES - USING FALLBACK RESPONSE');
+      return {
+        response: "I don't have that information in my knowledge base. Is there something specific about our properties or services that you'd like to know?",
+        source: 'fallback',
+        conversationId: conversationId || `conv_${Date.now()}`,
+        propertyRecommendations: []
+      };
+    }
     
-    // Step 6: Generate OpenAI prompt
+    // Step 8: Generate OpenAI prompt
     // Prepare more detailed context from training data to help OpenAI
     let trainingContext = '';
     if (trainingResults.qaMatches.length > 0 || trainingResults.fileContent.length > 0) {
@@ -346,12 +338,13 @@ export const testChatbotResponse = async (
     console.log('🔍 Final data sent to OpenAI:');
     console.log(`Training Context: ${trainingContext ? trainingContext.substring(0, 300) + '...' : 'None'}`);
     console.log(`Training Results Count: QA=${trainingResults.qaMatches.length}, Files=${trainingResults.fileContent.length}`);
-    console.log(`IsAgencyQuestion flag: ${isAgencyOrFaqIntent || isObviousAgencyQuestion}`);
+    console.log(`IsAgencyQuestion flag: ${isObviousAgencyQuestion || intentData.intent === 'agency_info'}`);
     
-    // Step 7: Send the message, intent, and any found data to the OpenAI API 
+    // Step 9: Send the message, intent, and any found data to the OpenAI API 
     console.log('🔍 Making request to ai-chatbot endpoint with data');
     
     try {
+      // MODIFIED: Add strict instructions about ONLY using provided data
       const aiResponse = await fetch('https://ckgaqkbsnrvccctqxsqv.supabase.co/functions/v1/ai-chatbot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -366,7 +359,9 @@ export const testChatbotResponse = async (
           intentClassification: intentData.intent, // Pass the intent classification
           responseSource: responseSource, // Pass the determined source to help OpenAI prioritize
           trainingContext: trainingContext, // Pass the formatted training context
-          isAgencyQuestion: isAgencyOrFaqIntent || isObviousAgencyQuestion, // Explicitly flag agency questions
+          isAgencyQuestion: isObviousAgencyQuestion || intentData.intent === 'agency_info', // Explicitly flag agency questions
+          // Add strict instruction to ONLY use provided data
+          strictMode: true, // PRINCIPLE #4: Prevent made-up answers
           // Add debugging info for OpenAI
           debugInfo: {
             keywordMatched: isObviousAgencyQuestion,
@@ -388,23 +383,31 @@ export const testChatbotResponse = async (
       const aiData = await aiResponse.json();
       console.log('AI response:', aiData);
 
-      // Step 8: Return the AI response with property recommendations and source
+      // Step 10: Return the AI response with property recommendations and source
       return {
         response: aiData.response,
-        source: aiData.source || responseSource,
+        source: aiData.source || responseSource || 'training', // Default to training source
         leadInfo: aiData.leadInfo,
         conversationId: aiData.conversationId || conversationId || `conv_${Date.now()}`,
         propertyRecommendations: propertyRecommendations
       };
     } catch (aiError) {
       console.error('Error in AI chatbot request:', aiError);
-      throw aiError;
+      // PRINCIPLE #3: If AI fails, don't make up an answer
+      return {
+        response: "I'm unable to access my knowledge base at the moment. Please try again in a few moments or contact our office directly for assistance.",
+        source: 'error',
+        conversationId: conversationId || `conv_${Date.now()}`,
+        propertyRecommendations: []
+      };
     }
   } catch (error) {
     console.error('Error in chatbot response:', error);
+    // PRINCIPLE #3: If anything fails, don't make up an answer
     return {
       response: "I'm sorry, I encountered an error processing your request. Please try again in a moment.",
       error: error instanceof Error ? error.message : String(error),
+      source: 'error',
       conversationId: conversationId || `conv_${Date.now()}`
     };
   }

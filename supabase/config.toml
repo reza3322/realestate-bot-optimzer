@@ -44,6 +44,9 @@ verify_jwt = false
 [functions.search-properties]
 verify_jwt = false
 
+[functions.search-property-listings]
+verify_jwt = false
+
 [functions.get-conversation-history]
 verify_jwt = false
 
