@@ -1,4 +1,3 @@
-
 import { Message, PropertyRecommendation, VisitorInfo, ChatbotResponse } from './types';
 
 /**
@@ -56,6 +55,7 @@ export const testChatbotResponse = async (
       };
     } else {
       // Otherwise, use the intent classification API
+      console.log('Calling intent analysis API...');
       const intentAnalysis = await fetch('https://ckgaqkbsnrvccctqxsqv.supabase.co/functions/v1/analyze-intent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -68,10 +68,12 @@ export const testChatbotResponse = async (
       });
 
       if (!intentAnalysis.ok) {
+        console.error(`Intent analysis API returned ${intentAnalysis.status}: ${await intentAnalysis.text()}`);
         throw new Error(`Intent analysis API returned ${intentAnalysis.status}`);
       }
 
       intentData = await intentAnalysis.json();
+      console.log('Intent analysis response:', intentData);
     }
     
     console.log('Intent analysis:', intentData);
@@ -100,56 +102,77 @@ export const testChatbotResponse = async (
     let responseSource = 'ai'; // Default source
     
     // Step 3: ALWAYS fetch training data first for any intent - this is critical for agency info
-    console.log('Searching training data regardless of intent...');
-    const searchResponse = await fetch('https://ckgaqkbsnrvccctqxsqv.supabase.co/functions/v1/search-training-data', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    console.log('🔍 STARTING TRAINING DATA SEARCH for message:', message);
+    console.log('🔍 Making request to search-training-data endpoint with userId:', userId);
+    
+    try {
+      const searchTrainingUrl = 'https://ckgaqkbsnrvccctqxsqv.supabase.co/functions/v1/search-training-data';
+      console.log('🔍 Request URL:', searchTrainingUrl);
+      
+      const searchPayload = {
         query: message,
         userId: userId,
         conversationId: conversationId,
         includeQA: true,
         includeFiles: true,  
-        includeProperties: false, // Don't search properties here - we'll do that separately if needed
+        includeProperties: false,
         previousMessages: previousMessages
-      })
-    });
-
-    if (!searchResponse.ok) {
-      throw new Error(`Search API returned ${searchResponse.status}`);
-    }
-
-    const searchResults = await searchResponse.json();
-    
-    // IMPORTANT: Log detailed training results to debug agency-related issues
-    console.log('🔍 Training search results:', JSON.stringify(searchResults, null, 2));
-    
-    if (isAgencyOrFaqIntent) {
-      console.log('🏢 Agency-related question detected, QA matches:', 
-                 searchResults.qa_matches?.length || 0, 
-                 'File content:', 
-                 searchResults.file_content?.length || 0);
+      };
       
-      // Log the actual content for debugging
-      if (searchResults.qa_matches?.length > 0) {
-        searchResults.qa_matches.forEach((match: any, index: number) => {
-          console.log(`QA Match ${index + 1} (similarity: ${match.similarity.toFixed(2)}):`, 
-                     `Q: ${match.question}`, 
-                     `A: ${match.answer}`);
-        });
+      console.log('🔍 Request payload:', JSON.stringify(searchPayload));
+      
+      const searchResponse = await fetch(searchTrainingUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(searchPayload)
+      });
+
+      console.log('🔍 Search API status:', searchResponse.status);
+      
+      if (!searchResponse.ok) {
+        const errorText = await searchResponse.text();
+        console.error(`Search API returned ${searchResponse.status}: ${errorText}`);
+        throw new Error(`Search API returned ${searchResponse.status}: ${errorText}`);
+      }
+
+      const searchResults = await searchResponse.json();
+      console.log('🔍 Training search results received:', 
+                 `QA matches: ${searchResults.qa_matches?.length || 0}`, 
+                 `File content: ${searchResults.file_content?.length || 0}`);
+      
+      // IMPORTANT: Log detailed training results to debug agency-related issues
+      console.log('🔍 Training search results:', JSON.stringify(searchResults, null, 2));
+      
+      if (isAgencyOrFaqIntent) {
+        console.log('🏢 Agency-related question detected, QA matches:', 
+                   searchResults.qa_matches?.length || 0, 
+                   'File content:', 
+                   searchResults.file_content?.length || 0);
+        
+        // Log the actual content for debugging
+        if (searchResults.qa_matches?.length > 0) {
+          searchResults.qa_matches.forEach((match: any, index: number) => {
+            console.log(`QA Match ${index + 1} (similarity: ${match.similarity?.toFixed(2) || 'N/A'}):`, 
+                       `Q: ${match.question || 'No question'}`, 
+                       `A: ${match.answer || 'No answer'}`);
+          });
+        }
+        
+        if (searchResults.file_content?.length > 0) {
+          searchResults.file_content.forEach((content: any, index: number) => {
+            console.log(`File Content ${index + 1} (similarity: ${content.similarity?.toFixed(2) || 'N/A'}):`, 
+                       content.text?.substring(0, 100) + '...' || 'No text');
+          });
+        }
       }
       
-      if (searchResults.file_content?.length > 0) {
-        searchResults.file_content.forEach((content: any, index: number) => {
-          console.log(`File Content ${index + 1} (similarity: ${content.similarity.toFixed(2)}):`, 
-                     content.text.substring(0, 100) + '...');
-        });
-      }
+      // Update training results
+      trainingResults.qaMatches = searchResults.qa_matches || [];
+      trainingResults.fileContent = searchResults.file_content || [];
+      
+    } catch (searchError) {
+      console.error('🔴 Error in training data search:', searchError);
     }
-    
-    // Update training results
-    trainingResults.qaMatches = searchResults.qa_matches || [];
-    trainingResults.fileContent = searchResults.file_content || [];
     
     // Check if we found good training matches - LOWER the threshold for agency questions
     const hasGoodTrainingMatches = (trainingResults.qaMatches.length > 0 && 
@@ -173,33 +196,39 @@ export const testChatbotResponse = async (
     // Step 4: Fetch property data if needed and if we're not dealing with a clear agency/FAQ question
     if (shouldSearchProperties && (responseSource !== 'training' || intentData.intent === 'property_search')) {
       console.log('Searching property data based on intent analysis...');
-      const propertyResponse = await fetch('https://ckgaqkbsnrvccctqxsqv.supabase.co/functions/v1/search-training-data', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: message,
-          userId: userId,
-          conversationId: conversationId,
-          includeQA: false,
-          includeFiles: false,
-          includeProperties: true,
-          previousMessages: previousMessages
-        })
-      });
+      try {
+        const propertyResponse = await fetch('https://ckgaqkbsnrvccctqxsqv.supabase.co/functions/v1/search-training-data', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            query: message,
+            userId: userId,
+            conversationId: conversationId,
+            includeQA: false,
+            includeFiles: false,
+            includeProperties: true,
+            previousMessages: previousMessages
+          })
+        });
 
-      if (!propertyResponse.ok) {
-        throw new Error(`Property search API returned ${propertyResponse.status}`);
-      }
+        if (!propertyResponse.ok) {
+          const errorText = await propertyResponse.text();
+          console.error(`Property search API returned ${propertyResponse.status}: ${errorText}`);
+          throw new Error(`Property search API returned ${propertyResponse.status}: ${errorText}`);
+        }
 
-      const propertyResults = await propertyResponse.json();
-      console.log('Property search results:', propertyResults);
-      
-      // Update property recommendations
-      propertyRecommendations = propertyResults.property_listings || [];
-      
-      // If we found property matches and didn't already find training data
-      if (propertyRecommendations.length > 0 && responseSource !== 'training') {
-        responseSource = 'properties';
+        const propertyResults = await propertyResponse.json();
+        console.log('Property search results:', propertyResults);
+        
+        // Update property recommendations
+        propertyRecommendations = propertyResults.property_listings || [];
+        
+        // If we found property matches and didn't already find training data
+        if (propertyRecommendations.length > 0 && responseSource !== 'training') {
+          responseSource = 'properties';
+        }
+      } catch (propertyError) {
+        console.error('Error in property search:', propertyError);
       }
     }
     
@@ -236,39 +265,50 @@ export const testChatbotResponse = async (
     console.log(`IsAgencyQuestion flag: ${isAgencyOrFaqIntent}`);
     
     // Step 7: Send the message, intent, and any found data to the OpenAI API 
-    const aiResponse = await fetch('https://ckgaqkbsnrvccctqxsqv.supabase.co/functions/v1/ai-chatbot', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        message: message,
-        userId: userId,
-        visitorInfo: visitorInfo,
-        conversationId: conversationId,
-        previousMessages: previousMessages,
-        trainingResults: trainingResults,  // Always pass training results to the AI
-        propertyRecommendations: propertyRecommendations,
-        intentClassification: intentData.intent, // Pass the intent classification
-        responseSource: responseSource, // Pass the determined source to help OpenAI prioritize
-        trainingContext: trainingContext, // Pass the formatted training context
-        isAgencyQuestion: isAgencyOrFaqIntent // Explicitly flag agency questions
-      })
-    });
+    console.log('🔍 Making request to ai-chatbot endpoint with data');
+    
+    try {
+      const aiResponse = await fetch('https://ckgaqkbsnrvccctqxsqv.supabase.co/functions/v1/ai-chatbot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: message,
+          userId: userId,
+          visitorInfo: visitorInfo,
+          conversationId: conversationId,
+          previousMessages: previousMessages,
+          trainingResults: trainingResults,  // Always pass training results to the AI
+          propertyRecommendations: propertyRecommendations,
+          intentClassification: intentData.intent, // Pass the intent classification
+          responseSource: responseSource, // Pass the determined source to help OpenAI prioritize
+          trainingContext: trainingContext, // Pass the formatted training context
+          isAgencyQuestion: isAgencyOrFaqIntent // Explicitly flag agency questions
+        })
+      });
 
-    if (!aiResponse.ok) {
-      throw new Error(`AI API returned ${aiResponse.status}`);
+      console.log('🔍 AI API status:', aiResponse.status);
+      
+      if (!aiResponse.ok) {
+        const errorText = await aiResponse.text();
+        console.error(`AI API returned ${aiResponse.status}: ${errorText}`);
+        throw new Error(`AI API returned ${aiResponse.status}: ${errorText}`);
+      }
+
+      const aiData = await aiResponse.json();
+      console.log('AI response:', aiData);
+
+      // Step 8: Return the AI response with property recommendations and source
+      return {
+        response: aiData.response,
+        source: aiData.source || responseSource,
+        leadInfo: aiData.leadInfo,
+        conversationId: aiData.conversationId || conversationId,
+        propertyRecommendations: propertyRecommendations
+      };
+    } catch (aiError) {
+      console.error('Error in AI chatbot request:', aiError);
+      throw aiError;
     }
-
-    const aiData = await aiResponse.json();
-    console.log('AI response:', aiData);
-
-    // Step 7: Return the AI response with property recommendations and source
-    return {
-      response: aiData.response,
-      source: aiData.source || responseSource,
-      leadInfo: aiData.leadInfo,
-      conversationId: aiData.conversationId || conversationId,
-      propertyRecommendations: propertyRecommendations
-    };
   } catch (error) {
     console.error('Error in chatbot response:', error);
     return {
