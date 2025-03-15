@@ -160,8 +160,9 @@ export const testChatbotResponse = async (
     console.log(`⏱️ SEARCH CALL STARTED at ${new Date().toISOString()}`);
     
     try {
+      // CRITICAL FIX: Use full URL with https protocol to ensure the function is called
       const searchTrainingUrl = 'https://ckgaqkbsnrvccctqxsqv.supabase.co/functions/v1/search-training-data';
-      console.log('🔍 Request URL:', searchTrainingUrl);
+      console.log('🔍 FULL Request URL:', searchTrainingUrl);
       
       const searchPayload = {
         query: message,
@@ -183,37 +184,61 @@ export const testChatbotResponse = async (
       // Add retry mechanism to ensure the search-training-data function is called
       let searchResponse = null;
       let retryCount = 0;
-      const maxRetries = 2;
+      const maxRetries = 3; // Increased number of retries
       
+      // Direct fetch with explicit error handling
       while (retryCount <= maxRetries) {
         try {
-          console.log(`🔄 Attempt ${retryCount + 1} to call search-training-data function`);
-          searchResponse = await fetch(searchTrainingUrl, {
+          console.log(`🔄 DIRECT FETCH: Attempt ${retryCount + 1} to call search-training-data function`);
+          
+          // Add unique timestamp to prevent caching
+          const uniqueUrl = `${searchTrainingUrl}?cachebuster=${Date.now()}`;
+          console.log(`Using URL with cache busting: ${uniqueUrl}`);
+          
+          searchResponse = await fetch(uniqueUrl, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+              'Content-Type': 'application/json',
+              // Add headers to prevent caching
+              'Cache-Control': 'no-cache, no-store, must-revalidate',
+              'Pragma': 'no-cache',
+              'Expires': '0'
+            },
             body: JSON.stringify(searchPayload)
           });
           
+          console.log(`Response status: ${searchResponse.status}, ok: ${searchResponse.ok}`);
+          
           if (searchResponse.ok) {
-            console.log(`✅ Successfully called search-training-data on attempt ${retryCount + 1}`);
+            console.log(`✅ SUCCESS: Called search-training-data on attempt ${retryCount + 1}`);
             break;
           } else {
-            const errorText = await searchResponse.text();
-            console.error(`❌ Search API returned ${searchResponse.status} on attempt ${retryCount + 1}: ${errorText}`);
+            let errorText = '';
+            try {
+              errorText = await searchResponse.text();
+            } catch (e) {
+              errorText = 'Could not read error response';
+            }
+            
+            console.error(`❌ Search API error: HTTP ${searchResponse.status} on attempt ${retryCount + 1}`);
+            console.error(`Error details: ${errorText}`);
             retryCount++;
             
             if (retryCount <= maxRetries) {
-              console.log(`🔄 Retrying in 500ms... (${retryCount}/${maxRetries})`);
-              await new Promise(resolve => setTimeout(resolve, 500));
+              const delay = 800 * retryCount; // Increasing backoff
+              console.log(`🔄 Retrying in ${delay}ms... (${retryCount}/${maxRetries})`);
+              await new Promise(resolve => setTimeout(resolve, delay));
             }
           }
         } catch (fetchError) {
-          console.error(`❌ Fetch error on attempt ${retryCount + 1}:`, fetchError);
+          console.error(`❌ NETWORK ERROR on attempt ${retryCount + 1}:`, fetchError);
+          console.error(`Stack trace: ${fetchError.stack || 'No stack trace available'}`);
           retryCount++;
           
           if (retryCount <= maxRetries) {
-            console.log(`🔄 Retrying in 500ms... (${retryCount}/${maxRetries})`);
-            await new Promise(resolve => setTimeout(resolve, 500));
+            const delay = 800 * retryCount; // Increasing backoff
+            console.log(`🔄 Retrying after network error in ${delay}ms... (${retryCount}/${maxRetries})`);
+            await new Promise(resolve => setTimeout(resolve, delay));
           }
         }
       }
