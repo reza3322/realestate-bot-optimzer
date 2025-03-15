@@ -37,7 +37,7 @@ const QuickStats = ({ stats, userPlan, isPremiumFeature, userId }: QuickStatsPro
     const leadsChannel = supabase
       .channel('realtime-leads')
       .on('postgres_changes', 
-        { event: '*', schema: 'public', table: 'leads', filter: `user_id=eq.${userId}` },
+        { event: '*', schema: 'public', table: 'leads' },
         () => fetchData()
       )
       .subscribe();
@@ -45,7 +45,7 @@ const QuickStats = ({ stats, userPlan, isPremiumFeature, userId }: QuickStatsPro
     const chatbotChannel = supabase
       .channel('realtime-chatbot')
       .on('postgres_changes', 
-        { event: '*', schema: 'public', table: 'chatbot_conversations', filter: `user_id=eq.${userId}` },
+        { event: '*', schema: 'public', table: 'chatbot_conversations' },
         () => fetchData()
       )
       .subscribe();
@@ -53,7 +53,7 @@ const QuickStats = ({ stats, userPlan, isPremiumFeature, userId }: QuickStatsPro
     const propertiesChannel = supabase
       .channel('realtime-properties')
       .on('postgres_changes', 
-        { event: '*', schema: 'public', table: 'properties', filter: `user_id=eq.${userId}` },
+        { event: '*', schema: 'public', table: 'properties' },
         () => fetchData()
       )
       .subscribe();
